@@ -66,7 +66,7 @@ header but no body.
 
 `unsupported_media_type` was reserved and never emitted: uapi never rejects a
 body on `Content-Type` (the header only switches a PATCH into RFC 6902 mode). It
-left the published `ErrorEnvelope.code` enum in v4 (#323), announced in 3.4.1.
+left the published `ErrorEnvelope.code` enum in v4 (#323), announced in 3.5.0.
 Clients branching on it must drop that branch.
 
 `batch_partial_failure` is special: it appears only in the body of a

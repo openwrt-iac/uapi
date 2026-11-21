@@ -42,7 +42,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the sweep, and an empty `cursor` reads the first page. v4 answers 400
   `bad_request` for `managed` and `validate`, and 400 `invalid_cursor` for the
   empty cursor. The `Link` to the next page of a curated list now keeps
-  `managed`. Announcement in 3.x pending. Migration note in
+  `managed`. Announced in 3.5.0. Migration note in
   `docs/migration-v3-to-v4.md`. (#403)
 - **BREAKING: `dhcp/leases` refuses a `family` other than `v4` or `v6`.** 3.x
   ignores the parameter, so any value lists the IPv4 leases. v4 answers 400
@@ -51,7 +51,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `?family=v6` lists IPv6 leases. The spec declares `family` on both GETs, and
   the lease schema gains the v6 fields `iaid`, `interface`, `ia_type` and
   `prefix_length`, with `expires_at` null for a v6 lease that does not expire,
-  where a v4 one reads 0. Announced in 3.4.1 (#320, #391); migration note in
+  where a v4 one reads 0. Announced in 3.5.0 (#320, #391); migration note in
   `docs/migration-v3-to-v4.md`. (#390)
 - **BREAKING: `sqm/queues.enabled` reads `true` only where sqm-scripts starts
   the queue.** sqm-scripts (`src/run-openwrt.sh` at `77cf89e`) starts a queue
@@ -78,7 +78,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schema: `id` and `runtime` joined the `required` list of every CRUD and
   singleton resource, the four hand-written `openapi_runtime` blocks are kept,
   and the rest get the documented empty-object shape. Read-only collections are
-  item lists and unchanged. Announced in 3.4.1 (#322); migration note in
+  item lists and unchanged. Announced in 3.5.0 (#322); migration note in
   `docs/migration-v3-to-v4.md`. (#354)
 - **BREAKING: the special endpoints move under `/uapi/...`.** `/tokens` (and
   `/tokens/<id>`), `/metrics`, `/diagnostics`, `/batch` and `/auth/whoami`
@@ -86,7 +86,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `/uapi/whoami`, matching the scopes that already existed. The scopes are
   unchanged, the public trio `/healthz`, `/openapi.json`, `/schema/*` stays at
   the top level, the old top-level paths answer 404, and the Prometheus `path`
-  labels move with them. Announced in 3.4.1 (#319); migration note in
+  labels move with them. Announced in 3.5.0 (#319); migration note in
   `docs/migration-v3-to-v4.md`. (#352) (#400)
 - **BREAKING: a write is refused for any stored error the section holds, as LuCI
   does.** LuCI validates every visible field of a form at save, so a stored
@@ -196,12 +196,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   /dhcp/leases?family=v6` the IPv6 ones from odhcpd's statefile. The entry id is
   the MAC for v4 and the IP for v6, so a v6 entry is looked up as `GET
   /dhcp/leases/<ip>?family=v6`. The `dhcp:leases6` scope leaves the scope tree
-  with the endpoint. Announced in 3.4.1 (#320); migration note in
+  with the endpoint. Announced in 3.5.0 (#320); migration note in
   `docs/migration-v3-to-v4.md`. (#351)
 - **BREAKING: `unsupported_media_type` leaves the `ErrorEnvelope.code` enum.**
   It was reserved and never emitted (uapi never rejects a body on
   `Content-Type`); the audit of emitted vs declared codes found it the only dead
-  one. Announced in 3.4.1 (#323); clients branching on 415 must drop that
+  one. Announced in 3.5.0 (#323); clients branching on 415 must drop that
   branch. Migration note in `docs/migration-v3-to-v4.md`. (#349)
 - **BREAKING: `network/interfaces.ip6prefix` no longer accepts a space-separated
   string on write.** The request type is array-only in both directions; a string
