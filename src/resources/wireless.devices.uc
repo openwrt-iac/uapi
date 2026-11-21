@@ -68,7 +68,7 @@ function ssid_errors(conn, radio) {
 		let view = wiface.fromUci(s, null);
 		for (let k, p in wiface.schema_properties)
 			if (p.writeOnly && s[k] != null) view[k] = s[k];
-		let fields = uniq(map(filter(wiface.rules(view, true), (e) => e.live), (e) => e.field));
+		let fields = uniq(map(filter(wiface.rules(view, true, conn), (e) => e.live), (e) => e.field));
 		if (length(fields) > 0) push(out, sprintf("%s (%s)", s['.name'], join(", ", fields)));
 	});
 	return out;

@@ -31750,7 +31750,8 @@
 							"wpa-mixed+aes+tkip",
 							"wpa-mixed+ccmp+tkip"
 						],
-						"default": "none"
+						"default": "none",
+						"description": "Encryption mode. A write refuses wep with `conflict` unless the daemon of the mode has WEP support: hostapd in mode ap, and wpa_supplicant in mode sta or adhoc. uapi asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does. It refuses wep in mode mesh, which takes none. Without that support, wifi-scripts set the SSID up without encryption, and OpenWrt builds both daemons without WEP. A stored value that starts with wep, such as the wep-open of LuCI, counts as WEP. A write that leaves a stored WEP value as it is is refused for it only when it sets the SSID up or changes its mode"
 					},
 					"disabled": {
 						"type": "boolean",
@@ -32079,7 +32080,8 @@
 							"wpa-mixed+aes+tkip",
 							"wpa-mixed+ccmp+tkip"
 						],
-						"default": "none"
+						"default": "none",
+						"description": "Encryption mode. A write refuses wep with `conflict` unless the daemon of the mode has WEP support: hostapd in mode ap, and wpa_supplicant in mode sta or adhoc. uapi asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does. It refuses wep in mode mesh, which takes none. Without that support, wifi-scripts set the SSID up without encryption, and OpenWrt builds both daemons without WEP. A stored value that starts with wep, such as the wep-open of LuCI, counts as WEP. A write that leaves a stored WEP value as it is is refused for it only when it sets the SSID up or changes its mode"
 					},
 					"disabled": {
 						"type": "boolean",

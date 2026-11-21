@@ -1125,3 +1125,88 @@ t.describe('wireless SSID values count while the SSID and its radio are enabled'
 		t.assert_equal(radios.create(c, ctx, { id: 'radio2', type: 'mac80211', disabled: true }).status, 200);
 	});
 });
+
+t.describe('wireless.interfaces WEP needs WEP in the daemon of the mode', () => {
+	let tx = { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null };
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let ifaces = handler.make(wiface, { tx });
+	let radios = handler.make(widev, { tx });
+	const REFUSED = [ [ 'encryption', 'conflict' ] ];
+	function box(features, radio0, ssids) {
+		return ubus.stub({ features, uci: { wireless: {
+			radio0: { '.type': 'wifi-device', '.anonymous': false, type: 'mac80211', band: '2g', ...radio0 },
+			...ssids,
+		} } });
+	}
+	function wep(extra) {
+		return { '.type': 'wifi-iface', '.anonymous': false, device: 'radio0', mode: 'ap', ssid: 'home', encryption: 'wep', ...extra };
+	}
+	function fields(r) {
+		return map(r.body?.errors ?? [], (e) => [ e.field, e.code ]);
+	}
+
+	t.it('a write of wep is refused unless the daemon of the mode has WEP', () => {
+		for (let p in [ [ 'ap', 'hostapd', 'wpa_supplicant' ], [ 'sta', 'wpa_supplicant', 'hostapd' ],
+		                [ 'adhoc', 'wpa_supplicant', 'hostapd' ] ]) {
+			let body = { id: 'w1', device: 'radio0', mode: p[0], ssid: 'home', encryption: 'wep' };
+			for (let f in [ {}, { [p[1]]: [ 'sae' ] }, { [p[2]]: [ 'wep' ] } ]) {
+				let c = box(f, {}, {});
+				let r = ifaces.create(c, ctx, body);
+				t.assert_deep_equal(fields(r), REFUSED, sprintf("%s %J", p[0], f));
+				t.assert_true(index(r.body.errors[0].message, p[1] + " on this router has no WEP support") > 0, r.body.errors[0].message);
+				t.assert_equal(c._state.uci.wireless.w1, null, p[0]);
+			}
+			let c = box({ [p[1]]: [ 'wep' ] }, {}, {});
+			t.assert_equal(ifaces.create(c, ctx, body).status, 200, p[0]);
+			t.assert_equal(c._state.uci.wireless.w1.encryption, 'wep', p[0]);
+		}
+	});
+
+	t.it('mode mesh takes no WEP, and mode monitor reads no encryption', () => {
+		let both = { hostapd: [ 'wep' ], wpa_supplicant: [ 'wep' ] };
+		t.assert_deep_equal(fields(ifaces.create(box(both, {}, {}), ctx, { id: 'w1', device: 'radio0', mode: 'mesh', encryption: 'wep' })),
+		                    REFUSED);
+		t.assert_equal(ifaces.create(box({}, {}, {}), ctx, { id: 'w1', device: 'radio0', mode: 'monitor', encryption: 'wep' }).status, 200);
+	});
+
+	t.it('a write that leaves a stored wep as it is passes, and one that sets the SSID up or changes its mode is refused', () => {
+		let c = box({}, {}, { w1: wep({}) });
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { ssid: 'other' }).status, 200);
+		t.assert_equal(c._state.uci.wireless.w1.ssid, 'other');
+		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { mode: 'sta' })), REFUSED);
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { encryption: 'psk2', key: 'correcthorse' }).status, 200);
+
+		c = box({}, {}, { w1: wep({ disabled: '1' }) });
+		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { disabled: false })), REFUSED);
+		t.assert_equal(c._state.uci.wireless.w1.disabled, '1');
+
+		c = box({}, { disabled: '1' }, { w1: wep({}) });
+		let r = radios.patch(c, ctx, 'radio0', { disabled: false });
+		t.assert_deep_equal(fields(r), [ [ 'disabled', 'conflict' ] ]);
+		t.assert_true(index(r.body.errors[0].message, ': w1 (encryption)') > 0, r.body.errors[0].message);
+	});
+
+	t.it('the sweep lists a stored WEP value, as LuCI spells it too, live only while the SSID is set up', () => {
+		for (let p in [ [ {}, {}, [ [ 'w1', [ [ 'encryption', 'conflict', true ] ] ] ] ],
+		                [ {}, { disabled: '1' }, [ [ 'w1', [ [ 'encryption', 'conflict', false ] ] ] ] ],
+		                [ { hostapd: [ 'wep' ] }, {}, [] ] ]) {
+			let swept = ifaces.sweep(box(p[0], p[1], { w1: wep({}) }));
+			t.assert_deep_equal(map(swept, (s) => [ s.id, map(s.errors, (e) => [ e.field, e.code, e.live ]) ]), p[2], sprintf("%J", p));
+		}
+		for (let e in [ 'wep-open', 'wep-shared', 'wep+shared' ]) {
+			let errs = ifaces.sweep(box({}, {}, { w1: wep({ encryption: e }) }))[0].errors;
+			t.assert_deep_equal(map(filter(errs, (x) => x.code == 'conflict'), (x) => [ x.field, x.live ]), [ [ 'encryption', true ] ], e);
+		}
+	});
+
+	t.it('asks a daemon only for a WEP value', () => {
+		let c = box({}, {}, { w1: wep({ encryption: 'psk2', key: 'correcthorse' }) });
+		let asked = [];
+		c.has_feature = function(daemon, feature) { push(asked, [ daemon, feature ]); return false; };
+		t.assert_equal(ifaces.patch(c, ctx, 'w1', { ssid: 'other' }).status, 200);
+		t.assert_deep_equal(ifaces.sweep(c), []);
+		t.assert_deep_equal(asked, []);
+		t.assert_deep_equal(fields(ifaces.patch(c, ctx, 'w1', { encryption: 'wep' })), REFUSED);
+		t.assert_deep_equal(asked, [ [ 'hostapd', 'wep' ] ]);
+	});
+});
