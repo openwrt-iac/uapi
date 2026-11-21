@@ -377,21 +377,24 @@ function acquire_pkg_waiting(package, wait_ms, global_path, prefix) {
 
 // A write with no kernel path at all is distinct from one whose every target was
 // skipped: without that distinction an absent header cannot tell a caller which
-// of the two it got, which is the whole point of reporting this.
-function _kernel_status(ops, applied) {
+// of the two it got, which is the whole point of reporting this. `omitted` names an
+// interface whose kernel did not get an endpoint that the write stored, which an
+// `ok` would hide.
+function _kernel_status(ops, applied, omitted) {
 	let targets = wg.interfaces_of(ops);
 	if (length(targets) == 0) return "no_kernel";
 	if (length(applied) == 0) return "skipped";
+	if (length(omitted) > 0) return "omitted";
 	return (length(applied) == length(targets)) ? "ok" : "partial";
 }
 
-function _finalize_after_reload(reload_err, restore_fn, body, services, ops, applied) {
+function _finalize_after_reload(reload_err, restore_fn, body, services, ops, kernel) {
 	if (reload_err == null) {
 		return { ok: true, body: body,
 		         reload_services: services,
 		         reload_status: (length(services) > 0) ? "ok" : "no_reload",
-		         kernel_applied: applied ?? [],
-		         kernel_status: _kernel_status(ops ?? [], applied ?? []) };
+		         kernel_applied: kernel.applied,
+		         kernel_status: _kernel_status(ops ?? [], kernel.applied, kernel.omitted) };
 	}
 
 	// restore_fn pushes to `left` why it left a package as it is, see put_back().
@@ -430,7 +433,7 @@ function conflict_result(message) {
 	return { ok: false, kind: "conflict", message: message + ". Nothing was written. A retry reads the new state." };
 }
 
-function run_inner(conn, pkg, services, fn, apply, restore, ops, applied, request_id) {
+function run_inner(conn, pkg, services, fn, apply, restore, ops, kernel, request_id) {
 	let result = fn(conn, pkg);
 
 	if (!result || result.ok === false) {
@@ -454,7 +457,7 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, applied, reques
 	// A package that the write left as it was gets no reload, which would read the same config
 	// again, and no restore, which would put the snapshot over what another writer committed since.
 	if (!committed)
-		return { ..._finalize_after_reload(null, null, result.body, [], ops, applied), unchanged: true };
+		return { ..._finalize_after_reload(null, null, result.body, [], ops, kernel), unchanged: true };
 
 	write_journal.mark_reload_started();
 	let stored = conn.uci_export(pkg);
@@ -463,7 +466,7 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, applied, reques
 		if (why == null) return restore();
 		push(left, why);
 		return null;
-	}, result.body, services, ops, applied);
+	}, result.body, services, ops, kernel);
 }
 
 // Reload the declared services, then push the wireguard peer changes the write
@@ -474,7 +477,7 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, applied, reques
 // already returned by the time this is called. A reload still running when the
 // budget ran out is no failure, and the checks after it would judge a config
 // that it may not have written yet, so they do not run.
-function _make_apply(conn, reload, services, wg_apply, ops, applied, watch) {
+function _make_apply(conn, reload, services, wg_apply, ops, kernel, watch) {
 	return function() {
 		watch.check = watch.start(conn, services, watch.packages);
 		let err = reload(services, watch.budget);
@@ -488,7 +491,7 @@ function _make_apply(conn, reload, services, wg_apply, ops, applied, watch) {
 		// wireguard restart, and on that clock the restore of a failed apply had no time left for
 		// its own reloads.
 		let start = now_ms();
-		err = wg_apply(conn, ops, applied);
+		err = wg_apply(conn, ops, kernel.applied, kernel.omitted);
 		if (watch.budget.until != null) watch.budget.until += now_ms() - start;
 		return err;
 	};
@@ -517,7 +520,7 @@ function transaction(conn, params) {
 	let wg_apply = params.wg_apply ?? wg.apply;
 	let wg_reconcile = params.wg_reconcile ?? wg.reconcile;
 	let wg_ops = params.wg_ops ?? [];
-	let wg_applied = [];
+	let wg_kernel = { applied: [], omitted: [] };
 	let check_services = params.check_services ?? default_check_services;
 	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ],
 	              budget: { ms: limits.reload_budget_ms(conn) } };
@@ -561,9 +564,9 @@ function transaction(conn, params) {
 		// reads were stale.
 		conn.uci_unload(pkg);
 		result = run_inner(conn, pkg, services, fn,
-		                   _make_apply(conn, reload, services, wg_apply, wg_ops, wg_applied, watch),
+		                   _make_apply(conn, reload, services, wg_apply, wg_ops, wg_kernel, watch),
 		                   _make_restore(conn, reload, services, wg_reconcile, wg_ops, watch),
-		                   wg_ops, wg_applied, params.request_id);
+		                   wg_ops, wg_kernel, params.request_id);
 	} catch (e) {
 		caught = e;
 	}
@@ -600,7 +603,7 @@ function multi_transaction(conn, params) {
 	let path = params.lock_path ?? LOCK_PATH;
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
-	let wg_applied = [];
+	let wg_kernel = { applied: [], omitted: [] };
 	let watch = { start: params.watch ?? check_daemons,
 	              budget: { ms: limits.reload_budget_ms(conn) } };
 
@@ -719,14 +722,14 @@ function multi_transaction(conn, params) {
 				// files match it again. A reload or a reconcile there would reset WireGuard
 				// sessions and undo what another writer put in the kernel by hand.
 				result = _finalize_after_reload(commit_err, function(left) { put_back_all(left); return null; },
-				                                inner.body, ran, wg_ops, wg_applied);
+				                                inner.body, ran, wg_ops, wg_kernel);
 				if (conflict != null && result.kind == "reload_failed_restored")
 					result = conflict_result(conflict);
 			} else if (length(committed) == 0) {
-				result = _finalize_after_reload(null, null, inner.body, [], wg_ops, wg_applied);
+				result = _finalize_after_reload(null, null, inner.body, [], wg_ops, wg_kernel);
 			} else {
 				watch.packages = committed;
-				let apply = _make_apply(conn, reload, ran, params.wg_apply ?? wg.apply, wg_ops, wg_applied, watch);
+				let apply = _make_apply(conn, reload, ran, params.wg_apply ?? wg.apply, wg_ops, wg_kernel, watch);
 				// The restore reloads and checks the daemons of the packages that it wrote back only: a
 				// package that it left holds the config that just failed.
 				result = _finalize_after_reload(apply(), function(left) {
@@ -734,7 +737,7 @@ function multi_transaction(conn, params) {
 					if (length(restored) == 0) return null;
 					return _make_restore(conn, reload, services_of(by_package, restored), params.wg_reconcile ?? wg.reconcile,
 					                     (index(restored, "network") >= 0) ? wg_ops : [], watch)();
-				}, inner.body, ran, wg_ops, wg_applied);
+				}, inner.body, ran, wg_ops, wg_kernel);
 			}
 		}
 	} catch (e) { caught = e; }

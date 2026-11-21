@@ -1764,8 +1764,8 @@ function build_doc() {
 					"schema": { "type": "string", "example": "firewall,dnsmasq" },
 				},
 				"XKernelStatus": {
-					"description": "Whether the write reached the kernel as well as uci. `ok` = every targeted interface was applied. `partial` = some were skipped. `skipped` = none was, because the interface is down or netifd does not know it, and uci is still committed and the change takes effect on the next ifup. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path, which is the value on most writes, or the write changed nothing in uci. Absent on raw and non-uci writes, which do not run the kernel apply.",
-					"schema": { "type": "string", "enum": ["ok", "partial", "skipped", "no_kernel"] },
+					"description": "Whether the write reached the kernel as well as uci. `ok` = every targeted interface was applied. `partial` = some were skipped. `skipped` = none was, because the interface is down or netifd does not know it, and uci is still committed and the change takes effect on the next ifup. `omitted` = the apply set a peer without the endpoint that uci holds for it, as the proto handler does: on OpenWrt main, the ucode proto handler leaves out the endpoint of a host that does not resolve. A read shows the endpoint that the kernel holds in `runtime.endpoint`, null after the restart of the handler. It takes the place of `ok` and `partial`, and X-Kernel-Applied still names the interfaces that were applied. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path, which is the value on most writes, or the write changed nothing in uci. Absent on raw and non-uci writes, which do not run the kernel apply.",
+					"schema": { "type": "string", "enum": ["ok", "partial", "omitted", "skipped", "no_kernel"] },
 				},
 				"XKernelApplied": {
 					"description": "Comma-separated list of the interfaces whose kernel state was actually changed. Absent when nothing was applied, so also absent whenever X-Kernel-Status is `skipped` or `no_kernel`.",
