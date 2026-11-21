@@ -142,11 +142,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **BREAKING: `mwan3/interfaces.family` reads `ipv4` for an empty value too, and
   every response holds it as a string.** mwan3 reads the option with
   `config_get family ... ipv4`, which takes an empty value as unset, so v3 read
-  `""`, a value outside the enum, for an interface that mwan3 runs as ipv4. The
-  response schema declared null and left `family` optional, although the v4 read
-  never answers null. It is now a required string, and the request schema no
-  longer declares null: a PUT that leaves `family` out removes the option, and
-  so does a null in a merge patch. Part of the change of #306 (#346). (#404)
+  `""`, a value outside the enum, for an interface that mwan3 runs as ipv4. A
+  list now reads as the string that `config_get` makes of it. The response
+  schema declared null and left `family` optional, although the v4 read never
+  answers null. It is now a required string, and the request schema no longer
+  declares null: a PUT that leaves `family` out removes the option, and so does
+  a null in a merge patch. Part of the change of #306 (#346). (#404)
 - **A `wireless/interfaces` section without a `mode` and `sqm/queues.enabled`
   read as their daemons do.** wifi-scripts sets up nothing for a section without
   a mode, so such a section no longer blocks a `wireless/devices` write that
