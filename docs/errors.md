@@ -28,8 +28,9 @@ Every non-2xx response carries this body shape (Content-Type:
 - `request_id` is a ULID echoed in the `X-Request-Id` response header on
   **every** response, success or error. Pair with the audit log line to trace a
   request server-side. Clients may supply their own via `X-Request-Id` header or
-  `?request_id=` query param (validated against `^[A-Za-z0-9_-]{8,128}$`;
-  malformed values fall back to a server-generated ULID).
+  `?request_id=` query param, each validated against `^[A-Za-z0-9_-]{8,128}$`.
+  The header wins when it matches. When neither form matches, the server
+  generates a ULID.
 - `errors[]` is only present for `422 validation_failed`. **All** field errors
   are reported together so the client can fix everything in one round trip.
 

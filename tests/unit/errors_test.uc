@@ -51,9 +51,13 @@ t.describe('errors.request_context', () => {
 		t.assert_equal(ctx.idempotency_key, 'k2');
 	});
 
-	t.it('falls back to a new ULID for a malformed X-Request-Id', () => {
-		let ctx = errors.request_context({ headers: { 'x-request-id': 'short' } }, {});
-		t.assert_equal(length(ctx.request_id), 26);
+	t.it('takes the query parameter over an empty header and a malformed X-Request-Id', () => {
+		let ctx = errors.request_context({ headers: {
+			'x-request-id': 'short', 'if-match': '', 'if-none-match': '', 'idempotency-key': '',
+		} }, { request_id: 'req-0123456789', if_match: 'deadbeef0000', if_none_match: '*',
+		       idempotency_key: 'k3' });
+		t.assert_deep_equal(ctx, { request_id: 'req-0123456789', if_match: 'deadbeef0000',
+		                           if_none_match: '*', idempotency_key: 'k3' });
 	});
 });
 
