@@ -27352,7 +27352,7 @@
 							"string",
 							"null"
 						],
-						"description": "IPv4 address to rewrite the source to. Requires target SNAT"
+						"description": "IPv4 address to rewrite the source to. Requires target SNAT. On the NPT target that only a read gives, the prefix that firewall4 maps match.src_ip to"
 					},
 					"snat_port": {
 						"type": [
@@ -27508,7 +27508,7 @@
 							"string",
 							"null"
 						],
-						"description": "IPv4 address to rewrite the source to. Requires target SNAT"
+						"description": "IPv4 address to rewrite the source to. Requires target SNAT. On the NPT target that only a read gives, the prefix that firewall4 maps match.src_ip to"
 					},
 					"snat_port": {
 						"type": [
@@ -28489,7 +28489,7 @@
 							"string",
 							"null"
 						],
-						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it"
+						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as odhcp6c reads it"
 					},
 					"reqaddress": {
 						"type": [
@@ -29071,8 +29071,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
-						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as dhcpv6.sh reads it"
+						"pattern": "^(auto|no|([0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$",
+						"description": "Prefix delegation request (dhcpv6, pppoe, ppp): auto, no, a prefix length, or a prefix such as 2001:db8::/56, each with an optional :IAID of up to 8 hex digits, as odhcp6c reads it"
 					},
 					"reqaddress": {
 						"type": [
@@ -29642,7 +29642,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(auto|no|(/?[0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$"
+						"pattern": "^(auto|no|([0-9]+|[0-9A-Fa-f:.]+/[0-9]+)(:[0-9A-Fa-f]{1,8})?)$"
 					},
 					"reqaddress": {
 						"type": [
@@ -31642,6 +31642,9 @@
 							"wpa3-mixed",
 							"sae-compat",
 							"wpa3-192",
+							"wpa-mixed",
+							"psk3",
+							"psk3-mixed",
 							"psk+ccmp",
 							"psk+ccmp256",
 							"psk+gcmp",
@@ -31731,7 +31734,17 @@
 							"wpa3-192+aes",
 							"wpa3-192+tkip+aes",
 							"wpa3-192+aes+tkip",
-							"wpa3-192+ccmp+tkip"
+							"wpa3-192+ccmp+tkip",
+							"wpa-mixed+ccmp",
+							"wpa-mixed+ccmp256",
+							"wpa-mixed+gcmp",
+							"wpa-mixed+gcmp256",
+							"wpa-mixed+tkip",
+							"wpa-mixed+tkip+ccmp",
+							"wpa-mixed+aes",
+							"wpa-mixed+tkip+aes",
+							"wpa-mixed+aes+tkip",
+							"wpa-mixed+ccmp+tkip"
 						],
 						"default": "none"
 					},
@@ -31958,6 +31971,9 @@
 							"wpa3-mixed",
 							"sae-compat",
 							"wpa3-192",
+							"wpa-mixed",
+							"psk3",
+							"psk3-mixed",
 							"psk+ccmp",
 							"psk+ccmp256",
 							"psk+gcmp",
@@ -32047,7 +32063,17 @@
 							"wpa3-192+aes",
 							"wpa3-192+tkip+aes",
 							"wpa3-192+aes+tkip",
-							"wpa3-192+ccmp+tkip"
+							"wpa3-192+ccmp+tkip",
+							"wpa-mixed+ccmp",
+							"wpa-mixed+ccmp256",
+							"wpa-mixed+gcmp",
+							"wpa-mixed+gcmp256",
+							"wpa-mixed+tkip",
+							"wpa-mixed+tkip+ccmp",
+							"wpa-mixed+aes",
+							"wpa-mixed+tkip+aes",
+							"wpa-mixed+aes+tkip",
+							"wpa-mixed+ccmp+tkip"
 						],
 						"default": "none"
 					},
@@ -32177,6 +32203,9 @@
 										"wpa3-mixed",
 										"sae-compat",
 										"wpa3-192",
+										"wpa-mixed",
+										"psk3",
+										"psk3-mixed",
 										"psk2+ccmp",
 										"psk2+ccmp256",
 										"psk2+gcmp",
@@ -32246,7 +32275,17 @@
 										"wpa3-192+aes",
 										"wpa3-192+tkip+aes",
 										"wpa3-192+aes+tkip",
-										"wpa3-192+ccmp+tkip"
+										"wpa3-192+ccmp+tkip",
+										"wpa-mixed+ccmp",
+										"wpa-mixed+ccmp256",
+										"wpa-mixed+gcmp",
+										"wpa-mixed+gcmp256",
+										"wpa-mixed+tkip",
+										"wpa-mixed+tkip+ccmp",
+										"wpa-mixed+aes",
+										"wpa-mixed+tkip+aes",
+										"wpa-mixed+aes+tkip",
+										"wpa-mixed+ccmp+tkip"
 									]
 								}
 							},
@@ -32277,6 +32316,7 @@
 										"wpa3",
 										"wpa3-mixed",
 										"wpa3-192",
+										"wpa-mixed",
 										"wpa+ccmp",
 										"wpa+ccmp256",
 										"wpa+gcmp",
@@ -32326,7 +32366,17 @@
 										"wpa3-192+aes",
 										"wpa3-192+tkip+aes",
 										"wpa3-192+aes+tkip",
-										"wpa3-192+ccmp+tkip"
+										"wpa3-192+ccmp+tkip",
+										"wpa-mixed+ccmp",
+										"wpa-mixed+ccmp256",
+										"wpa-mixed+gcmp",
+										"wpa-mixed+gcmp256",
+										"wpa-mixed+tkip",
+										"wpa-mixed+tkip+ccmp",
+										"wpa-mixed+aes",
+										"wpa-mixed+tkip+aes",
+										"wpa-mixed+aes+tkip",
+										"wpa-mixed+ccmp+tkip"
 									]
 								}
 							},
@@ -32364,6 +32414,9 @@
 										"wpa3-mixed",
 										"sae-compat",
 										"wpa3-192",
+										"wpa-mixed",
+										"psk3",
+										"psk3-mixed",
 										"psk2+ccmp",
 										"psk2+ccmp256",
 										"psk2+gcmp",
@@ -32433,7 +32486,17 @@
 										"wpa3-192+aes",
 										"wpa3-192+tkip+aes",
 										"wpa3-192+aes+tkip",
-										"wpa3-192+ccmp+tkip"
+										"wpa3-192+ccmp+tkip",
+										"wpa-mixed+ccmp",
+										"wpa-mixed+ccmp256",
+										"wpa-mixed+gcmp",
+										"wpa-mixed+gcmp256",
+										"wpa-mixed+tkip",
+										"wpa-mixed+tkip+ccmp",
+										"wpa-mixed+aes",
+										"wpa-mixed+tkip+aes",
+										"wpa-mixed+aes+tkip",
+										"wpa-mixed+ccmp+tkip"
 									]
 								},
 								"ft_psk_generate_local": {
@@ -32521,6 +32584,9 @@
 							"wpa3-mixed",
 							"sae-compat",
 							"wpa3-192",
+							"wpa-mixed",
+							"psk3",
+							"psk3-mixed",
 							"psk+ccmp",
 							"psk+ccmp256",
 							"psk+gcmp",
@@ -32611,6 +32677,16 @@
 							"wpa3-192+tkip+aes",
 							"wpa3-192+aes+tkip",
 							"wpa3-192+ccmp+tkip",
+							"wpa-mixed+ccmp",
+							"wpa-mixed+ccmp256",
+							"wpa-mixed+gcmp",
+							"wpa-mixed+gcmp256",
+							"wpa-mixed+tkip",
+							"wpa-mixed+tkip+ccmp",
+							"wpa-mixed+aes",
+							"wpa-mixed+tkip+aes",
+							"wpa-mixed+aes+tkip",
+							"wpa-mixed+ccmp+tkip",
 							null
 						]
 					},
@@ -35089,7 +35165,7 @@
 						],
 						"minimum": 0,
 						"maximum": 49710,
-						"description": "Certificate validity in days"
+						"description": "Certificate validity in days. A write takes 1 to 49710: px5g makes a certificate that has already expired for 0, and wraps a larger number. A read also gives a stored 0"
 					},
 					"bits": {
 						"type": [
@@ -35157,9 +35233,9 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 1,
 						"maximum": 49710,
-						"description": "Certificate validity in days"
+						"description": "Certificate validity in days. A write takes 1 to 49710: px5g makes a certificate that has already expired for 0, and wraps a larger number. A read also gives a stored 0"
 					},
 					"bits": {
 						"type": [
@@ -35223,7 +35299,7 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0,
+						"minimum": 1,
 						"maximum": 49710
 					},
 					"bits": {
@@ -35417,7 +35493,7 @@
 							"integer",
 							"null"
 						],
-						"maximum": 86400
+						"description": "Minimum TTL of the cache in seconds. unbound.sh runs a value above 1800 as 300"
 					},
 					"domain": {
 						"type": [
@@ -35609,8 +35685,9 @@
 							"integer",
 							"null"
 						],
-						"maximum": 86400,
-						"minimum": 0
+						"description": "Minimum TTL of the cache in seconds. unbound.sh runs a value above 1800 as 300",
+						"minimum": 0,
+						"maximum": 86400
 					},
 					"domain": {
 						"type": [
@@ -35796,8 +35873,8 @@
 							"integer",
 							"null"
 						],
-						"maximum": 86400,
-						"minimum": 0
+						"minimum": 0,
+						"maximum": 86400
 					},
 					"domain": {
 						"type": [
@@ -37469,7 +37546,7 @@
 							"string",
 							"null"
 						],
-						"description": "Firewall mark mask for mwan3-tagged packets, in hex or decimal, as the shell arithmetic of mwan3 reads it (default 0x3F00)."
+						"description": "Firewall mark mask for mwan3-tagged packets, in hex, decimal or octal with a leading 0, as the shell arithmetic of mwan3 reads it (default 0x3F00). A decimal or octal mask is at most 0xFFFFFFFF."
 					},
 					"logging": {
 						"type": "boolean",
@@ -37517,8 +37594,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(0[xX][0-9A-Fa-f]+|[0-9]{1,10})$",
-						"description": "Firewall mark mask for mwan3-tagged packets, in hex or decimal, as the shell arithmetic of mwan3 reads it (default 0x3F00)."
+						"pattern": "^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]{0,9})$",
+						"description": "Firewall mark mask for mwan3-tagged packets, in hex, decimal or octal with a leading 0, as the shell arithmetic of mwan3 reads it (default 0x3F00). A decimal or octal mask is at most 0xFFFFFFFF."
 					},
 					"logging": {
 						"type": "boolean",
@@ -37562,7 +37639,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(0[xX][0-9A-Fa-f]+|[0-9]{1,10})$"
+						"pattern": "^(0[xX][0-9A-Fa-f]+|0[0-7]*|[1-9][0-9]{0,9})$"
 					},
 					"logging": {
 						"type": [
@@ -38408,7 +38485,7 @@
 							"string",
 							"null"
 						],
-						"description": "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests."
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it."
 					},
 					"src_ip": {
 						"type": [
@@ -38505,7 +38582,7 @@
 							"null"
 						],
 						"pattern": "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$",
-						"description": "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests."
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it."
 					},
 					"src_ip": {
 						"type": [

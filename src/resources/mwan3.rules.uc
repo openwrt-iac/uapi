@@ -7,6 +7,11 @@ let is_valid_ip = values.is_valid_ip;
 const VALID_FAMILY = { "ipv4": true, "ipv6": true, "any": true };
 // ipset caps a timeout at 2147483 seconds, and LuCI's form at 1000000.
 const WRITE = { timeout: { maximum: 1000000 } };
+// mwan3 writes the rules of a family in one iptables-restore batch, which fails whole on a
+// protocol that iptables cannot parse: a number above 255, or a name that is neither one of its
+// own nor in musl's table. iptables lowercases the name first.
+const XTABLES_PROTOCOLS = [ "tcp", "sctp", "udp", "udplite", "icmp", "ipv6-icmp", "icmpv6", "esp", "ah",
+                            "mobility-header", "ipv6-mh", "mh", "dccp", "ipcomp", "all" ];
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -50,9 +55,14 @@ function _is_valid_addr_or_cidr(s) {
 	return is_valid_ip(s) || is_valid_cidr_any(s);
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE);
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
+	let proto = (delta ?? json).proto;
+	if (type(proto) == "string" && !(match(proto, /^[0-9]{1,3}$/) ? int(proto) <= 255
+	                                 : (lc(proto) in XTABLES_PROTOCOLS || lc(proto) in values.MUSL_PROTOCOLS)))
+		push(errs, { field: "proto", code: "invalid_format",
+		             message: "must be a protocol number from 0 to 255 or a name that iptables resolves, such as tcp, udp, icmp, esp or all: mwan3 loads the rules of a family in one batch, and iptables refuses the batch for a protocol that it cannot parse" });
 	if (json.use_policy == null || json.use_policy == "") {
 		push(errs, { field: "use_policy", code: "required", message: "is required" });
 	} else if (conn != null) {
@@ -83,7 +93,7 @@ return {
 	schema_properties: {
 		family:     { type: ["string", "null"], enum: [...keys(VALID_FAMILY), null] },
 		proto:      { type: ["string", "null"], pattern: "^([0-9]{1,3}|[A-Za-z][A-Za-z0-9._-]*)$",
-		              description: "IP protocol as iptables takes it: a number, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests." },
+		              description: "IP protocol as iptables takes it: a number from 0 to 255, or a name that iptables resolves, such as tcp, udp, icmp, esp or all, which LuCI suggests. A write refuses another value, because iptables refuses the rules of the whole family for it." },
 		src_ip:     { type: ["string", "null"], description: "IP address or CIDR." },
 		src_port:   { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		dest_ip:    { type: ["string", "null"], description: "IP address or CIDR." },

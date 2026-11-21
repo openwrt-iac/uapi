@@ -160,9 +160,9 @@ function _check_path(errs, field, value) {
 		             message: "must be an absolute filesystem path (no shell meta)" });
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE);
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	_check_path(errs, "ca",       json.ca);
 	_check_path(errs, "cert",     json.cert);
 	_check_path(errs, "key",      json.key);

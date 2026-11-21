@@ -130,10 +130,12 @@ function check_target_coupling(json, errs) {
 
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
 
-	values.write_bounds(errs, delta ?? json, WRITE);
+	// A PUT removes the set_helper option, which uapi does not model, and fw4 skips a HELPER rule
+	// without it, so only a PATCH may send HELPER back.
+	values.write_bounds(errs, delta ?? json, WRITE, partial ? stored : null);
 	if (json.target == null)
 		push(errs, { field: "target", code: "required", message: "is required" });
 

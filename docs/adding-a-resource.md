@@ -33,7 +33,7 @@ return {
     reload: ["<service>"],             // ubus services to reload on write
     fromUci: function(section, conn) { ... }, // uci section dict -> response JSON
     toUci:   function(json) { ... },          // request JSON -> uci option dict
-    validate: function(json, conn, id, delta, partial) { ... return []; }, // {field, code, message}[]
+    validate: function(json, conn, id, delta, partial, stored) { ... return []; }, // {field, code, message}[]
     validate_new: function(json, conn) { ... return []; }, // optional: see "Rules that a stored value can fail"
     schema_properties: { ... },        // type/enum/min/max/pattern/items; enforced centrally
 
@@ -315,8 +315,10 @@ minimum: 68 } }`. The generator puts those keywords on the `*Request` schema
 only, and the type
 gate does not read them, so `validate()` must refuse the value itself.
 `values.write_bounds()` refuses an `enum`, `minimum` or `maximum` on the fields
-that a request names, as the type gate would: pass it the same object that the
-property takes under `x-uapi-write`, and `delta ?? json`.
+that a request changes, with the messages of the type gate: pass it the same
+object that the property takes under `x-uapi-write`, `delta ?? json`, and the
+`stored` read that the handler passes to `validate()` after `partial`. A field
+that the request sends back unchanged passes, so a PUT of the read passes.
 `tests/unit/write_overlay_test.uc` checks that it does, with a value just past
 each keyword in
 every fixture case of the module. A `pattern` is probed only with values that

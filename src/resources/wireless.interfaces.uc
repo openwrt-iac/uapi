@@ -17,11 +17,13 @@ const VALID_ENCRYPTION = {
 	"psk": true, "psk2": true, "psk-mixed": true,
 	"sae": true, "sae-mixed": true,
 	"wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true,
-	"sae-compat": true, "wpa3-192": true,
+	"sae-compat": true, "wpa3-192": true, "wpa-mixed": true,
+	// parse_encryption in wifi-scripts takes these as the older names of sae and sae-mixed.
+	"psk3": true, "psk3-mixed": true,
 };
 // LuCI appends a forced cipher, as in psk2+ccmp, to these modes of the enum, and
 // parse_encryption in wifi-scripts also reads the older aes spellings.
-const CIPHER_MODES = [ "psk", "psk2", "psk-mixed", "sae", "wpa", "wpa2", "wpa3", "wpa3-mixed", "wpa3-192" ];
+const CIPHER_MODES = [ "psk", "psk2", "psk-mixed", "sae", "wpa", "wpa2", "wpa3", "wpa3-mixed", "wpa3-192", "wpa-mixed" ];
 const CIPHERS = [ "ccmp", "ccmp256", "gcmp", "gcmp256", "tkip", "tkip+ccmp",
                   "aes", "tkip+aes", "aes+tkip", "ccmp+tkip" ];
 for (let m in CIPHER_MODES)
@@ -69,10 +71,11 @@ const R1KH_ID_RE = regexp(R1KH_ID_PATTERN);
 
 // The modes whose key wifi-scripts writes as a line: a passphrase or a PSK for hostapd, or a psk or
 // sae_password for wpa_supplicant.
-const KEY_LINE_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae": true, "sae-mixed": true, "sae-compat": true };
+const KEY_LINE_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae": true, "sae-mixed": true, "sae-compat": true,
+                         "psk3": true, "psk3-mixed": true };
 // The modes whose key supplicant.uc writes as psk in mode sta and adhoc. Plain sae gets sae_password,
 // which wpa_supplicant takes at any length.
-const STA_PSK_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae-mixed": true };
+const STA_PSK_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae-mixed": true, "psk3-mixed": true };
 // supplicant.uc puts the key between double quotes as it is, and wpa_supplicant ends a config line at a
 // `#` outside a quoted string.
 const STA_COMMENT_RE = /^[^"]*"([^"]*"[^"]*")*[^"]*#/;
@@ -86,7 +89,7 @@ function base_encryption(e) {
 // psk-mixed. owe gets no fast transition key management, so hostapd does not cap its nasid. A
 // section with no mode reads as mode ap, as fromUci() reads it.
 const BELOW_WPA2 = { "none": true, "wep": true, "psk": true, "wpa": true };
-const EAP = { "wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true, "wpa3-192": true };
+const EAP = { "wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true, "wpa3-192": true, "wpa-mixed": true };
 const LOCAL_FT_KEYS = { "psk": true, "psk2": true, "psk-mixed": true };
 const ROAMING_ENCRYPTION = filter(keys(VALID_ENCRYPTION), (e) => !BELOW_WPA2[base_encryption(e)]);
 const FT_ENCRYPTION = filter(ROAMING_ENCRYPTION, (e) => base_encryption(e) != "owe");
@@ -205,8 +208,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
+	let named = delta ?? json;
 
 	values.require_present(errs, json, "device");
 
@@ -219,7 +223,7 @@ function validate(json, conn, id, delta) {
 	if (json.mode != null && !VALID_MODES[json.mode])
 		push(errs, { field: "mode", code: "not_in_enum",
 		             message: "must be one of " + join(", ", WRITE_MODES) });
-	else if ((delta ?? json).mode == "ahdemo")
+	else if (named.mode == "ahdemo" && stored?.mode != "ahdemo")
 		push(errs, { field: "mode", code: "not_in_enum",
 		             message: "must be one of " + join(", ", WRITE_MODES) + ": wifi-scripts sets up no interface in mode ahdemo" });
 
@@ -227,9 +231,11 @@ function validate(json, conn, id, delta) {
 		push(errs, { field: "encryption", code: "not_in_enum",
 		             message: "unknown encryption value" });
 
-	// LuCI writes an EAP SSID without a key, so only a write that sends an EAP encryption needs one.
+	// LuCI writes an EAP SSID without a key, so only a write that changes the encryption to an EAP
+	// mode needs one. A PUT of the read sends the encryption back without the masked key.
 	let needs_key = json.encryption != null && !NO_KEY_ENCRYPTION[json.encryption]
-	                && (!EAP[base_encryption(json.encryption)] || (delta ?? json).encryption != null);
+	                && (!EAP[base_encryption(json.encryption)]
+	                    || (named.encryption != null && named.encryption != stored?.encryption));
 	if (needs_key && (json.key == null || json.key == ""))
 		push(errs, { field: "key", code: "required",
 		             message: sprintf("is required when encryption is %J", json.encryption) });
@@ -295,7 +301,7 @@ function rules(json, radio_on) {
 			err("key", "out_of_range", "must be 8 to 63 bytes, or 64 hex digits, in mode ap: wifi-scripts gives hostapd no key for another length", on);
 		else if (length(ap_key) == 64 && !hex)
 			err("key", "invalid_format", "must be hex digits when it is 64 bytes long in mode ap: wifi-scripts gives it to hostapd as a PSK", on);
-		else if (hex && base == "sae")
+		else if (hex && (base in [ "sae", "psk3" ]))
 			err("key", "conflict", "must not be 64 hex digits with encryption sae in mode ap: hostapd takes it as a PSK, and SAE needs a passphrase", on);
 	}
 

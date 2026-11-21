@@ -127,11 +127,11 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
 
 	values.require_present(errs, json, "interface");
-	values.write_bounds(errs, delta ?? json, WRITE);
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
 
 	if (json.ra != null && !VALID_RA[json.ra])
 		push(errs, { field: "ra", code: "not_in_enum",

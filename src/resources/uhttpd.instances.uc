@@ -66,9 +66,9 @@ function uapi_prefix_present(json) {
 	return false;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE);
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
 
 	// Self-lockout protection: refuse a write to the 'main' instance that
 	// would strip uapi's own ucode_prefix entry. Applies to PUT and PATCH

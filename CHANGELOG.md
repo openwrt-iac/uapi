@@ -84,24 +84,31 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   configuration that LuCI or the daemon takes, such as `option metric '-1'` on a
   `network/interfaces` section, `option type 'bonding'` on a `config device`,
   the `HELPER` target that LuCI writes on a firewall rule, `option mode
-  'ahdemo'`, `option encryption 'sae-compat'`, an mwan3 `count` above 10 or an
-  sqm `script` such as `simplest_tbf.qos`. These Responses now take the value,
-  which is branch (b) of the type carve-out in `docs/versioning.md`. No read
-  changes, so nothing fails: a client that validated such a read failed and now
-  passes. Where a write does not take the value, its bound moved to
-  `x-uapi-write`, and the server refuses it only in a field that the request
-  names, with the same code as before. Some of these values blocked every PATCH
-  of their section and no longer do: a device or radio type that uapi does not
+  'ahdemo'`, `option encryption 'sae-compat'`, an mwan3 `count` above 10, an sqm
+  `script` such as `simplest_tbf.qos`, or an unbound `ttl_min` above 86400.
+  These Responses now take the value, which is branch (b) of the type carve-out
+  in `docs/versioning.md`. No read changes, so nothing fails: a client that
+  validated such a read failed and now passes. Where a write does not take the
+  value, its bound moved to `x-uapi-write`, and the server refuses only a write
+  that changes a field to it, with the same code as before. A write that sends
+  the stored value back passes, such as a PUT of the read, which a full-body
+  client sends. A `firewall/rules` PUT of `HELPER` stays refused, because a PUT
+  removes the `set_helper` option, which uapi does not model, and firewall4
+  skips a HELPER rule without it. Some of these values blocked every PATCH of
+  their section and no longer do: a device or radio type that uapi does not
   write, a `vid` of 0, mode `ahdemo`, an unbound `rebind_protection` other than
   0, 1 or 2, a `reqprefix` with an `:IAID`, a negated firewall port with a blank
-  after the `!`, and an EAP SSID without a key, as LuCI writes it. A write also
-  takes values that LuCI writes and 3.x refused, which is an addition, such as
-  the negated port, mark and DSCP forms with a blank, `sae-compat`, `wpa3-192`,
-  a `network/rules.priority` above 32766, a `leasetime` of `infinite` or
-  `deprecated`, and a `system.hostname` with a trailing dot. A PUT that sends
-  back the `id` of an interface that LuCI named, such as `4g`, passes. A fix
-  that would read another value, such as a firewall verdict in lower case, waits
-  for v4. (#410)
+  after the `!`, the `snat_ip` of an NPT rule, and an EAP SSID without a key, as
+  LuCI writes it. Such an SSID needs a key only in a write that changes its
+  encryption. A write also takes values that LuCI or the daemon takes and 3.x
+  refused, which is an addition, such as the negated port, mark and DSCP forms
+  with a blank, `sae-compat`, `wpa3-192`, `wpa-mixed`, `psk3`, `psk3-mixed`, a
+  `network/rules.priority` above 32766, an mwan3 rule `proto` that iptables
+  parses, an mwan3 `mmx_mask` in decimal or octal up to 32 bits, a `leasetime`
+  of `infinite` or `deprecated`, and a `system.hostname` with a trailing dot. A
+  PUT that sends back the `id` of an interface that LuCI named, such as `4g`,
+  passes. A fix that would read another value, such as a firewall verdict in
+  lower case, waits for v4. (#410)
 - **On OpenWrt main, wireguard peers follow the proto handler that leaves out a
   value wg would refuse.** Since openwrt ecd9120f04, the ucode handler of main
   leaves out a peer whose key is not a WireGuard key, and the line of a

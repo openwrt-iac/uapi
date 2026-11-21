@@ -16,12 +16,6 @@ const TOS_VALUES = [ 0, 4, 8, 12, 16, 20, 24, 28 ];
 // uci hands netifd priority as a signed 32-bit number, and LuCI writes it from 0 up.
 const WRITE = { priority: { minimum: 0 } };
 
-// musl's getprotobyname compares a name against this built-in table, case-sensitively.
-const MUSL_PROTOCOLS = [ "ip", "icmp", "igmp", "ggp", "ipencap", "st", "tcp", "egp", "pup", "udp", "hmp",
-                         "xns-idp", "rdp", "iso-tp4", "xtp", "ddp", "idpr-cmtp", "ipv6", "ipv6-route",
-                         "ipv6-frag", "idrp", "rsvp", "gre", "esp", "ah", "skip", "ipv6-icmp", "ipv6-nonxt",
-                         "ipv6-opts", "rspf", "vmtp", "ospf", "ipip", "encap", "pim", "raw" ];
-
 // The kernel refuses a port range that holds 0 or 65535 or runs backwards
 // (fib_rule_port_range_valid), and a uid range that runs backwards or holds 4294967295, which maps
 // to no uid. netifd keeps a port in 16 bits and a uid in 32.
@@ -55,7 +49,7 @@ function c_unsigned(s, base) {
 function ipproto_installs(v) {
 	let s = "" + v;
 	let c = c_unsigned(s, 0);
-	return (c != null && c.len == length(s) && c.n > 0) || index(MUSL_PROTOCOLS, s) >= 0;
+	return (c != null && c.len == length(s) && c.n > 0) || index(values.MUSL_PROTOCOLS, s) >= 0;
 }
 
 // netifd reads a range with sscanf("%u-%u"), which reads a second number only right after the dash
@@ -137,10 +131,10 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta) {
+function validate(json, conn, id, delta, partial, stored) {
 	let errs = [];
 
-	values.write_bounds(errs, delta ?? json, WRITE);
+	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	if (json.src != null && json.src != "" && !is_valid_ipv4(json.src) && !is_valid_cidr(json.src))
 		push(errs, { field: "src", code: "invalid_format",
 		             message: "must be a valid IPv4 address or CIDR" });

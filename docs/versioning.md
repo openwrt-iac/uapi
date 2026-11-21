@@ -241,9 +241,7 @@ that the request schema does not take. Four kinds of value qualify:
   LuCI writes,
 - a value that the daemon takes and a write does not, such as an mwan3
   `probe_count` above 10, the `bonding` type of `network/devices` that LuCI
-  writes, or the `HELPER` target of `firewall/rules`. A write refuses such a
-  value only in a field that the request names, as the schema check did before
-  the bound moved to `x-uapi-write`, so a PATCH that leaves it passes.
+  writes, or the `HELPER` target of `firewall/rules`.
 
 The response declares what a read can return, and the request declares what a
 write can send,
@@ -252,7 +250,11 @@ server refuses it
 too, except where the rule is in `validate_new()`, such as the -1 of
 `network/wireguard_peers.persistent_keepalive`: there the server takes a write
 that leaves the
-stored value as it is. A module declares the difference with `x-uapi-write`, and
+stored value as it is. The server also takes a write that sends back a value of
+the fourth kind, a PUT of the read too, and refuses one that changes a field to
+it. A `firewall/rules` PUT of `HELPER` stays refused, because a PUT removes the
+`set_helper` option, which uapi does not model, and firewall4 skips a HELPER
+rule without it. A module declares the difference with `x-uapi-write`, and
 `tests/unit/write_overlay_test.uc` checks each such keyword against the refusal
 in
 `validate()`.
