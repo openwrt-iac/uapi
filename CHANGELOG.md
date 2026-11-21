@@ -8,6 +8,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: a list cursor that ends on an anonymous section holds a hash.**
+  The id of an anonymous section is its libuci name, which holds the position
+  of the section in its package. After a delete of an earlier section, 3.x
+  resumed the next page from the section that took that name, and skipped an
+  item. A page that ends on an unmanaged section now gives `c_<id>.<hash>`, with
+  a hash of the ETags of the items up to it, and the cursor answers 400
+  `invalid_cursor` when one of them changed. A bare `c_<id>` of an unmanaged
+  section answers 400 too. 3.5.0 did not announce it, so it uses the tightening
+  carve-out of `docs/versioning.md`: a client could not tell whether the page
+  of such a cursor skipped an item. Migration note in
+  `docs/migration-v3-to-v4.md`. (#429)
 - **BREAKING: the HTTP token mint refuses a scope that the server does not
   know.** `POST /uapi/tokens` checks each scope as `uapi-token create` does. A
   scope passes when its path is in the scope tree, is `raw:<package>`, or names
