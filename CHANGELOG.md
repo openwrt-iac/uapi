@@ -90,7 +90,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   them. That refusal uses the carve-out of `docs/versioning.md` for a payload
   that produced broken state no caller can rely on. The validation sweep lists a
   stored list that the handler drops, and a PATCH that sends the value stores it
-  as an option. (#PR)
+  as an option. (#412)
 - **A read of a value that the platform takes conforms to its Response, and a
   write takes more of the values that LuCI writes.** An audit compared each
   schema constraint with LuCI and with the daemon that reads the option. A
