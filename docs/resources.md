@@ -328,7 +328,7 @@ composition rules, and stability caveat.
 | `GET /openapi.json` | none | The OpenAPI 3.1 spec. |
 | `GET /schema/<package>/<resource>` | none | One resource's `schema_properties`. `GET /schema` lists all keys. |
 | `GET /uapi/whoami` | any token | Token introspection: token_id, scopes, source_ip, expires_at, allowed_cidrs, last_used_at, last_used_ip. |
-| `GET /uapi/tokens`, `POST /uapi/tokens`, `DELETE /uapi/tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST requires the caller's scopes to cover the requested scopes, equal or narrower. |
+| `GET /uapi/tokens`, `POST /uapi/tokens`, `DELETE /uapi/tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST refuses a scope outside the scope tree with 422, and requires the caller's scopes to cover the requested scopes, equal or narrower. |
 | `GET /uapi/metrics` | `uapi:metrics:ro` (or `*:ro`) | Prometheus 0.0.4 text. |
 | `GET /uapi/diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, current lock holders. |
 | `POST /uapi/batch` | each sub-request scope-checked | Multi-package all-or-nothing transaction (max 50 ops). |

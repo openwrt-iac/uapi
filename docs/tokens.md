@@ -87,6 +87,13 @@ and a stored one admits no caller. The validation sweep does not cover tokens,
 so
 `uapi-token list` is where a stored entry shows.
 
+Each requested scope must be in the scope tree below, as for `uapi-token
+create`, and the HTTP mint has no `--force`. A typo, a scope that a release
+removed such as `dhcp:leases6`, or a malformed scope returns `422
+validation_failed` with code `not_in_enum` on its entry, such as `scopes[1]`.
+This check runs before the escalation check, so an unknown scope never returns
+403.
+
 The caller's scopes must cover the requested scopes, equal or narrower.
 Escalation
 returns `403 scope_escalation_blocked`. A name that a token or another

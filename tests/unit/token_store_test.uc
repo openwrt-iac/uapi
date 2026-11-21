@@ -158,6 +158,35 @@ t.describe('token_store.create validation', () => {
 		t.assert_equal(r.kind, "validation");
 	});
 
+	t.it('refuses a scope outside the known tree on its own entry', () => {
+		for (let s in [ "firewall:rulez:rw", "dhcp:leases6:ro", "firewall:rules" ]) {
+			let c = bus.stub({});
+			let r = token_store.create(c, { name: "ok_name", scopes: [ "firewall:rules:ro", s ] },
+				[ "*:rw" ], 1700000000, noop_tx());
+			t.assert_equal(r.kind, "validation", s);
+			t.assert_equal(length(r.errors), 1, s);
+			t.assert_equal(r.errors[0].field, "scopes[1]", s);
+			t.assert_equal(r.errors[0].code, "not_in_enum", s);
+		}
+	});
+
+	t.it('mints a scope of the known tree, a wildcard and a raw package', () => {
+		let c = bus.stub({});
+		let r = token_store.create(c,
+			{ name: "ok_name", scopes: [ "dhcp:leases:ro", "*:rules:ro", "raw:network:ro" ] },
+			[ "*:rw" ], 1700000000, noop_tx());
+		t.assert_true(r.ok);
+		t.assert_deep_equal(c._state.uci.uapi.ok_name.scopes, [ "dhcp:leases:ro", "*:rules:ro", "raw:network:ro" ]);
+	});
+
+	// A 403 would send the client to a broader token, which cannot mint the scope either.
+	t.it('refuses an unknown scope with 422 before it judges escalation', () => {
+		let c = bus.stub({});
+		let r = token_store.create(c, { name: "ok_name", scopes: [ "firewall:rulez:rw" ] },
+			[ "firewall:ro" ], 1700000000, noop_tx());
+		t.assert_equal(r.kind, "validation");
+	});
+
 	t.it('blocks scope escalation', () => {
 		let c = bus.stub({});
 		let r = token_store.create(c,

@@ -110,6 +110,10 @@ function _validate_create_body(body) {
 		if (type(body.scopes[i]) != "string")
 			push(errs, errors.field_error(sprintf("scopes[%d]", i),
 				"invalid_type", "scope must be a string"));
+		else try { scope.validate_against_known_tree(body.scopes[i]); }
+		catch (e) {
+			push(errs, errors.field_error(sprintf("scopes[%d]", i), "not_in_enum", e.message));
+		}
 	}
 	if (body.expires_in_seconds != null) {
 		let n = values.as_int(body.expires_in_seconds);

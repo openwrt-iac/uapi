@@ -51,15 +51,28 @@ The upgrade keeps each stored token and its scopes. A token that holds
 addresses. 3.x kept those behind `dhcp:leases6`. A token that holds only
 `dhcp:leases6` still authenticates, but that scope grants nothing now, so
 `?family=v6` answers 403 `insufficient_scope`. `uapi-token create` refuses
-`dhcp:leases6` as an unknown path. `POST /uapi/tokens` still accepts it, and it
-grants nothing to the new token. A scope on all of `dhcp`, such as `dhcp:ro`,
-reads both families before and after the upgrade.
+`dhcp:leases6` as an unknown path, and `POST /uapi/tokens` answers 422 for it,
+as the next section says. A scope on all of `dhcp`, such as `dhcp:ro`, reads
+both families before and after the upgrade.
 
 Before the upgrade, run `uapi-token list` to find the tokens that hold either
 scope. For a client that reads the IPv6 leases, mint a token on 3.x with both
 `dhcp:leases` and `dhcp:leases6`, and revoke the old one. The new token reads
 both families before and after the upgrade. v4 has no scope for the IPv4 leases
 alone, so a client that must not see the IPv6 leases cannot keep `dhcp:leases`.
+
+## The token mint refuses a scope that the server does not know
+
+`POST /uapi/tokens` now checks each scope against the scope tree of the server,
+as `uapi-token create` does (announced in 3.5.0, #415). A typo such as
+`firewall:rulez:rw`, a scope that v4 removed such as `dhcp:leases6:ro`, or a
+malformed scope such as one without a verb answers 422 `validation_failed`,
+with code `not_in_enum` on its entry of `scopes`, such as `scopes[1]`. 3.x
+minted a token with an unknown scope, which granted nothing, and answered 500
+`internal_error` for a malformed one. The check runs before the escalation
+check, so such a scope answers 422 and not 403 `scope_escalation_blocked`. A
+stored token that holds an unknown scope keeps it and still authenticates.
+`docs/tokens.md` lists the scope tree.
 
 ## `id` and `runtime` are required in every resource response
 

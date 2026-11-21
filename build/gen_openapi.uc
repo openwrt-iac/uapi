@@ -1008,7 +1008,7 @@ function build_paths() {
 		},
 		"post": {
 			"summary": "Mint a new token over HTTP",
-			"description": "Scope: uapi:tokens:rw (or *:rw). Requested scopes MUST be equal to or narrower than the caller's own. A scope that the caller does not hold returns 403 scope_escalation_blocked. The cleartext bearer is returned exactly once.",
+			"description": "Scope: uapi:tokens:rw (or *:rw). Each requested scope MUST be in the scope tree of the server, and a scope outside it returns 422 validation_failed. Requested scopes MUST be equal to or narrower than the caller's own. A scope that the caller does not hold returns 403 scope_escalation_blocked. The cleartext bearer is returned exactly once.",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenCreateRequest" } } } },
 			"responses": responses("post", {
 				"200": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenCreateResponse" } } } },
@@ -1366,7 +1366,7 @@ function build_schemas() {
 			"properties": {
 				"name":   { "type": "string", "pattern": "^[A-Za-z0-9_]{1,63}$" },
 				"scopes": { "type": "array", "items": { "type": "string" }, "minItems": 1,
-				            "description": "MUST be equal to or narrower than the caller's own scopes. A scope that the caller does not hold returns 403 scope_escalation_blocked" },
+				            "description": "Each entry MUST be in the scope tree of the server, as `uapi-token create` takes it (see [docs/tokens.md](https://github.com/openwrt-iac/uapi/blob/main/docs/tokens.md) `Scope tree`). Another string returns 422 validation_failed with code not_in_enum on its entry, such as `scopes[1]`, before the caller's scopes are checked. The scopes MUST be equal to or narrower than the caller's own. A scope that the caller does not hold returns 403 scope_escalation_blocked" },
 				"expires_in_seconds": { "type": ["integer", "null"], "minimum": 1 },
 				"allowed_cidrs":      { "type": "array", "items": { "type": "string", "description": "IPv4 or IPv6 CIDR; a caller matches entries of its own family only" } },
 				"rate":  { "type": ["integer", "null"], "minimum": 1,
