@@ -70,6 +70,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   3.5.0 notice covers them. They use the carve-out of `docs/versioning.md` for a
   tightening that refuses a payload that produced broken state. Migration note
   in `docs/migration-v3-to-v4.md`. (#435)
+- **BREAKING: a WireGuard peer endpoint that does not resolve follows the proto
+  handler.** 3.x committed such an `endpoint_host`, `wg set` refused the peer,
+  and the restore answered 500 `reload_failed_restored`. On 25.12, wireguard.sh
+  gives the endpoint to wg, which refuses the config of the whole interface at
+  its next start, so a write that sends such a host for an enabled peer with a
+  key answers 422 `conflict` on `endpoint_host` before its commit. On OpenWrt
+  main, the ucode proto handler leaves out the endpoint and keeps the peer, so
+  the write sets the peer without it and answers 200 with the new
+  `X-Kernel-Status: omitted`. A name resolves when busybox's nslookup answers
+  it, as that handler reads it. A stored name is not checked. 3.5.0 did not
+  announce this change. Migration note in `docs/migration-v3-to-v4.md`. (#424)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
   where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a
@@ -277,6 +288,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   array, and `ipv4 ipv6` or an empty string outside its enum: carve-out (b) of
   `docs/versioning.md`. A client that checks the enum of the read fails loudly
   on such a value, as in 3.x. (#435)
+- **A WireGuard peer remove checks every section that it sets again before it
+  changes the kernel.** A remove of a key that other sections of the interface
+  hold set the first of them again, then refused a later one with a malformed
+  preshared key or an `allowed_ips` entry marked `+` or `-`. The restore refuses
+  that section before it changes the kernel, so the kernel kept what the remove
+  had set. Only a hand edit stores such a section. (#424)
 
 ## [3.5.0] - 2026-11-21
 
