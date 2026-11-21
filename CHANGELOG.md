@@ -6,6 +6,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-11-21
+
 ### Added
 
 - **`/diagnostics` reports interrupted writes.** A write now records itself in
@@ -83,6 +85,14 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the adopt flow is withdrawn: an anonymous section is named from its position
   in the file at each load, so its name cannot be a client's id, and adopt is
   how a client gets one that holds. (#376)
+- **The rest of the v4 program is announced in the published spec and
+  `docs/deprecations.md`.** The "Upcoming in v4" block of `/api/v3/openapi.json`
+  and the "Announced response-shape changes" section now also list the move of
+  the special endpoints under `/uapi/...`, the merge of `dhcp/leases6` into
+  `dhcp/leases?family=v6`, the removal of `managed` and the adopt flow, the
+  always-present documented `runtime` envelope on every resource, and the
+  pruning of dead error codes from the enum. The deprecation window runs from
+  this release, not from v4. (#345)
 
 ### Fixed
 
@@ -241,12 +251,6 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stored `wep-open` or `wep-shared`, which LuCI writes, broke the Response enum
   and blocked every write of the SSID. Read and write take them now, under the
   same rule. (#409) (#411)
-
-## [3.4.1] - 2026-11-05
-
-### Deprecated
-
-- **The rest of the v4 program is announced in the published spec and `docs/deprecations.md`.** The "Upcoming in v4" block of `/api/v3/openapi.json` and the "Announced response-shape changes" section now also list the move of the special endpoints under `/uapi/...`, the merge of `dhcp/leases6` into `dhcp/leases?family=v6`, the removal of `managed` and the adopt flow, the always-present documented `runtime` envelope on every resource, and the pruning of dead error codes from the enum. The deprecation window runs from this release, not from v4. (#345)
 
 ## [3.4.0] - 2026-11-04
 
