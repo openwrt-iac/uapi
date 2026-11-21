@@ -644,15 +644,18 @@ bodies failed.
   commits on main between 1 August and 1 November 2026 touched one of the paths.
   The job runs beside `integration`, and on a hit of the SDK cache it took 10 to
   12 minutes at the last release tags, so it adds little to the wait. On any
-  other PR the job is skipped.
+  other PR the job runs too, but each of its steps checks `BUILD` and skips, so
+  it builds nothing.
 - `package` is a required check: the `main` and `v3` rulesets require `unit`,
   `lint`, `integration`, `entry` and `package`, with the branch up to date, so a
   red `package` blocks a merge. A PR that does not change the APK still merges,
-  because a skipped job passes as a required check. The `lint` job decides
-  whether `package` runs. An error of `git diff` there counts as a change and
-  runs `package`, and a failure of that step or of the checkout fails `lint`,
-  which is required. A job of its own would skip `package` when it failed, and
-  the skip would pass.
+  because its `package` job runs with no build and passes. The job has no
+  job-level `if`. Its name is an expression of the matrix, and GitHub does not
+  evaluate the name of a job that its `if` skips, so the required `package`
+  check never reported and the PR could not merge (#406). The `lint` job decides
+  whether `package` builds. An error of `git diff` there counts as a change and
+  builds the package, and a failure of that step or of the checkout fails
+  `lint`, which is required.
 - Release tag: + multi-arch verify-build (cross-compile sanity) + `package` job
   + release-apk job (publishes the APK that `package` tested to the GitHub
   Release, with CHANGELOG-extracted notes).
