@@ -212,7 +212,7 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id, delta) {
 	let errs = [];
 
 	values.require_present(errs, json, "device");
