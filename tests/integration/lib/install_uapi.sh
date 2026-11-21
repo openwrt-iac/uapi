@@ -338,3 +338,24 @@ ensure_wireguard() {
 	done
 	return 1
 }
+
+# Real handlers of protos that uapi does not model, and a test handler that keeps the config netifd
+# hands it, so that a write is checked against what the handler receives. netifd scans
+# /lib/netifd/proto only when it starts, as for wireguard above.
+proto_handlers_ready() {
+	$SSH 'lsmod | grep -q "^dummy "' && $SSH 'ubus call network get_proto_handlers 2>/dev/null' \
+		| jq -e 'has("6in4") and has("gre") and has("ipip") and has("vxlan") and has("uapitest")' >/dev/null
+}
+
+ensure_proto_handlers() {
+	proto_handlers_ready && return 0
+	$SSH 'apk add 6in4 gre ipip vxlan kmod-dummy 2>&1 | tail -3; modprobe dummy' || return 1
+	push_file_to_vm tests/integration/lib/uapitest_proto.sh /lib/netifd/proto/uapitest.sh || return 1
+	$SSH 'chmod +x /lib/netifd/proto/uapitest.sh; (sleep 1; /etc/init.d/network restart) >/dev/null 2>&1 &' || true
+	n=0
+	while [ $n -lt 40 ]; do
+		proto_handlers_ready && return 0
+		n=$((n + 1)); sleep 2
+	done
+	return 1
+}
