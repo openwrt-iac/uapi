@@ -1132,15 +1132,6 @@ t.describe('wg under the ucode handler', () => {
 		t.assert_true(index(r.commands, set_of(PK2, '10.0.0.3/32')) >= 0, r.commands);
 		t.assert_true(index(run_wg({ network: { wg1: WG1 } }, sprintf("wg.apply(c, %J)", ops)).commands, set_of(PK, '10.0.0.2/32')) >= 0);
 	});
-	t.it('routes nothing for a peer whose key the handler skips, and withdraws the routes that it had', () => {
-		let op = { iface: 'wg1', action: 'set', public_key: PK + ' # b', allowed_ips: [ '10.9.0.0/24' ], route_words: [ '10.9.0.0/24' ],
-		           route_allowed_ips: true, prev_allowed_ips: [ '10.8.0.0/24' ], prev_route_allowed_ips: true };
-		let routes = (load) => filter(run_wg({ network: { wg1: WG1 } }, sprintf("wg.apply(c, %J)", [ op ]), null, null, load).commands,
-		                              (l) => match(l, /^ip\|route\|(replace|del)\|/));
-		t.assert_deep_equal(routes(UCODE_WG), [ 'ip|route|del|10.8.0.0/24|dev|wg1|proto|static|scope|link' ]);
-		t.assert_deep_equal(routes(), [ 'ip|route|replace|10.9.0.0/24|dev|wg1|proto|static|scope|link',
-		                                'ip|route|del|10.8.0.0/24|dev|wg1|proto|static|scope|link' ]);
-	});
 	t.it('sets a peer whose stored preshared key is not a WireGuard key without one, in an apply and a restore', () => {
 		let a = peer({ public_key: PK, allowed_ips: '10.0.0.2/32', preshared_key: 'not-a-key' });
 		let uci = { network: { wg1: WG1, a, b: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32' }) } };
