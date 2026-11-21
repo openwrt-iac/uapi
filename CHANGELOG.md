@@ -87,7 +87,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unchanged, the public trio `/healthz`, `/openapi.json`, `/schema/*` stays at
   the top level, the old top-level paths answer 404, and the Prometheus `path`
   labels move with them. Announced in 3.4.1 (#319); migration note in
-  `docs/migration-v3-to-v4.md`. (#352)
+  `docs/migration-v3-to-v4.md`. (#352) (#400)
 - **BREAKING: a write is refused for any stored error the section holds, as LuCI
   does.** LuCI validates every visible field of a form at save, so a stored
   value that breaks a rule now blocks every write of the section with 422, not
@@ -236,13 +236,6 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   PUT that sends back the `id` of an interface that LuCI named, such as `4g`,
   passes. A fix that would read another value, such as a firewall verdict in
   lower case, waits for v4. (#410)
-- **The docs and two spec descriptions name the `/uapi/...` paths.** The
-  README, the operator docs and the descriptions of `wireless/devices.disabled`
-  and `network/wireguard_peers.runtime` still named `/tokens`, `/metrics`,
-  `/diagnostics`, `/batch` and `/auth/whoami`. These paths answer 404 in v4, so
-  the token mint and whoami examples and the sample Prometheus scrape config
-  failed. `docs/migration-v1-to-v2.md` and the shipped sections of
-  `docs/roadmap.md` name the 2.x and 3.x paths again. (#400)
 - **On OpenWrt main, wireguard peers follow the proto handler that leaves out a
   value wg would refuse.** Since openwrt ecd9120f04, the ucode handler of main
   leaves out a peer whose key is not a WireGuard key, and the line of a
