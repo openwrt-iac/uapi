@@ -43,16 +43,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `synflood_rate` of `abc`, or a burst that is no integer, is now an error of
   the section, because fw4 then applies no ruleset, and it blocks every write
   that does not replace it. Announced in 3.5.0 (#407, #408), and in 3.4.0 for a
-  stored error (#308). Two changes of `synflood_rate` were not announced. A
+  stored error (#308). One change of `synflood_rate` was not announced. A
   stored rate without a unit, such as `25`, read as the integer 25 in 3.x and
   now reads as the string `25/second`. The 3.5.0 notice did not cover this
   change of type. Every rate reads as a string so that a Terraform client can
   type the field, because Terraform has no type that is an integer or a string.
-  A write takes such a string, or an integer that is a rate per second, of at
-  most 15 digits, where 3.x took any integer from 1. The kernel refuses a rate
-  whose sum with the burst overflows 64 bits, and fw4 then applies no
-  ruleset while `syn_flood` is on. Migration note in
-  `docs/migration-v3-to-v4.md`. (#423)
+  A write takes such a string, or an integer that is a rate per second. A rate
+  that overflows 64 bits in the kernel with the burst, such as `1/minute` with a
+  burst of 4294967295, answers 422 `out_of_range`, and a stored one is an error
+  of the section. 3.x took such a write, and fw4 then applied no ruleset while
+  `syn_flood` was on. This refusal uses the carve-out of `docs/versioning.md`
+  for a tightening that refuses a payload that produced broken state. Migration
+  note in `docs/migration-v3-to-v4.md`. (#423)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
   where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a

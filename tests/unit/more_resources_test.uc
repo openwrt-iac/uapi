@@ -92,14 +92,18 @@ t.describe('firewall.defaults synflood_rate and synflood_burst', () => {
 			t.assert_deep_equal(refused(v), [ 'invalid_format' ], v);
 	});
 
-	// nft_limit_init refuses a rate that overflows a u64 when it adds the burst, at most 2^32 - 1.
-	t.it('a write refuses a rate of more than 15 digits', () => {
-		for (let v in [ 999999999999999, '999999999999999/day' ])
-			t.assert_deep_equal(refused(v), [], v);
-		for (let v in [ 1000000000000000, 18446744073709551615 ])
-			t.assert_deep_equal(refused(v), [ 'out_of_range' ], v);
-		for (let v in [ '1000000000000000/second', '18446744073709551615/second' ])
-			t.assert_deep_equal(refused(v), [ 'invalid_format' ], v);
+	// The bounds are those at which nft -f of `limit rate <rate> burst <burst> packets` fails with
+	// EOVERFLOW in nft_limit_init. An unset burst is 50, and a burst of 0 is nft's 5.
+	t.it('a write refuses a limit that overflows 64 bits in the kernel', () => {
+		let overflow = (rate, burst) => map(filter(full_validate(fw_defaults, { synflood_rate: rate, synflood_burst: burst }, null),
+		                                           (e) => e.field == "synflood_rate"), (e) => e.code);
+		for (let ok in [ [ 1000000000000000, null ], [ 18446744073709551565, null ], [ '18446744073709551610/second', 0 ],
+		                 [ '1/minute', 307445734 ], [ '1/day', 213503 ], [ '25/hour', 128102389 ], [ 4294967295, 4294967295 ] ])
+			t.assert_deep_equal(overflow(...ok), [], ok);
+		for (let bad in [ [ 18446744073709551566, null ], [ '18446744073709551611/second', 0 ],
+		                  [ '99999999999999999999999/second', null ], [ '1/minute', 307445735 ],
+		                  [ '1/minute', 4294967295 ], [ '1/day', 213504 ], [ '25/hour', 200000000 ] ])
+			t.assert_deep_equal(overflow(...bad), [ 'out_of_range' ], bad);
 	});
 
 	t.it('the response declares the rate as a string', () => {
@@ -146,6 +150,19 @@ t.describe('firewall.defaults options that fw4 refuses', () => {
 			let swept = dh.sweep(box({ synflood_burst: '16.5', syn_flood: on }))[0]?.errors ?? [];
 			t.assert_deep_equal(map(swept, (e) => [ e.field, e.code, e.live ]), [ [ "synflood_burst", "invalid_format", on == '1' ] ], on);
 		}
+	});
+
+	t.it('a limit that overflows in the kernel is an error, live while syn_flood is on', () => {
+		for (let on in [ '1', '0' ])
+			for (let opts in [ { synflood_rate: '1/minute', synflood_burst: '4294967295' }, { synflood_rate: '99999999999999999999999/h' } ]) {
+				let swept = dh.sweep(box({ ...opts, syn_flood: on }))[0]?.errors ?? [];
+				t.assert_deep_equal(map(swept, (e) => [ e.field, e.code, e.live ]), [ [ "synflood_rate", "out_of_range", on == '1' ] ], opts);
+			}
+		let r = dh.patch(box({}), ctx, { syn_flood: true, synflood_rate: '1/minute', synflood_burst: 4294967295 });
+		t.assert_equal(r.status, 422);
+		t.assert_deep_equal(codes(r, 'synflood_rate'), [ 'out_of_range' ]);
+		t.assert_deep_equal(codes(dh.patch(box({ synflood_rate: '1/day', synflood_burst: '250000' }), ctx, { input: 'DROP' }), 'synflood_rate'),
+		                    [ 'out_of_range' ]);
 	});
 
 	t.it('a write that names the option replaces the stored value, and a null removes it', () => {
