@@ -18,10 +18,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on its entry of `scopes`. No request of v4 checks such a path, so none of
   them grants access until such a package is installed. 3.x minted them, and
   answered 500 for a malformed one. This check runs before the escalation
-  check. A raw request on a vnstat `interface` section now checks `vnstat`, as
-  for any section that no resource models, and no longer `vnstat:interfaces`,
-  which left the scope tree in 3.0.0. Announced in 3.5.0 (#415). Migration note
-  in `docs/migration-v3-to-v4.md`. (#421)
+  check. Announced in 3.5.0 (#415). Migration note in
+  `docs/migration-v3-to-v4.md`. (#421)
 - **BREAKING: a `dhcp/leases` entry without a client id reads `duid` null.**
   dnsmasq writes `*` for a missing client id, as for a missing host name, and
   3.x reads it as the string `"*"`. Announced in 3.5.0 (#392). Migration note in

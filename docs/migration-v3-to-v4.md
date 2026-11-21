@@ -87,11 +87,6 @@ the escalation check, so such a scope answers 422 and not 403
 `scope_escalation_blocked`. A stored token that holds such a scope keeps it and
 still authenticates. `docs/tokens.md` lists the scope tree.
 
-`vnstat:interfaces` left the scope tree in 3.0.0 with the `vnstat/interfaces`
-endpoint, but a raw request on a vnstat `interface` section still checked it.
-Such a section now needs `vnstat:ro` or `vnstat:rw`, as any section that no
-resource models.
-
 ## `id` and `runtime` are required in every resource response
 
 The response body does not change: v3 already returned `id` and `runtime` on
@@ -293,10 +288,9 @@ change.
 ## Reads that change at the upgrade
 
 The upgrade keeps `/etc/config`, the token store and every id as they are. Of
-the stored scopes, only `dhcp:leases`, `dhcp:leases6` and `vnstat:interfaces`
-change what they grant, as the `dhcp/leases` and token mint sections say. Some
-reads now answer another value for the same stored option, to follow what the
-daemon does:
+the stored scopes, only `dhcp:leases` and `dhcp:leases6` change what they grant,
+as the `dhcp/leases` section says. Some reads now answer another value for the
+same stored option, to follow what the daemon does:
 
 | Resource | Field | The read changes when the option is |
 |---|---|---|

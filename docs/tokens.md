@@ -191,7 +191,7 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `snmpd` | `agents`, `com2secs`, `groups`, `accesses`, `system` |
 | `lldpd` | `config` |
 | `prometheus_node_exporter_lua` | `config` |
-| `vnstat` | `config` |
+| `vnstat` | `config`, `interfaces` (raw only) |
 | `mwan3` | `globals`, `interfaces`, `members`, `policies`, `rules` |
 | `usteer` | `config` |
 | `openvpn` | `instances` |
