@@ -332,16 +332,15 @@ function validate(json, conn, id, delta, partial) {
 	let ok = (field) => applies(field, json.proto);
 	let handler = handler_options(conn, json.proto);
 	for (let field, opt in LIST_OPTIONS)
-		if (ok(field) && length(as_word_list_or_null(named[field])) > 1 && one_value(handler?.[opt]))
+		if (ok(field) && length(as_word_list_or_null(json[field])) > 1 && one_value(handler?.[opt]))
 			push(errs, { field, code: "conflict",
 			             message: sprintf("must hold one value on proto %s: its handler reads %s as one value, and netifd hands it no list", json.proto, opt) });
 	// A uci list never reaches a handler that reads the option as one value: on 6in4 the tunnel took
-	// the wan address and no IPv6 address. The read shows the value, so only the stored form tells.
-	// A write that names the field stores one value as an option, and one that leaves it keeps what
-	// uci holds, so only the sweep, which passes no `stored`, reports it.
-	let raw = (stored == null && handler != null && id != null) ? conn.uci_get(PKG, id) : null;
+	// the wan address and no IPv6 address. The read shows the value, so only the stored form tells,
+	// and a write that names the field stores one value as an option.
+	let raw = (handler != null && id != null) ? conn.uci_get(PKG, id) : null;
 	for (let field, opt in LIST_OPTIONS)
-		if (type(raw?.[opt]) == "array" && length(raw[opt]) == 1 && one_value(handler[opt]))
+		if (!exists(named, field) && type(raw?.[opt]) == "array" && length(raw[opt]) == 1 && one_value(handler[opt]))
 			push(errs, { field, code: "conflict",
 			             message: sprintf("is stored as a uci list, which netifd does not hand to the %s handler, since it reads %s as one value. A PATCH that sends the value stores it as an option", json.proto, opt) });
 	if (ok("netmask") && json.netmask != null && json.netmask != "" && !is_valid_ipv4(json.netmask))
