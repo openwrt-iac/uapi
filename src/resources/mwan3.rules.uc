@@ -5,18 +5,22 @@ let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ip = values.is_valid_ip;
 
 const VALID_FAMILY = { "ipv4": true, "ipv6": true, "any": true };
-// iptables takes a number up to 255, all, a name that getprotobyname knows, or one of its own table.
-// mwan3 loads every rule in one iptables-restore, which fails as a whole on another value. libxtables
-// reads the number with base 0, so 0x11 is hex, a leading 0 makes it octal, and 08 does not parse.
-const WRITE_PROTO_PATTERN = "^(0|[1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0[0-7]{1,2}|0[0-3][0-7]{2}|0[xX]0*[0-9A-Fa-f]{1,2}|"
-	+ join("|", [ "all", ...values.MUSL_PROTOCOLS, "sctp", "udplite", "icmpv6", "ipv6-mh", "mh" ]) + ")$";
+// iptables lowercases the protocol, then takes a number up to 255, all, a name that getprotobyname
+// knows, or one of its own table. mwan3 loads every rule in one iptables-restore, which fails as a
+// whole on another value. libxtables reads the number with base 0, so 0x11 is hex, a leading 0
+// makes it octal, and 08 does not parse.
+const PROTO_NAMES = [ "all", ...values.MUSL_PROTOCOLS, "sctp", "udplite", "icmpv6", "mobility-header", "ipv6-mh", "mh" ];
+const WRITE_PROTO_PATTERN = "^([1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0+[0-3]?[0-7]{0,2}|0[xX]0*[0-9A-Fa-f]{1,2}|"
+	+ join("|", map(PROTO_NAMES, (n) => replace(n, /[a-z]/g, (c) => "[" + c + uc(c) + "]"))) + ")$";
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		family:     section.family ?? null,
+		// mwan3.sh reads it with `config_get family ... any`, which joins a list with spaces, and
+		// whose `${...:-any}` takes an empty value as unset too.
+		family:     values.config_get(section.family) || null,
 		proto:      section.proto ?? null,
 		src_ip:     section.src_ip ?? null,
 		src_port:   section.src_port ?? null,
@@ -72,6 +76,17 @@ function validate(json, conn) {
 	return errs;
 }
 
+// mwan3.sh compares the proto with tcp and udp in lower case, and drops the ports of any other, so
+// a TCP rule with a port matches every port.
+function validate_new(json) {
+	let p = json.proto;
+	if (type(p) != "string" || p == lc(p) || !(lc(p) in [ "tcp", "udp" ])
+	    || ((json.src_port ?? "") == "" && (json.dest_port ?? "") == ""))
+		return [];
+	return [ { field: "proto", code: "conflict",
+	           message: "must be tcp or udp in lower case with src_port or dest_port: mwan3 drops the ports of another spelling and matches every port" } ];
+}
+
 return {
 	package: "mwan3",
 	type: "rule",
@@ -79,14 +94,16 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	validate_new: validate_new,
 	openapi_singular: "mwan3 rule",
 	id_prefix: "r",
 	openapi_required: ["use_policy"],
 	schema_properties: {
-		family:     { type: ["string", "null"], enum: [...keys(VALID_FAMILY), null] },
+		family:     { type: ["string", "null"], enum: [...keys(VALID_FAMILY), null],
+		              description: "Unset or empty, mwan3 runs the rule for both families, and the read gives null. A list reads as the string that mwan3's config_get joins." },
 		proto:      { type: ["string", "null"], pattern: "^(0[xX][0-9A-Fa-f]+|[0-9]+|[A-Za-z][A-Za-z0-9._-]*)$",
 		              "x-uapi-write": { pattern: WRITE_PROTO_PATTERN },
-		              description: "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules." },
+		              description: "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in any case, because iptables lowercases it. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules. mwan3 matches `src_port` and `dest_port` only for tcp or udp in lower case: with a port, a write refuses another spelling of them, such as TCP, and a stored one blocks every write of the section." },
 		src_ip:     { type: ["string", "null"], description: "IP address or CIDR." },
 		src_port:   { type: ["string", "null"], pattern: values.SHELL_WORD_RE, description: "Single port or 'lo-hi' range." },
 		dest_ip:    { type: ["string", "null"], description: "IP address or CIDR." },

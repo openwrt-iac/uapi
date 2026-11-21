@@ -209,6 +209,17 @@ decimal or octal, such as `08`, blocks every write, since mwan3, iptables and
 `ip` cannot use it. A write that changes the encryption of an SSID to an EAP
 mode needs a key, and one that sends back the stored mode does not.
 
+Two refusals were not announced in 3.5.0. A `mwan3/rules` section with
+`src_port` or `dest_port` and a `proto` of `tcp` or `udp` in another case, such
+as `TCP`, answers 422 `conflict` on `proto`, because mwan3 then drops the ports
+and the rule matches every port. A `firewall/zones.name` that starts with a
+digit or a dash, such as `1wan`, answers 422 `invalid_format`, because fw4
+skips such a zone. 3.x took both, and a stored one blocks every write of its
+section. Both use the carve-out of `docs/versioning.md` for a tightening that
+refuses a payload that produced broken state. A `mwan3/rules.proto` name in
+any case, `mobility-header` and an octal number with more leading zeros, such
+as `000017`, pass as in 3.x.
+
 Some reads now give the value as the daemon parses it: a firewall policy,
 target, `reflection_src` or family as fw4 reads it, an option of several words
 as its words, and a numeric route type as its name. The table in "Reads that
@@ -417,6 +428,7 @@ same stored option, to follow what the daemon does:
 | `sqm/queues` | `enabled` | absent, or not `1`, `0`, `off`, `false` or `no` |
 | `wireless/interfaces` | `mode` | absent |
 | `mwan3/interfaces` | `family` | absent |
+| `mwan3/rules` | `family` | empty, which reads null, or a list, which reads as the string that `config_get` joins |
 | `firewall/defaults`, `firewall/zones` | `input`, `output_policy`, `forward` | a policy in another case or a prefix of one, such as `accept` |
 | `firewall/zones` | `input`, `output_policy`, `forward` | absent |
 | `firewall/defaults` | `synflood_rate` | any rate: a number, such as `25`, reads as the string `25/second` instead of an integer, and a rate with a unit, such as `25/s`, or after spaces or a `!`, reads with the whole unit instead of null |

@@ -26429,7 +26429,7 @@
 							"string",
 							"null"
 						],
-						"description": "Zone name. A write takes alphanumerics, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes"
+						"description": "Zone name. A write takes a letter or an underscore, then letters, digits, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes. firewall4 skips a zone whose name starts with a digit or a dash, so a write refuses it, and a stored one blocks every write of the section."
 					},
 					"input": {
 						"type": [
@@ -26524,8 +26524,8 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[a-zA-Z0-9_-]+$",
-						"description": "Zone name. A write takes alphanumerics, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes"
+						"pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$",
+						"description": "Zone name. A write takes a letter or an underscore, then letters, digits, dashes and underscores, and a read also gives the dots and slashes that firewall4 takes. firewall4 skips a zone whose name starts with a digit or a dash, so a write refuses it, and a stored one blocks every write of the section."
 					},
 					"input": {
 						"type": [
@@ -26612,7 +26612,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^[a-zA-Z0-9_-]+$"
+						"pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$"
 					},
 					"input": {
 						"type": [
@@ -38616,14 +38616,15 @@
 							"ipv6",
 							"any",
 							null
-						]
+						],
+						"description": "Unset or empty, mwan3 runs the rule for both families, and the read gives null. A list reads as the string that mwan3's config_get joins."
 					},
 					"proto": {
 						"type": [
 							"string",
 							"null"
 						],
-						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules."
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in any case, because iptables lowercases it. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules. mwan3 matches `src_port` and `dest_port` only for tcp or udp in lower case: with a port, a write refuses another spelling of them, such as TCP, and a stored one blocks every write of the section."
 					},
 					"src_ip": {
 						"type": [
@@ -38715,15 +38716,16 @@
 							"ipv6",
 							"any",
 							null
-						]
+						],
+						"description": "Unset or empty, mwan3 runs the rule for both families, and the read gives null. A list reads as the string that mwan3's config_get joins."
 					},
 					"proto": {
 						"type": [
 							"string",
 							"null"
 						],
-						"pattern": "^(0|[1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0[0-7]{1,2}|0[0-3][0-7]{2}|0[xX]0*[0-9A-Fa-f]{1,2}|all|ip|icmp|igmp|ggp|ipencap|st|tcp|egp|pup|udp|hmp|xns-idp|rdp|iso-tp4|xtp|ddp|idpr-cmtp|ipv6|ipv6-route|ipv6-frag|idrp|rsvp|gre|esp|ah|skip|ipv6-icmp|ipv6-nonxt|ipv6-opts|rspf|vmtp|ospf|ipip|encap|pim|raw|sctp|udplite|icmpv6|ipv6-mh|mh)$",
-						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in lower case. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules."
+						"pattern": "^([1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0+[0-3]?[0-7]{0,2}|0[xX]0*[0-9A-Fa-f]{1,2}|[aA][lL][lL]|[iI][pP]|[iI][cC][mM][pP]|[iI][gG][mM][pP]|[gG][gG][pP]|[iI][pP][eE][nN][cC][aA][pP]|[sS][tT]|[tT][cC][pP]|[eE][gG][pP]|[pP][uU][pP]|[uU][dD][pP]|[hH][mM][pP]|[xX][nN][sS]-[iI][dD][pP]|[rR][dD][pP]|[iI][sS][oO]-[tT][pP]4|[xX][tT][pP]|[dD][dD][pP]|[iI][dD][pP][rR]-[cC][mM][tT][pP]|[iI][pP][vV]6|[iI][pP][vV]6-[rR][oO][uU][tT][eE]|[iI][pP][vV]6-[fF][rR][aA][gG]|[iI][dD][rR][pP]|[rR][sS][vV][pP]|[gG][rR][eE]|[eE][sS][pP]|[aA][hH]|[sS][kK][iI][pP]|[iI][pP][vV]6-[iI][cC][mM][pP]|[iI][pP][vV]6-[nN][oO][nN][xX][tT]|[iI][pP][vV]6-[oO][pP][tT][sS]|[rR][sS][pP][fF]|[vV][mM][tT][pP]|[oO][sS][pP][fF]|[iI][pP][iI][pP]|[eE][nN][cC][aA][pP]|[pP][iI][mM]|[rR][aA][wW]|[sS][cC][tT][pP]|[uU][dD][pP][lL][iI][tT][eE]|[iI][cC][mM][pP][vV]6|[mM][oO][bB][iI][lL][iI][tT][yY]-[hH][eE][aA][dD][eE][rR]|[iI][pP][vV]6-[mM][hH]|[mM][hH])$",
+						"description": "IP protocol as iptables takes it: a number from 0 to 255, which iptables reads as octal after a leading 0 and as hex after 0x, or a name such as tcp, udp, icmp, esp or all, which LuCI suggests. A write takes a name that iptables knows, in any case, because iptables lowercases it. A stored name or number that iptables refuses reads as it is, and mwan3 then loads none of its rules. mwan3 matches `src_port` and `dest_port` only for tcp or udp in lower case: with a port, a write refuses another spelling of them, such as TCP, and a stored one blocks every write of the section."
 					},
 					"src_ip": {
 						"type": [
@@ -38817,7 +38819,7 @@
 							"string",
 							"null"
 						],
-						"pattern": "^(0|[1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0[0-7]{1,2}|0[0-3][0-7]{2}|0[xX]0*[0-9A-Fa-f]{1,2}|all|ip|icmp|igmp|ggp|ipencap|st|tcp|egp|pup|udp|hmp|xns-idp|rdp|iso-tp4|xtp|ddp|idpr-cmtp|ipv6|ipv6-route|ipv6-frag|idrp|rsvp|gre|esp|ah|skip|ipv6-icmp|ipv6-nonxt|ipv6-opts|rspf|vmtp|ospf|ipip|encap|pim|raw|sctp|udplite|icmpv6|ipv6-mh|mh)$"
+						"pattern": "^([1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-5]|0+[0-3]?[0-7]{0,2}|0[xX]0*[0-9A-Fa-f]{1,2}|[aA][lL][lL]|[iI][pP]|[iI][cC][mM][pP]|[iI][gG][mM][pP]|[gG][gG][pP]|[iI][pP][eE][nN][cC][aA][pP]|[sS][tT]|[tT][cC][pP]|[eE][gG][pP]|[pP][uU][pP]|[uU][dD][pP]|[hH][mM][pP]|[xX][nN][sS]-[iI][dD][pP]|[rR][dD][pP]|[iI][sS][oO]-[tT][pP]4|[xX][tT][pP]|[dD][dD][pP]|[iI][dD][pP][rR]-[cC][mM][tT][pP]|[iI][pP][vV]6|[iI][pP][vV]6-[rR][oO][uU][tT][eE]|[iI][pP][vV]6-[fF][rR][aA][gG]|[iI][dD][rR][pP]|[rR][sS][vV][pP]|[gG][rR][eE]|[eE][sS][pP]|[aA][hH]|[sS][kK][iI][pP]|[iI][pP][vV]6-[iI][cC][mM][pP]|[iI][pP][vV]6-[nN][oO][nN][xX][tT]|[iI][pP][vV]6-[oO][pP][tT][sS]|[rR][sS][pP][fF]|[vV][mM][tT][pP]|[oO][sS][pP][fF]|[iI][pP][iI][pP]|[eE][nN][cC][aA][pP]|[pP][iI][mM]|[rR][aA][wW]|[sS][cC][tT][pP]|[uU][dD][pP][lL][iI][tT][eE]|[iI][cC][mM][pP][vV]6|[mM][oO][bB][iI][lL][iI][tT][yY]-[hH][eE][aA][dD][eE][rR]|[iI][pP][vV]6-[mM][hH]|[mM][hH])$"
 					},
 					"src_ip": {
 						"type": [

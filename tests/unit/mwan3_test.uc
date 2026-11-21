@@ -137,6 +137,12 @@ t.describe('mwan3.rules validates policy cross-reference + IP shapes', () => {
 		t.assert_true(length(filter(errs, e => e.field == "src_ip")) > 0);
 		t.assert_true(length(filter(errs, e => e.field == "dest_ip")) > 0);
 	});
+
+	t.it('family reads a list as config_get joins it, and an empty one as null, as mwan3 does', () => {
+		t.assert_equal(rules.fromUci({ '.name': 'r1', family: [ 'ipv6' ] }).family, 'ipv6');
+		t.assert_equal(rules.fromUci({ '.name': 'r1', family: [ '' ] }).family, null);
+		t.assert_equal(rules.fromUci({ '.name': 'r1', family: '' }).family, null);
+	});
 });
 
 // iptables refuses err and warn as a log level, and mwan3 leaves a member with a metric above 256 out
@@ -200,5 +206,22 @@ t.describe('mwan3 values that mwan3 does not run', () => {
 		t.assert_deep_equal(codes(mh.patch(c, ctx, 'm1', { weight: 2 }), "metric"), [ "out_of_range" ]);
 		t.assert_true(SPEC.Mwan3MembersResponse.properties.metric.maximum >= 300);
 		t.assert_equal(SPEC.Mwan3MembersRequest.properties.metric.maximum, 256);
+	});
+
+	t.it('tcp or udp in another case with a port answers conflict, and a stored one blocks a write of another field', () => {
+		let rh = handler.make(rules, { tx });
+		let rule = (sec) => bus.stub({ uci: { mwan3: {
+			p1: { '.type': 'policy', '.anonymous': false },
+			r1: { '.type': 'rule', '.anonymous': false, use_policy: 'p1', ...sec },
+		} } });
+		for (let sec in [ { proto: 'tcp', dest_port: '443' }, { proto: 'udp', src_port: '53' } ]) {
+			let p = uc(sec.proto);
+			t.assert_deep_equal(codes(rh.patch(rule(sec), ctx, 'r1', { proto: p }), "proto"), [ "conflict" ], p);
+			let c = rule({ ...sec, proto: p });
+			t.assert_deep_equal(codes(rh.patch(c, ctx, 'r1', { sticky: true }), "proto"), [ "conflict" ], p);
+			t.assert_equal(rh.sweep(c)[0].errors[0].field, "proto", p);
+		}
+		t.assert_equal(rh.patch(rule({ proto: 'tcp', dest_port: '443' }), ctx, 'r1', { proto: 'TCP', dest_port: null }).status, 200);
+		t.assert_equal(rh.patch(rule({ proto: 'Udp' }), ctx, 'r1', { sticky: true }).status, 200);
 	});
 });
