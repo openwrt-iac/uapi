@@ -16,7 +16,7 @@ function parse_leases(content) {
 			mac: parts[1],
 			ip: parts[2],
 			hostname: parts[3] == "*" ? null : parts[3],
-			duid: length(parts) > 4 ? parts[4] : null,
+			duid: (length(parts) > 4 && parts[4] != "*") ? parts[4] : null,
 		});
 	}
 	return leases;
@@ -58,6 +58,6 @@ return {
 		prefix_length: { type: ["integer", "null"], description: "Length of a delegated prefix; null for an address (v6 entries only)" },
 		ip: { type: "string", description: "Assigned IP address" },
 		hostname: { type: ["string", "null"] },
-		duid:     { type: ["string", "null"], description: "Client DUID. A v4 entry carries the client id that dnsmasq records, a v6 entry always carries the DUID" },
+		duid:     { type: ["string", "null"], description: "Client DUID. A v4 entry carries the client id that dnsmasq records, or null when the client sent none. A v6 entry always carries the DUID" },
 	},
 };
