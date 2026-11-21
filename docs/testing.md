@@ -615,33 +615,34 @@ bodies failed.
 ## CI shape
 
 - Every commit/PR: unit suite + lint.
-- The OpenWrt that the VM and SDK jobs use follows the ref: `v4` (the branch or
-  a PR base) runs them on both the stable release and the OpenWrt main
-  snapshot, and every other ref, tags included, on the stable release alone.
-  The stable release is pinned by checksum in `build/sdk.sha256`. The snapshot
-  is verified against the `sha256sums` published beside each artifact, because
-  a moving target has no filename to pin. `tools/openwrt-sdk.sh`
-  resolves both, and `tests/vm/setup.sh` picks the image the same way.
+- The VM and SDK jobs of `v3`, of a PR to it and of a 3.x tag run on the
+  stable release of OpenWrt, pinned by checksum in `build/sdk.sha256`.
+  `tools/openwrt-sdk.sh` resolves it, and `tests/vm/setup.sh` picks the image
+  the same way. `main`, the 4.x line, also runs them on the OpenWrt main
+  snapshot, which is verified against the `sha256sums` published beside each
+  artifact, because a moving target has no filename to pin.
 - Every PR: the changelog check (`.github/workflows/changelog.yml`), which fails
   when `## [Unreleased]` in `CHANGELOG.md` has no entry ending in the PR's
   number and the PR has no `changelog-not-needed` label.
-- Every PR + push to main or v4: unit + integration suite (QEMU).
+- Every PR + push to main or v3: unit + integration suite (QEMU).
 - A PR that changes what goes into the APK (`src/`, `build/openapi.json`,
-  `files/`, `cli/uapi-token`), how it is built, or the APK smoke test: + the
-  `package` job, which builds the APK and runs the APK install smoke test above
-  on it, the upgrades from 3.2.0 included. That is most code PRs: 211 of the 259
-  commits on main between 1 August and 1 November 2026 touched one of the paths.
-  The job runs beside `integration`, and on a hit of the SDK cache it took 10 to
-  12 minutes at the last release tags, so it adds little to the wait. On any
-  other PR the job is skipped.
-- `package` is a required check: the `main` and `v4` rulesets require `unit`,
+  `files/`, `cli/uapi-token`), how it is built, or the APK smoke test: + a
+  build in the `package` job, which builds the APK and runs the APK install
+  smoke test above on it, the upgrades from 3.2.0 included. That is most code
+  PRs: 211 of the 259 commits on main between 1 August and 1 November 2026
+  touched one of the paths. The job runs beside `integration`, and on a hit of
+  the SDK cache it took 10 to 12 minutes at the last release tags, so it adds
+  little to the wait. On any other PR the job runs with each step skipped.
+- `package` is a required check: the `main` and `v3` rulesets require `unit`,
   `lint`, `integration`, `entry` and `package`, with the branch up to date, so a
-  red `package` blocks a merge. A PR that does not change the APK still merges,
-  because a skipped job passes as a required check. The `lint` job decides
-  whether `package` runs. An error of `git diff` there counts as a change and
-  runs `package`, and a failure of that step or of the checkout fails `lint`,
-  which is required. A job of its own would skip `package` when it failed, and
-  the skip would pass.
+  red `package` blocks a merge. The job always runs and each of its steps checks
+  `BUILD`, so a PR that does not change the APK gets a passing `package` check
+  with no build. The job has no job-level `if`: when one skipped the job,
+  GitHub did not evaluate its name, an expression of the matrix, so the
+  required `package` check never reported and the PR could not merge (#406).
+  The `lint` job decides whether `package` builds. An error of `git diff` there
+  counts as a change and builds, and a failure of that step or of the checkout
+  fails `lint`, which is required.
 - Release tag: + multi-arch verify-build (cross-compile sanity) + `package` job
   + release-apk job (publishes the APK that `package` tested to the GitHub
   Release, with CHANGELOG-extracted notes).
