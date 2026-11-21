@@ -27,11 +27,12 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs for branch / PR pushes to save runner minutes; never
-# cancel a tag-triggered run that may be mid-publish to the GitHub Release.
-# workflow_dispatch runs (operator-triggered pre-tag validation, often slow
-# because of verify-arch-build) get their own concurrency group so an
-# unrelated push to main doesn't kill them mid-run.
+# Only a pull request cancels its superseded runs. A push run saves the SDK cache in
+# warm-sdk-cache at the end of the build, and run 44924480417 lost that save on main when
+# the next push cancelled it after 21 minutes. A tag run may be mid-publish to the GitHub
+# Release. workflow_dispatch runs (operator-triggered pre-tag validation, often slow
+# because of verify-arch-build) get their own concurrency group, so they do not wait
+# behind a push to main.
 # Every job carries an explicit timeout-minutes. GitHub's default is 6 hours, so a stalled
 # job used to sit until something else killed it and then report a duration that read like a
 # hang in our own code: the 2026-08-06 Actions incident produced 15 and 45 minute failures
@@ -45,9 +46,7 @@ permissions:
 # last push to main cached.
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: >-
-    ${{ !startsWith(github.ref, 'refs/tags/')
-        && github.event_name != 'workflow_dispatch' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   OPENWRT_VERSION: 25.12.6
@@ -106,8 +105,8 @@ jobs:
       # lint-emdash cannot list tracked files, which is how it went unenforced.
       - name: Trust the workspace (container checkout)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      # In lint rather than a job of its own: package would skip when a job it needs fails, and a
-      # skipped job passes as a required check. An error of git diff counts as a change.
+      # In lint, a required check, so a failure here fails the PR. An error of git diff counts as
+      # a change.
       - name: Does the pull request change the package?
         id: package
         if: github.event_name == 'pull_request'
@@ -450,8 +449,8 @@ jobs:
 
   # release-apk attaches the APK that the package job built and smoke-tested to the GitHub
   # Release. The apk feed itself is rebuilt elsewhere (openwrt-iac/openwrt-iac.github.io's
-  # publish.yml pulls latest stable from each source repo); this job just makes sure a
-  # successful tag has a downloadable asset. Three guards apply: needs (integration, and
+  # publish.yml pulls the release marked Latest from each source repo); this job just makes
+  # sure a successful tag has a downloadable asset. Three guards apply: needs (integration, and
   # package, which needs unit and lint), job-level v* tag check, and a step-level if on the
   # release-upload step. A failing smoke in package keeps the apk off the GitHub Release.
   release-apk:
@@ -483,18 +482,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
+          case "$TAG" in
+            *-rc*|*-alpha*|*-beta*|*-pre*)
+              PRE=--prerelease LATEST= ;;
+            *)
+              # The feed and the site take the release that GitHub marks Latest (since
+              # openwrt-iac/openwrt-iac.github.io#8), so a fix of an older major, such as a 3.x
+              # release after 4.0.0, must not take the mark from the current one. The list has
+              # its own assignment so that a failed gh stops the step: in a group with the echo,
+              # the failure left the tag as the highest and marked it Latest.
+              released=$(gh release list --exclude-pre-releases --exclude-drafts --limit 100 \
+                           --json tagName --jq '.[].tagName')
+              highest=$(printf '%s\n%s\n' "$released" "$TAG" | sort -V | tail -1)
+              PRE= LATEST=--latest=false
+              [ "$highest" = "$TAG" ] && LATEST=--latest ;;
+          esac
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            case "$TAG" in
-              *-rc*|*-alpha*|*-beta*|*-pre*)
-                PRE=--prerelease LATEST= ;;
-              *)
-                # The feed and the site follow the Latest mark, so a fix of an older major, such
-                # as a 3.x release after 4.0.0, must not take it from the current one.
-                highest=$( { gh release list --exclude-pre-releases --exclude-drafts --limit 100 \
-                               --json tagName --jq '.[].tagName'; echo "$TAG"; } | sort -V | tail -1)
-                PRE= LATEST=--latest=false
-                [ "$highest" = "$TAG" ] && LATEST=--latest ;;
-            esac
             chmod +x scripts/release-notes.sh
             scripts/release-notes.sh "$TAG" > /tmp/release-notes.md
             if [ -s /tmp/release-notes.md ]; then
@@ -510,12 +513,13 @@ jobs:
             gh release upload "$TAG" dist/sbom.spdx.json --clobber || true
           # Deleting a tag in order to move it reverts its release to a draft, and
           # `gh release view` succeeds on a draft, so the create branch above is skipped
-          # and the rebuilt artifacts land in a release nobody can see or download.
-          gh release edit "$TAG" --draft=false
+          # and the rebuilt artifacts land in a release nobody can see or download. Without
+          # make_latest, GitHub marks the release Latest when it publishes it.
+          gh release edit "$TAG" --draft=false $LATEST
 
       # The signed APK feed lives at openwrt-iac.github.io/feed/ and is
       # rebuilt by openwrt-iac/openwrt-iac.github.io's publish.yml workflow,
-      # which pulls the latest stable release asset from every source repo
+      # which pulls the asset of the release marked Latest from every source repo
       # listed in its feed.yml. uapi no longer pushes to a gh-pages feed
       # of its own; attaching the APK to this GitHub Release is the whole
       # job, and the aggregator picks it up on its next run.
@@ -579,8 +583,12 @@ jobs:
           echo "tarball=$t" >> "$GITHUB_OUTPUT"
           echo "key=$k" >> "$GITHUB_OUTPUT"
 
-      - name: Cache OpenWrt SDK (${{ matrix.arch }})
-        uses: actions/cache@v6
+      # Saved only by a dispatch on main, where every ref can read it: an entry saved on a tag
+      # is readable from that tag alone, and the tag v3.5.0 saved three of 2 GiB each in the
+      # repository's 10 GB.
+      - name: Restore the OpenWrt SDK cache (${{ matrix.arch }})
+        id: sdkcache
+        uses: actions/cache/restore@v6
         with:
           path: build/sdk-${{ matrix.arch }}
           key: ${{ steps.sdk.outputs.key }}
@@ -616,3 +624,10 @@ jobs:
         with:
           name: uapi-apk-${{ matrix.arch }}
           path: ${{ steps.find_apk.outputs.apk }}
+
+      - name: Save the OpenWrt SDK cache (${{ matrix.arch }})
+        if: github.ref == 'refs/heads/main' && steps.sdkcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/sdk-${{ matrix.arch }}
+          key: ${{ steps.sdk.outputs.key }}
