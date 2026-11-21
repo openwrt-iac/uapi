@@ -846,7 +846,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		// ap.uc counts the entries of a list, two here.
 		t.assert_deep_equal(map(filter(wiface.validate_new({ encryption: 'psk2', key: [ 'abcdefgh', 'ijklmnop' ] }),
 		                               (e) => e.field == 'key'), (e) => e.code), [ 'out_of_range' ]);
-		t.assert_deep_equal(live({ encryption: 'psk2', key: bytes(7), disabled: true }, 'key'), [ false ]);
+		t.assert_deep_equal(live({ mode: 'ap', encryption: 'psk2', key: bytes(7), disabled: true }, 'key'), [ false ]);
 		t.assert_deep_equal(codes({ mode: 'monitor', encryption: 'psk2', key: bytes(7) }, 'key'), []);
 	});
 
@@ -892,7 +892,7 @@ t.describe('wireless.interfaces values that reach the daemons', () => {
 		t.assert_deep_equal(codes({ ...eap, nasid: bytes(254) }, 'nasid'), [ 'out_of_range' ]);
 		t.assert_deep_equal(codes({ ...eap, nasid: 'é' + bytes(252) }, 'nasid'), [ 'out_of_range' ]);
 		t.assert_deep_equal(codes({ encryption: 'wpa3-mixed+ccmp', key: 'x', nasid: bytes(254) }, 'nasid'), [ 'out_of_range' ]);
-		t.assert_deep_equal(live({ ...eap, disabled: true, nasid: bytes(254) }, 'nasid'), [ false ]);
+		t.assert_deep_equal(live({ mode: 'ap', ...eap, disabled: true, nasid: bytes(254) }, 'nasid'), [ false ]);
 		for (let b in [ { mode: 'sta', ...eap }, { encryption: 'psk2', key: 'correcthorse' } ])
 			t.assert_deep_equal(codes({ ...b, nasid: bytes(254) }, 'nasid'), [], b);
 	});
