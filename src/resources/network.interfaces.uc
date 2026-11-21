@@ -55,11 +55,13 @@ function applies(field, proto) {
 		|| (!VALID_PROTOS[proto] && field != "broadcast_flag" && field != "has_private_key");
 }
 
-// The fields that toUci writes as a uci list, and their options. netifd hands a list to a handler
-// only for an option that the handler declares as a list, and it publishes each declaration in
-// get_proto_handlers: 6in4, gre, ipip and vxlan declare ipaddr as a string, and LuCI writes it as
-// an option for them.
-const LIST_OPTIONS = { ipaddrs: "ipaddr", ip6addrs: "ip6addr", ip6prefix: "ip6prefix", addresses: "addresses" };
+// Fields that can hold several values, and their options. netifd hands a list to a handler only for
+// an option that the handler declares as a list, and it publishes each declaration in
+// get_proto_handlers: 6in4, gre, ipip and vxlan declare ipaddr as a string, and LuCI writes it as an
+// option for them. Every handler that declares one of these as a string reads it from what netifd
+// hands it. wireguard.sh declares addresses as a string and reads the list from uci, so the
+// declaration does not tell for addresses.
+const LIST_OPTIONS = { ipaddrs: "ipaddr", ip6addrs: "ip6addr", ip6prefix: "ip6prefix" };
 
 const ONE_VALUE = " On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list.";
 
@@ -234,11 +236,11 @@ function toUci(body) {
 	if (json.proto != null) out.proto = json.proto;
 	// On a proto that uapi does not model, one value is written as an option, which a handler takes
 	// whether it declares a string or a list. netifd's static handler takes a list.
-	let list = (v) => (!VALID_PROTOS[json.proto] && length(v) == 1) ? v[0] : v;
+	let form = (v) => (!VALID_PROTOS[json.proto] && length(v) == 1) ? v[0] : v;
 	if (type(json.ipaddrs) == "array" && length(json.ipaddrs) > 0)
-		out.ipaddr = list(json.ipaddrs);
+		out.ipaddr = form(json.ipaddrs);
 	if (type(json.ip6addrs) == "array" && length(json.ip6addrs) > 0)
-		out.ip6addr = list(json.ip6addrs);
+		out.ip6addr = form(json.ip6addrs);
 
 	if (json.netmask != null) out.netmask = json.netmask;
 	if (json.gateway != null) out.gateway = json.gateway;
@@ -276,7 +278,7 @@ function toUci(body) {
 	// remove a hand-written listen_port without this clear.
 	else if (exists(json, "listen_port")) out.listen_port = [];
 	if (type(json.addresses) == "array" && length(json.addresses) > 0)
-		out.addresses = list(json.addresses);
+		out.addresses = json.addresses;
 	if (json.nohostroute != null) out.nohostroute = json.nohostroute ? "1" : "0";
 	return out;
 }
@@ -506,7 +508,7 @@ return {
 	validate: validate,
 	// A static interface takes `option ipaddr` and `list ipaddr` alike, so a PATCH that sends its
 	// address back writes nothing there.
-	rewrite_when_named: (view) => VALID_PROTOS[view?.proto] ? {} : LIST_OPTIONS,
+	rewrite_when_named: (view) => VALID_PROTOS[view.proto] ? {} : LIST_OPTIONS,
 	openapi_write_back: keys(WRITE),
 	// Opt in to the advisory management-path warning. Only this resource carries the
 	// fields that can move the caller's own path, and `disabled` on a peer or a rule is
@@ -598,8 +600,7 @@ return {
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,
 		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its stored peers holds a value for which a peer write refuses to enable the peer." },
-		addresses: { type: ["array", "null"], items: { type: "string" },
-		             description: "Addresses of a wireguard interface (uci `list addresses`)." + ONE_VALUE },
+		addresses: { type: ["array", "null"], items: { type: "string" } },
 		private_key: { type: "string", writeOnly: true,
 		               description: "WireGuard private key; accepted on write, masked on read. A PATCH or PUT that switches the interface to another proto removes it." },
 		has_private_key: { type: "boolean", readOnly: true },

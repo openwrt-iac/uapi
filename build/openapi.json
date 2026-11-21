@@ -28432,8 +28432,7 @@
 						],
 						"items": {
 							"type": "string"
-						},
-						"description": "Addresses of a wireguard interface (uci `list addresses`). On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
+						}
 					},
 					"private_key": {
 						"type": "string",
@@ -29018,8 +29017,7 @@
 						],
 						"items": {
 							"type": "string"
-						},
-						"description": "Addresses of a wireguard interface (uci `list addresses`). On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list."
+						}
 					},
 					"private_key": {
 						"type": "string",

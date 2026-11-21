@@ -812,6 +812,15 @@ t.describe('network.interfaces proto scope', () => {
 		t.assert_deep_equal(listed(c), [ [ 'ipaddrs:conflict' ] ]);
 		t.assert_equal(ifh.patch(c, ctx, 'henet', { mtu: 1400 }).status, 200);
 
+		let jp = { ...ctx, json_patch: true };
+		c = box({ ipaddr: '192.0.2.1' });
+		t.assert_equal(ifh.patch(c, jp, 'henet', [ { op: 'replace', path: '/ipaddrs', value: [ '192.0.2.4' ] } ]).status, 200);
+		t.assert_equal(c._state.uci.network.henet.ipaddr, '192.0.2.4');
+		t.assert_deep_equal(fields(ifh.patch(c, jp, 'henet', [ { op: 'add', path: '/ipaddrs/-', value: '192.0.2.5' } ])), [ 'ipaddrs:conflict' ]);
+		c = box({ ipaddr: [ '192.0.2.1' ] });
+		t.assert_equal(ifh.patch(c, jp, 'henet', [ { op: 'replace', path: '/ipaddrs/0', value: '192.0.2.1' } ]).status, 200);
+		t.assert_equal(c._state.uci.network.henet.ipaddr, '192.0.2.1');
+
 		c = box({}, {});
 		t.assert_equal(ifh.patch(c, ctx, 'henet', { ipaddrs: [ '192.0.2.2', '192.0.2.3' ] }).status, 200);
 		t.assert_deep_equal(c._state.uci.network.henet.ipaddr, [ '192.0.2.2', '192.0.2.3' ]);
