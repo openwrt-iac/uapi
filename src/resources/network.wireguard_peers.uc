@@ -72,7 +72,7 @@ function endpoint_host_problems(host) {
 	return out;
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta) {
 	let errs = [];
 
 	if (json.interface == null || json.interface == "")
@@ -102,6 +102,19 @@ function validate(json, conn) {
 			               "no network interface %J with proto=wireguard exists",
 			               json.interface) });
 	}
+
+	// wireguard.sh gives every endpoint to `wg syncconf`, which refuses the whole config of the
+	// interface for a name that does not exist, so the interface stays down from its next start.
+	// The ucode handler of OpenWrt main leaves such an endpoint out, and the kernel apply reports it.
+	// A name exists at one time and not at another, so only a host that the request sends in place
+	// of the stored one is checked, never a stored one.
+	let host = replace(config_get(delta?.endpoint_host) ?? "", /[[:space:]]/g, "");
+	if (conn != null && host != "" && !wg.ucode_handler() && json.disabled !== true
+	    && (config_get(json.public_key) ?? "") != "" && length(endpoint_host_problems(host)) == 0
+	    && (id == null || host != replace(config_get(conn.uci_get('network', id)?.endpoint_host) ?? "", /[[:space:]]/g, ""))
+	    && wg.missing_host(host))
+		push(errs, { field: "endpoint_host", code: "conflict",
+		             message: "does not exist: the DNS answers that the name has no address, and wireguard.sh gives the endpoint to wg, which then refuses the config of the whole interface at its next start" });
 
 	return errs;
 }
@@ -288,9 +301,9 @@ return {
 		allowed_ips:          { type: ["array", "null"], items: { type: "string" },
 		                        description: "IPv4 or IPv6 addresses or CIDRs routed to this peer; a bare address means a single host. A read gives the entries as wg gets them: wireguard.sh joins a list with spaces, leaving out an empty entry, makes each space a comma, and expands the backslash escapes of printf %b, and wg cuts the line at a NUL byte and at `#` and splits it at commas. So `10.0.0.0/8\\054192.168.0.0/16` reads as two entries, and so does a comma, while two prefixes that a tab separates read as one entry, and a space at either end or next to another adds an empty entry, and wg refuses the config for either, so the interface does not come up. A value that the escapes would give a second line, the end of the config or a byte that is not printable ASCII, or that holds a backslash and is longer than 512 bytes, reads unexpanded. A value that wg reads as an empty line, such as one that starts with `#`, reads as one empty entry, because wireguard.sh still writes the line and wg refuses it. The routes of `route_allowed_ips` go to each word of the value as stored, before the escapes, with the address before the first `/` of the word and the length after its last, read as netifd reads it. The ucode proto handler of OpenWrt main takes a list as its entries and an option as its words, joins them with commas and expands no escape, so a list entry that holds a space or a backslash reads as one entry, which wg refuses, and it routes each entry with the length that ucode's int() reads, its leading decimal digits, so `10.0.0.0/0x10` routes 0.0.0.0/0. Each entry that a write leaves must be an address or CIDR, on a disabled peer too. A stored entry that starts with `+` or `-` marks an incremental update to wg, which adds the prefixes of the whole list to what the peer already holds instead of replacing them, and refuses the command for one marked `-`, in `wg set` as in the `wg syncconf` of an ifup. A write refuses such an entry, because it is not an address or CIDR, and the kernel apply and the restore refuse a peer that stores one." },
 		endpoint_host:        { type: ["string", "null"],
-		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write refuses a host with a backslash, a newline, a `#`, or a colon outside an IPv6 address, which can end in a %zone, on a disabled peer too." },
+		                        description: "Remote endpoint host name or IP address. An IPv6 address goes without brackets, because wireguard.sh brackets every host with a colon itself. A write refuses a host with a backslash, a newline, a `#`, or a colon outside an IPv6 address, which can end in a %zone, on a disabled peer too. wireguard.sh gives wg every host, and wg refuses the config of the whole interface at its next start for a name that does not exist, so where netifd runs wireguard.sh, a write that sends such a name for an enabled peer with a key answers 422 `conflict`: one for which busybox's nslookup gets NXDOMAIN or a reply with no address. A lookup that fails for a time, as on a timeout, is not refused, because wg retries the name. The ucode handler of OpenWrt main leaves out the endpoint of a name for which nslookup prints no address and keeps the peer, so there the write sets the peer without it and answers `X-Kernel-Status: omitted`. A stored name is not checked, since a name can exist at one time and not at another." },
 		endpoint_port:        { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
-		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out, as it does for a peer with a host and no port. A write answers 422 while the port reads 0, on a disabled peer too." },
+		                        description: "Endpoint UDP port. A service name that uci stores, such as `https`, reads as its port from /etc/services, as the platform resolves it. 0 reads when the name does not resolve: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the endpoint out. A write answers 422 while the port reads 0, on a disabled peer too. A peer with a host and no port reads null, and both handlers give wg port 51820 for it, as the kernel apply and the restore do. An empty value, which only a hand edit stores, reads null too, and the ucode handler leaves the endpoint out for it, as the kernel apply does there." },
 		persistent_keepalive: { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
 		                        description: "Seconds between keepalive packets. 0, a stored `off` or no value turns them off. -1 reads when wg cannot read the stored value: wireguard.sh then cannot bring the interface up, and the ucode handler of OpenWrt main leaves the keepalive out. A write answers 422 while the keepalive reads -1, on a disabled peer too." },
 		route_allowed_ips:    { type: "boolean", default: false,

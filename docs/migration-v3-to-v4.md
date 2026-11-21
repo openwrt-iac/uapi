@@ -259,6 +259,32 @@ has returned since 3.2.0. A one-element array is still stored as a scalar, which
 netifd, 6rd, map and 464xlat read the same way, so the stored form does not
 change.
 
+## A WireGuard endpoint that does not resolve follows the platform
+
+3.x committed a peer whose `endpoint_host` does not resolve. On an up interface
+`wg set` refused it, and the restore answered 500 `reload_failed_restored`. On
+an interface that was down, or that netifd did not know, 3.x answered 200
+`X-Kernel-Status: skipped` and stored the host. v4 answers as the platform
+treats such a host.
+
+On 25.12, wireguard.sh gives the endpoint to wg, which refuses the config of the
+whole interface at its next start for a name that does not exist. A write that
+sends such a name for an enabled peer with a key answers 422 `conflict` on
+`endpoint_host`, before its commit: a name for which busybox's nslookup gets
+NXDOMAIN, or a reply with no address. This refuses a payload that 3.x stored on
+a down interface, under the carve-out of `docs/versioning.md` for a payload that
+produced broken state no caller can rely on: the interface did not come up
+again. A lookup that fails for a time, as on a timeout or a SERVFAIL, is not
+refused, because wg retries the name and the interface comes up once it
+resolves.
+
+On OpenWrt main, the ucode proto handler leaves out the endpoint of a name for
+which busybox's nslookup prints no address, and keeps the peer. The write
+answers 200, sets the peer without the endpoint, and says so
+with the new `X-Kernel-Status: omitted`. A read then shows `runtime.endpoint`
+null beside the stored `endpoint_host`. A client that branches on the values of
+`X-Kernel-Status` sees `omitted` there, as it can see a new error code.
+
 ## Reads that change at the upgrade
 
 The upgrade keeps `/etc/config`, the token store and every id as they are. Of

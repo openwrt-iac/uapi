@@ -50,6 +50,7 @@ PEER4='TWlzY2VsbGFuZW91c1BlZXJLZXlGb3JUZXN0aW5nMD0='
 # Peers outlive their parent in uci, and a peer section whose interface is gone
 # would be left behind for every later run to trip over, so they go first.
 cleanup() {
+	$SSH 'rm -f /usr/sbin/wg' >/dev/null 2>&1 || true
 	for i in $IFACE $IFACE2 $IFACE3; do
 		$SSH "ifdown $i >/dev/null 2>&1 || true
 		      for s in \$(uci show network | sed -n \"s/^network\\.\\([^.]*\\)=wireguard_$i\$/\\1/p\"); do
@@ -60,6 +61,23 @@ cleanup() {
 	done
 }
 trap cleanup EXIT
+
+# A write that fails after its commit runs the restore, whose steps below check what it sets. An
+# endpoint that does not resolve was that write, and is no longer: 25.12 refuses it before the
+# commit, and OpenWrt main sets the peer without it. So `wg set` refuses the peer of FAILKEY here,
+# through a wg in /usr/sbin, which the PATH of uapi finds before /usr/bin. The proto handlers run
+# /usr/bin/wg by its path, so an ifup still sets that peer.
+FAILKEY=$($SSH 'wg genkey | wg pubkey')
+$SSH '[ ! -e /usr/sbin/wg ]' || fail "/usr/sbin/wg exists, and the cleanup would remove it"
+$SSH 'cat > /usr/sbin/wg && chmod 755 /usr/sbin/wg' <<EOF
+#!/bin/sh
+case " \$* " in *" peer $FAILKEY allowed-ips "*) echo "uapi45: wg refuses this peer" >&2; exit 1 ;; esac
+exec /usr/bin/wg "\$@"
+EOF
+bad_write() {
+	call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
+		-d "{\"interface\":\"${1:-$IFACE}\",\"public_key\":\"$FAILKEY\",\"allowed_ips\":[\"${2:-10.98.99.30/32}\"]}"
+}
 
 echo "--- create the parent wireguard interface ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/interfaces" \
@@ -222,24 +240,46 @@ $SSH "wg set $IFACE peer '$STRAY' remove"
 # The whole reason the apply is per-peer rather than a netifd interface renew. A
 # renew is asynchronous and takes the interface down when the config it reads is
 # bad, so this request used to answer 200 while dropping a working tunnel and its
-# healthy peers. An unresolvable endpoint is not exotic: a typo produces it, and
-# so does a dynamic-DNS name that has not propagated.
-echo "--- a peer with an unresolvable endpoint fails alone, tunnel untouched ---"
+# healthy peers.
+echo "--- a peer that wg refuses fails alone, tunnel untouched ---"
 before=$(kernel_peers | wc -l)
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
-	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",
-	    \"endpoint_port\":51820}")
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500, got $(status_of "$r"): $(body_of "$r")"
-# uapi's own wg set refuses the peer, so the 500 carries the resolver's words. The ucode handler of
-# main leaves the endpoint out and keeps the interface up since openwrt ecd9120f04, where it kept
-# the interface down before, so the restore and the tunnel checks below hold on both.
-echo "$(body_of "$r")" | grep -q 'does not resolve' \
-	|| fail "expected the resolver error to be reported: $(body_of "$r")"
+r=$(bad_write)
+[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500, got $(status_of "$r"), so uapi did not run /usr/sbin/wg: $(body_of "$r")"
+body_of "$r" | grep -q 'uapi45: wg refuses this peer' || fail "expected the words of wg to be reported: $(body_of "$r")"
 $SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "tunnel was torn down by a bad peer"
 [ "$(kernel_peers | wc -l)" = "$before" ] \
 	|| fail "healthy peers changed: was $before, now $(kernel_peers | wc -l)"
-$SSH "uci show network | grep -q nx.invalid" && fail "bad peer was not rolled back out of uci"
+$SSH "uci show network | grep -qF '$FAILKEY'" && fail "bad peer was not rolled back out of uci"
+
+# An endpoint that does not resolve is not exotic: a typo produces it, and so does a dynamic-DNS
+# name that has not propagated. wireguard.sh of 25.12 gives it to wg, which refuses the config of
+# the whole interface at its next start for a name that does not exist, so a write refuses one that
+# the resolver answers NXDOMAIN for before its commit. The ucode handler of OpenWrt main leaves the
+# endpoint out since openwrt ecd9120f04 and keeps the peer and the interface up, so the write sets
+# the peer as the handler does and says that the endpoint did not land. It answered 500 on both,
+# after a commit, a reload and a restore.
+echo "--- an endpoint that does not resolve is refused on 25.12, and set without the endpoint on main ---"
+h=$(write_headers POST /network/wireguard_peers "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
+	\"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
+if wg_ucode_platform; then
+	echo "$h" | head -1 | grep -q ' 200 ' || fail "an endpoint that does not resolve expected 200: $h $(cat /tmp/uapi45_patch.json)"
+	echo "$h" | grep -qix 'X-Kernel-Status: omitted' && echo "$h" | grep -qix "X-Kernel-Applied: $IFACE" \
+		|| fail "the write did not say that the endpoint did not land: $h"
+	unres=$(jq -r .id /tmp/uapi45_patch.json)
+	[ "$(read_peer "$unres" '[.endpoint_host, .runtime.in_kernel, .runtime.endpoint]')" = '["nx.invalid",true,null]' ] \
+		|| fail "the read of the peer without its endpoint: $(read_peer "$unres" '[.endpoint_host, .runtime]')"
+	r=$(call -X DELETE "$URL/network/wireguard_peers/$unres")
+	[ "$(status_of "$r")" = "204" ] || fail "DELETE of the peer without its endpoint: $(body_of "$r")"
+else
+	echo "$h" | head -1 | grep -q ' 422 ' || fail "an endpoint that does not resolve expected 422: $h $(cat /tmp/uapi45_patch.json)"
+	[ "$(jq -c '[.errors[] | [.field, .code]]' /tmp/uapi45_patch.json)" = '[["endpoint_host","conflict"]]' ] \
+		|| fail "the 422 is not a conflict on endpoint_host: $(cat /tmp/uapi45_patch.json)"
+	$SSH "uci show network | grep -q nx.invalid" && fail "the refused peer reached uci"
+fi
+$SSH "ip link show $IFACE" >/dev/null 2>&1 || fail "tunnel was torn down by an endpoint that does not resolve"
+has_peer "$PEER3" && fail "the peer is in the kernel after the write"
+[ "$(kernel_peers | wc -l)" = "$before" ] \
+	|| fail "healthy peers changed: was $before, now $(kernel_peers | wc -l)"
 
 # The restore after a failed write reapplies every peer from uci, including ones written by hand
 # that never passed validate(). It has to read them as wireguard.sh does, and run nothing.
@@ -249,10 +289,8 @@ $SSH "rm -f /tmp/uapi45_ran; uci set network.uapi45sib=wireguard_$IFACE; uci set
 	uci set network.uapi45sib.allowed_ips=10.98.99.60/32; uci set network.uapi45sib.endpoint_host=198.51.100.7;
 	uci set network.uapi45sib.endpoint_port=https; uci set network.uapi45sib.persistent_keepalive='0;touch /tmp/uapi45_ran';
 	uci commit network"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
-	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+r=$(bad_write)
+[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 endpoint=$(wg_show endpoints | awk -v k="$SIB" '$1 == k { print $2 }')
 $SSH "uci delete network.uapi45sib; uci commit network; wg set $IFACE peer '$SIB' remove 2>/dev/null || true"
 $SSH "[ ! -e /tmp/uapi45_ran ]" || fail "a stored persistent_keepalive ran as a shell command"
@@ -260,18 +298,17 @@ $SSH "[ ! -e /tmp/uapi45_ran ]" || fail "a stored persistent_keepalive ran as a 
 # the port name from /etc/services as wireguard.sh does.
 [ "$endpoint" = "198.51.100.7:443" ] || fail "the restore applied endpoint_port 'https' as '$endpoint', not 198.51.100.7:443"
 
-# The restore gives a hand-written endpoint_host to `wg set`, which must read it as one argument, as
-# the write path above does. It runs alone, because the restore stops at the first peer that wg
-# refuses.
+# The restore gives a hand-written endpoint_host to `wg set` on 25.12, and to nslookup on main, which
+# must read it as one argument, as the write path above does. It runs alone, because the restore of
+# 25.12 stops at the first peer that wg refuses. The restore of main sets the peer without the
+# endpoint, as the handler does.
 echo "--- a restore gives a hand-written endpoint_host to wg as one argument, and runs nothing from it ---"
 SIB2=$($SSH 'wg genkey | wg pubkey')
 $SSH "rm -f /tmp/uapi45_ep; uci set network.uapi45sib2=wireguard_$IFACE; uci set network.uapi45sib2.public_key='$SIB2';
 	uci set network.uapi45sib2.allowed_ips=10.98.99.62/32; uci set network.uapi45sib2.endpoint_port=51820;
 	uci set network.uapi45sib2.endpoint_host='x\$(touch\${IFS}/tmp/uapi45_ep)y'; uci commit network"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
-	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+r=$(bad_write)
+[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 $SSH "uci delete network.uapi45sib2; uci commit network"
 $SSH "[ ! -e /tmp/uapi45_ep ]" || fail "a stored endpoint_host ran as a shell command"
 
@@ -302,9 +339,7 @@ wait_iface_settled "$IFACE" || true
 # the restart it starts wipes a hand-set state again anyway, so the preload
 # only feeds the 25.12 semantics.
 $SSH "wg set $IFACE peer '$NOIPS' allowed-ips 10.98.99.66/32 2>/dev/null || true"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
-	    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
+r=$(bad_write)
 noips=$(wg_show allowed-ips | awk -v k="$NOIPS" '$1 == k { print $2 }')
 after=$(has_peer "$AFTER" && echo yes || echo no)
 # The commit fires procd's reload trigger for network, and on main a peer
@@ -312,7 +347,7 @@ after=$(has_peer "$AFTER" && echo yes || echo no)
 # the reload's own re-apply drops the deleted sections' peers anyway.
 $SSH "uci delete network.uapi45nokey; uci delete network.uapi45noips; uci delete network.uapi45after; uci commit network
 	wg set $IFACE peer '$NOIPS' remove 2>/dev/null || true; wg set $IFACE peer '$AFTER' remove 2>/dev/null || true"
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore did not recover: $(body_of "$r")"
 [ "$noips" = "(none)" ] || fail "the peer without allowed IPs holds '$noips' in the kernel, not (none)"
 [ "$after" = "yes" ] || fail "the restore did not set the peer after the peer without a key"
@@ -336,15 +371,10 @@ $SSH "wg genpsk > /tmp/uapi45psk; wg set $IFACE peer '$BADPSK' allowed-ips 10.98
 	uci add_list network.uapi45badpsk.allowed_ips=10.98.99.80/32; uci set network.uapi45badpsk.preshared_key=not-a-key
 	uci set network.uapi45after2=wireguard_$IFACE; uci set network.uapi45after2.public_key='$AFTER2'
 	uci add_list network.uapi45after2.allowed_ips=10.98.99.81/32; uci commit network"
-bad_write() {
-	call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-		-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
-		    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}"
-}
 r=$(bad_write)
 psk=$(wg_show preshared-keys | awk -v k="$BADPSK" '$1 == k { print $2 }')
 after=$(has_peer "$AFTER2" && echo yes || echo no)
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore stopped at the malformed preshared key: $(body_of "$r")"
 if wg_ucode_platform; then
 	# The restart recreates the netdev from uci, so a preshared key set by hand, which no section
@@ -362,10 +392,9 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" -d "{\"op
 	{\"path\":\"/network/wireguard_peers/uapi45badpsk\",\"method\":\"PATCH\",
 	 \"body\":{\"preshared_key\":\"$PSK2\",\"allowed_ips\":[\"10.98.99.80/32\",\"10.98.99.82/32\"]}},
 	{\"path\":\"/network/wireguard_peers\",\"method\":\"POST\",
-	 \"body\":{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.99.30/32\"],
-	           \"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}}]}")
+	 \"body\":{\"interface\":\"$IFACE\",\"public_key\":\"$FAILKEY\",\"allowed_ips\":[\"10.98.99.30/32\"]}}]}")
 psk=$($SSH "wg show $IFACE preshared-keys" | awk -v k="$BADPSK" '$1 == k { print $2 }')
-[ "$(status_of "$r")" = "500" ] || fail "batch with a bad endpoint expected 500, got $(status_of "$r"): $(body_of "$r")"
+[ "$(status_of "$r")" = "500" ] || fail "batch with a peer that wg refuses expected 500, got $(status_of "$r"): $(body_of "$r")"
 if wg_ucode_platform; then
 	# The restart of the restore recreates the netdev from uci, where the handler runs the peer
 	# without the 'not-a-key' preshared key, and the reconcile sets it so: the kernel is what uci holds.
@@ -385,7 +414,7 @@ after=$(has_peer "$AFTER2" && echo yes || echo no)
 held=$(has_peer "$BADPSK" && echo yes || echo no)
 $SSH "uci delete network.uapi45badpsk; uci delete network.uapi45after2; uci commit network; rm -f /tmp/uapi45psk
 	wg set $IFACE peer '$AFTER2' remove 2>/dev/null || true; wg set $IFACE peer '$BADPSK' remove 2>/dev/null || true"
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 [ "$after" = "yes" ] || fail "the restore did not set the peer after the peer that the kernel does not hold"
 if wg_ucode_platform; then
 	# The handler and the restore run the peer without its preshared key.
@@ -428,14 +457,22 @@ has_peer "$PEER4" || fail "re-enabled peer was not reinstalled"
 call -X DELETE "$URL/network/wireguard_peers/$rid" >/dev/null
 
 # endpoint_host reaches a shell command. validate_new() refuses only escapes, newlines, and
-# brackets with a colon in it, so this host reaches `wg set`, which must read it as one argument and fail to
-# resolve it. A regression here is remote command execution, not a cosmetic bug.
+# brackets with a colon in it, so this host reaches nslookup, which must read it as one argument and
+# fail to resolve it. A regression here is remote command execution, not a cosmetic bug. The host
+# holds no space, which a write strips before it asks nslookup on 25.12. There the write refuses the
+# host when the resolver answers that it does not exist, and `wg set` refuses it after the commit
+# when the resolver answers in another way.
 echo "--- a command substitution in endpoint_host does not execute ---"
 $SSH "rm -f /tmp/uapi-wg-injection" >/dev/null 2>&1
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.99.32/32\"],
-	    \"endpoint_host\":\"x\$(touch /tmp/uapi-wg-injection)y\",\"endpoint_port\":51820}")
-[ "$(status_of "$r")" = "500" ] || fail "endpoint_host with a command substitution expected 500 from wg, got $(status_of "$r")"
+	    \"endpoint_host\":\"x\$(touch\${IFS}/tmp/uapi-wg-injection)y\",\"endpoint_port\":51820}")
+if wg_ucode_platform; then
+	[ "$(status_of "$r")" = "200" ] || fail "endpoint_host with a command substitution expected 200 on main, got $(status_of "$r"): $(body_of "$r")"
+	call -X DELETE "$URL/network/wireguard_peers/$(id_of "$r")" >/dev/null
+else
+	case "$(status_of "$r")" in 422|500) ;; *) fail "endpoint_host with a command substitution expected 422 or 500 on 25.12, got $(status_of "$r"): $(body_of "$r")" ;; esac
+fi
 $SSH "test -f /tmp/uapi-wg-injection" >/dev/null 2>&1 \
 	&& fail "endpoint_host was interpolated into the shell and executed"
 
@@ -539,10 +576,8 @@ else
 	has_peer "$ESC_PEER" || fail "ifup did not set the key that wireguard.sh expands: $(kernel_peers)"
 	[ "$(read_peer uapi45esc '[.runtime.in_kernel, .runtime.allowed_ips]')" = '[true,["10.98.99.70/32"]]' ] \
 		|| fail "the read does not match the key with an escape to the peer of the kernel: $(read_peer uapi45esc .runtime)"
-	r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-		-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",
-		    \"allowed_ips\":[\"10.98.99.30/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
-	[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+	r=$(bad_write)
+	[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 	body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore failed on the peer with an escape: $(body_of "$r")"
 	has_peer "$ESC_PEER" || fail "the restore removed the peer with an escape from the kernel"
 fi
@@ -652,7 +687,7 @@ else
 	escips_held "after a PATCH"
 	[ "$($SSH "uci get network.uapi45escips.allowed_ips")" = '10.98.150.0/24\05410.98.151.0/25' ] || fail "the PATCH rewrote allowed_ips"
 	r=$(bad_write)
-	[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 again, got $(status_of "$r"): $(body_of "$r")"
+	[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500 again, got $(status_of "$r"): $(body_of "$r")"
 	body_of "$r" | grep -q '"code": "reload_failed_restored"' || fail "the restore failed on the escape in allowed_ips: $(body_of "$r")"
 	escips_held "after the restore"
 fi
@@ -702,10 +737,8 @@ r=$(call -X PUT -H 'Content-Type: application/json' "$URL/network/wireguard_peer
 	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"FD00:98:CC:0::/64\"],\"route_allowed_ips\":true}")
 [ "$(status_of "$r")" = "200" ] || fail "PUT respelled prefix: $(body_of "$r")"
 static6 | grep -q '^fd00:98:cc::/64 ' || fail "the PUT that respelled the prefix withdrew its route: $(static6)"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE\",\"public_key\":\"$PEER4\",
-	    \"allowed_ips\":[\"10.98.99.34/32\"],\"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
-[ "$(status_of "$r")" = "500" ] || fail "bad endpoint expected 500 for the restore, got $(status_of "$r"): $(body_of "$r")"
+r=$(bad_write "$IFACE" 10.98.99.34/32)
+[ "$(status_of "$r")" = "500" ] || fail "a peer that wg refuses expected 500 for the restore, got $(status_of "$r"): $(body_of "$r")"
 static6 | grep -q '^fd00:98:cc::/64 ' || fail "the restore withdrew the route of the respelled prefix: $(static6)"
 has_peer "$PEER3" || fail "the restore dropped the peer of the respelled prefix"
 r=$(call -X DELETE "$URL/network/wireguard_peers/$respelled")
@@ -877,10 +910,8 @@ body_of "$r" | grep -qF '"field": "allowed_ips[0]"' || fail "the 422 is not on a
 # restore would add the marker entry to it and answer restored.
 $SSH "uci set network.uapi45mark.disabled=0; uci commit network
 	wg set $IFACE2 peer '$MARK' allowed-ips 10.98.94.2/32,10.98.94.99/32"
-r=$(call -X POST -H 'Content-Type: application/json' "$URL/network/wireguard_peers" \
-	-d "{\"interface\":\"$IFACE2\",\"public_key\":\"$PEER3\",\"allowed_ips\":[\"10.98.94.30/32\"],
-	    \"endpoint_host\":\"nx.invalid\",\"endpoint_port\":51820}")
-[ "$(status_of "$r")" = "500" ] || fail "the write with the bad endpoint expected 500, got $(status_of "$r"): $(body_of "$r")"
+r=$(bad_write "$IFACE2" 10.98.94.30/32)
+[ "$(status_of "$r")" = "500" ] || fail "the write of a peer that wg refuses expected 500, got $(status_of "$r"): $(body_of "$r")"
 body_of "$r" | grep -q '"code": "reload_failed_unrecovered"' || fail "the restore claimed to recover: $(body_of "$r")"
 body_of "$r" | grep -q 'marked + or -' || fail "the error names no marker entry: $(body_of "$r")"
 # On main every restart re-derives the kernel from uci, so the hand-set IP is gone before the write.

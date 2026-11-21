@@ -735,6 +735,19 @@ t.describe('multi_transaction, the reload of a batch', () => {
 		t.assert_deep_equal([ r.reload_status, r.reload_services, r.kernel_status ], [ "no_reload", [], "no_kernel" ]);
 	});
 
+	t.it('reports omitted when the kernel did not get an endpoint that the batch stored', () => {
+		let r = tx.multi_transaction(ubus.stub({ uci: { fw: {}, net: {} } }), {
+			packages: [ "net" ], reload_services: { net: [ "network" ] },
+			lock_path: "/tmp/uapi-test-reload-global.lock", pkg_lock_prefix: "/tmp/uapi-test-reload-pkg.",
+			wg_ops: [ { iface: "wg0", action: "set" } ],
+			wg_apply: function(c, o, applied, omitted) { push(applied, "wg0"); push(omitted, "wg0"); return null; },
+			fn: (c) => ({ ok: true, body: {} }), reload: noop_reload, check_services: noop_check,
+		});
+		for (let f in [ "global.lock", "pkg.net.lock" ])
+			require('fs').unlink("/tmp/uapi-test-reload-" + f);
+		t.assert_deep_equal([ r.kernel_status, r.kernel_applied ], [ "omitted", [ "wg0" ] ]);
+	});
+
 	t.it('checks the init scripts of every package before it takes a lock', () => {
 		let seen = null;
 		let r = tx.multi_transaction(ubus.stub({ uci: { fw: {}, net: {} } }), {
@@ -1006,6 +1019,19 @@ t.describe('transaction kernel_status', () => {
 		let r = run([{ iface: "wg0", action: "set" }, { iface: "wg1", action: "set" }],
 		            applier(["wg0"]));
 		t.assert_equal(r.kernel_status, "partial");
+		t.assert_deep_equal(r.kernel_applied, ["wg0"]);
+	});
+
+	// The ucode handler of OpenWrt main leaves out the endpoint of a host that does not resolve, and
+	// the apply sets the peer as it does, so an `ok` would say that the endpoint landed.
+	t.it('reports omitted when the kernel did not get an endpoint that the write stored', () => {
+		let r = run([{ iface: "wg0", action: "set" }, { iface: "wg1", action: "set" }],
+		            function(c, o, applied, omitted) {
+		                push(applied, "wg0");
+		                push(omitted, "wg0");
+		                return null;
+		            });
+		t.assert_equal(r.kernel_status, "omitted");
 		t.assert_deep_equal(r.kernel_applied, ["wg0"]);
 	});
 
