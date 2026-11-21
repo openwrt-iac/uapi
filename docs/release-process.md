@@ -38,7 +38,8 @@ tarball sha256 lives in
 the SDK pins against a candidate without tagging:
 
 ```
-gh workflow run ci.yml --ref main
+gh workflow run ci.yml --ref main    # 4.x
+gh workflow run ci.yml --ref v3      # 3.x
 ```
 
 This fires the `unit + lint + integration + package + verify-arch-build`
@@ -98,8 +99,8 @@ sweep that never happened.
 
 ## Major preparation branch
 
-A major's breaking work lands on a preparation branch cut from `main` (today
-`v4`), not on `main` itself. Breaking-change PRs target the preparation
+A major's breaking work lands on a preparation branch cut from `main` (`v4`
+for 4.x), not on `main` itself. Breaking-change PRs target the preparation
 branch. Additive and internal PRs keep targeting `main` and can ship in
 minors while the major is in flight.
 
@@ -120,8 +121,21 @@ minors while the major is in flight.
   so breaking PRs start from a current base and conflicts stay small.
 - Until the release, the preparation branch still serves the current API
   prefix. The mount move is the last commit before the rc tag.
-- At release time: rebase the preparation branch onto `main`, merge it into
-  `main`, then run the rc flow below.
+- At release time: cut the maintenance branch of the old major from `main`
+  (`v3` for 3.x), with a copy of the `main` ruleset that has no bypass actor.
+  Rebase the preparation branch onto `main` one last time, merge it into
+  `main`, delete it and its ruleset, then run the rc flow below. From then, a
+  fix of the old major lands on its maintenance branch by PR, and is carried to
+  `main` when it applies there. The old major's releases are tagged on its
+  maintenance branch. After such a tag, copy the new section of its
+  `CHANGELOG.md` into the one of `main`, and take out of the `[Unreleased]`
+  of `main` each entry that the section carries, so the released sections of
+  both branches carry the same entries. A carried entry keeps the number of
+  its `main` PR at its end (see Changelog below).
+
+`v4` went through this on 2026-11-21: `main` carries 4.x, and `v3` carries 3.x
+from 3.5.0 on. A 3.x release follows the steps below with `v3` where they name
+`main`.
 
 ## Release flow
 
@@ -129,8 +143,7 @@ minors while the major is in flight.
 
 For any MAJOR bump, tag `vX.0.0-rc1` (or `-rc2`, etc.) BEFORE the final
 `vX.0.0`. The release-apk workflow auto-detects `-rc/-alpha/-beta/-pre`
-and marks the GitHub release as a prerelease (its
-`case "$TAG" in *-rc*|*-alpha*|*-beta*|*-pre*) PRE=--prerelease ;;` block).
+and marks the GitHub release as a prerelease (its `case "$TAG"` block).
 
 **RCs do NOT publish to the apk feed.** The feed aggregator at
 `openwrt-iac/openwrt-iac.github.io` pulls each source repo's latest
@@ -159,7 +172,10 @@ Per-release steps (operator does these in order):
 2. **Update `VERSION`** to the target value. **Regenerate** the OpenAPI:
    `make openapi`. Commit.
 3. **Close the changelog section.** Run `scripts/changelog-missing.sh
-   <previous-tag>` and fix whatever it lists. Then rename `## [Unreleased]`
+   <previous-tag> <line>`, where `<line>` is the branch that the release is
+   tagged on (`main` for 4.x, `v3` for 3.x), and fix whatever it lists. On
+   that branch itself the script takes it as the default, and on a topic
+   branch it refuses to guess. Then rename `## [Unreleased]`
    to `## [x.y.z] - <date>`, and put an empty `## [Unreleased]` above it.
    Do this for `rc` releases too. A final release after RCs gets a short
    section of its own that points at the RC sections, as 3.0.0 does. The
@@ -177,7 +193,7 @@ Per-release steps (operator does these in order):
    p99; it does not gate, because no
    baseline is committed. Read the numbers in the run log or the `bench-run`
    artifact if a release is expected to move latency.
-6. **Merge to main**.
+6. **Merge** into `main` for 4.x, or into `v3` for 3.x.
 7. **Sign and push the tag**:
    ```
    git tag -s v2.0.0 -m "v2.0.0"
@@ -209,6 +225,10 @@ Per-release steps (operator does these in order):
 
    Once `package` and `integration` pass, `release-apk` creates the GitHub
    Release and attaches the APK and the SBOM (always; RCs get `--prerelease`).
+   It marks the release Latest only when no published release has a higher
+   version, so a 3.x release after 4.0.0 leaves the mark on 4.x. A moved tag
+   republishes its release with the same decision. When the list of releases
+   cannot be read, the job fails rather than guess.
 9. **Verify the release** is visible on GitHub Releases. The feed at
    `openwrt-iac.github.io/feed/` picks up the new asset on its next
    `publish.yml` run (nightly schedule or manual
@@ -294,13 +314,18 @@ counter, so the guess is wrong if an issue opens in between, and the check then
 fails until the
 entry carries the real number.
 
-**At release time,** `scripts/changelog-missing.sh <previous-tag>` lists every
-PR merged into
-`main` since that tag that has neither an entry nor the label. It must print
-nothing. Step 3
+**At release time,** `scripts/changelog-missing.sh <previous-tag> <line>`
+lists every PR merged into `<line>` since that tag that has neither an entry
+nor the label: `main` for 4.x, `v3` for 3.x. It must print nothing. Step 3
 above then turns `## [Unreleased]` into the release section, and
-`scripts/release-notes.sh`
-makes that section the GitHub Release body.
+`scripts/release-notes.sh` makes that section the GitHub Release body.
+
+**A change carried between `main` and `v3`** has a PR on each branch, and its
+entry keeps the number of the `main` PR at its end:
+`(#<v3 PR>) (#<main PR>)`. When the `v3` PR merges first, the `main` number
+joins the entry where the 3.x section is copied into `main`. The sweep of each
+branch then finds its own PR, and the sweep of `main` still finds it after the
+copied section replaces the entry in its `[Unreleased]`.
 
 Before this process, entries were written at release time from memory. Between
 3.0.0 and the
@@ -314,8 +339,9 @@ Before tagging:
   outcome noted even if nothing was eligible.
 - [ ] `VERSION` matches the target tag.
 - [ ] `build/openapi.json`'s `info.version` matches (`make openapi-check`).
-- [ ] `scripts/changelog-missing.sh <previous-tag>` prints nothing, and
-  `## [Unreleased]` is renamed to this version.
+- [ ] `scripts/changelog-missing.sh <previous-tag> <line>` prints nothing
+  (`main` for 4.x, `v3` for 3.x), and `## [Unreleased]` is renamed to this
+  version.
 - [ ] Any version number a doc announced ahead of time now matches reality.
   `docs/deprecations.md` carries a target release in its "Deprecated since"
   column before that release exists, and the roadmap names target versions
@@ -326,14 +352,14 @@ Before tagging:
 - [ ] `make test coverage` green.
 - [ ] CI green on the branch being tagged, for the exact commit that will be
   tagged.
-  `main` for a release off the current major, `release/<major>.<minor>.x` for a
-  patch on an
-  older one. Both are built on push.
+  `main` for 4.x, `v3` for 3.x, `release/<major>.<minor>.x` for a patch on an
+  older major. All three are built on push.
 - [ ] `.github/release-signers.asc` contains your GPG public key block.
 - [ ] `build/sdk.sha256` pins ALL four arch SDKs at the right
   `OPENWRT_VERSION` (x86_64 + aarch64_generic + arm_cortex-a7 + mips_24kc).
-- [ ] `gh workflow run ci.yml --ref main` green - validates the per-arch
-  SDK pins via `verify-arch-build` without consuming a tag.
+- [ ] `gh workflow run ci.yml --ref main` green (`--ref v3` for 3.x) -
+  validates the per-arch SDK pins via `verify-arch-build` without consuming a
+  tag.
 
 After tagging, before announcing:
 
