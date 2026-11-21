@@ -3,6 +3,9 @@ let ubus = require('bus');
 let handler = require('handler');
 let wg = require('wg');
 let wgp = loadfile('src/resources/network.wireguard_peers.uc')();
+let fs = require('fs');
+// wg as it runs where netifd has the ucode proto handler of OpenWrt main.
+let uc = t.load_with_fs({ ...fs, access: (p) => p == '/lib/netifd/proto/wireguard.uc' || fs.access(p) }, [ 'wg' ]);
 
 const PK = 'QDOrIy8Zr31CrRFTGiUoVO0Ib3qSChv5U6gCqjiDrB4=';
 const PK2 = 'TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=';
@@ -369,10 +372,9 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 	// The ucode handler of OpenWrt main gives a host of digits and dots to wg as it stands, as uci
 	// holds it, and wg looks up one that inet_aton does not read as a name that no DNS holds.
 	t.it('refuses under the ucode handler a host of digits and dots that wg cannot read, a stored one too', () => {
-		let fs = require('fs');
 		let with_module = (m) => handler.make(t.load_with({ wg: m }, [ '../resources/network.wireguard_peers' ]),
 		                                      { tx: { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null } });
-		let h = with_module(t.load_with_fs({ ...fs, access: (p) => p == '/lib/netifd/proto/wireguard.uc' || fs.access(p) }, [ 'wg' ]));
+		let h = with_module(uc);
 		for (let host in [ '10.0.0.256', '1.2.3.4.5', '08.0.0.1', '.' ])
 			t.assert_deep_equal(fields_of(h.patch(with_wg(), ctx(), 'g_existing', { endpoint_host: host })), [ [ 'endpoint_host', 'invalid_format' ] ], host);
 		for (let host in [ '192.168.1.01', '010.0.0.1', '167772161', '0x0a000001', ' 10.0.0.256' ])
@@ -450,6 +452,19 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { disabled: false }).status, 200);
 		t.assert_equal(make_handler().patch(c, ctx(), 'g_existing', { public_key: PK + ' ' }).status, 200);
 		t.assert_deep_equal(fields_of(make_handler().patch(c, ctx(), 'g_existing', { public_key: ' ' + PK })), [ [ 'public_key', 'invalid_format' ] ]);
+	});
+
+	// The ucode handler of OpenWrt main matches a key as uci holds it, and skips the peer, or leaves
+	// out the preshared key, for one with whitespace or a comment.
+	t.it('under the ucode handler a stored key with whitespace or a comment blocks every write of the peer, and is not live', () => {
+		let h = handler.make(t.load_with({ wg: uc }, [ '../resources/network.wireguard_peers' ]),
+		                     { tx: { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null } });
+		for (let k, v in { public_key: PK + ' # b', preshared_key: PK + ' ' }) {
+			let c = with_wg();
+			c._state.uci.network.g_existing[k] = v;
+			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { description: 'x' })), [ [ k, 'invalid_format' ] ], k);
+			t.assert_deep_equal(map(h.sweep(c)[0].errors, (e) => [ e.field, e.live ]), [ [ k, false ] ], k);
+		}
 	});
 
 	t.it('refuses a key whose unused bits are not zero, which wg refuses', () => {
@@ -633,6 +648,19 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		t.assert_equal(h.patch(c, ctx(), 'wg1', { ...WG, disabled: true }).status, 200);
 		t.assert_equal(ph.patch(c, ctx(), 'g_ka', { persistent_keepalive: 25 }).status, 200);
 		t.assert_equal(h.patch(c, ctx(), 'wg1', { disabled: false }).status, 200);
+	});
+
+	// The ucode handler of OpenWrt main skips a peer whose key does not match its pattern, so wg
+	// reads none of its values.
+	t.it('under the ucode handler a switch or an enable passes for a peer that the handler skips', () => {
+		let skipped = { g_ip: { public_key: 'not-a-key', allowed_ips: [ 'foo' ], endpoint_host: 'a#b' } };
+		let real = global.modules.wg;
+		global.modules.wg = uc;
+		let r = [ h.patch(world(STATIC, skipped), ctx(), 'wg1', WG),
+		          h.patch(world({ ...WG, disabled: '1' }, skipped), ctx(), 'wg1', { disabled: false }),
+		          h.patch(world(STATIC, { g_ip: { allowed_ips: [ 'foo' ] } }), ctx(), 'wg1', WG) ];
+		global.modules.wg = real;
+		t.assert_deep_equal(map(r, errs), [ [], [], [ [ 'proto', 'conflict' ] ] ]);
 	});
 
 	t.it('a write of an interface already live on wireguard does not check its peers', () => {

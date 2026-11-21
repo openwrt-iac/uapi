@@ -449,6 +449,13 @@ A read then shows `runtime.endpoint` null beside the stored `endpoint_host`. A
 client that branches on the values of `X-Kernel-Status` sees `omitted` there, as
 it can see a new error code.
 
+The handler also matches a key as uci holds it. It skips a peer whose stored
+`public_key` holds whitespace or a `#` comment, with its routes, and leaves out
+such a `preshared_key`, where wg reads both under wireguard.sh. On OpenWrt main,
+such a key is now an error, so it blocks every write of its peer, as the stored
+errors above do. LuCI refuses such a key too. The kernel apply installs no route
+for a peer that the handler skips, where 3.x did.
+
 ## Reads that change at the upgrade
 
 The upgrade keeps `/etc/config`, the token store and every id as they are. Of
