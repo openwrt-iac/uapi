@@ -8,7 +8,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **BREAKING: a WireGuard peer endpoint that does not resolve follows the proto
+- **A WireGuard peer endpoint that does not resolve follows the proto
   handler.** 3.x committed such an `endpoint_host`, `wg set` refused the peer,
   and the restore answered 500 `reload_failed_restored`. On 25.12, wireguard.sh
   gives the endpoint to wg, which refuses the config of the whole interface at
@@ -17,8 +17,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   main, the ucode proto handler leaves out the endpoint and keeps the peer, so
   the write sets the peer without it and answers 200 with the new
   `X-Kernel-Status: omitted`. A name resolves when busybox's nslookup answers
-  it, as that handler reads it. A stored name is not checked. 3.5.0 did not
-  announce this change. Migration note in `docs/migration-v3-to-v4.md`. (#424)
+  it, as that handler reads it. A stored name is not checked. This is not
+  breaking: 3.x stored no such write, so the 422 reports a refusal that already
+  happened as a client error, the 200 on main is a write that failed and now
+  succeeds, and a new header value is handled like a new error code. Note in
+  `docs/migration-v3-to-v4.md`. (#424)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
   where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a

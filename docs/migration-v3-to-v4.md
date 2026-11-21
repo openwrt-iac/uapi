@@ -263,8 +263,9 @@ change.
 
 3.x committed a peer whose `endpoint_host` does not resolve, then `wg set`
 refused it, and the restore answered 500 `reload_failed_restored`. v4 answers as
-the platform treats such a host. A name resolves when busybox's nslookup answers
-it, as the ucode proto handler of OpenWrt main reads it.
+the platform treats such a host. This is no break, because 3.x stored no such
+write, but a client sees another status. A name resolves when busybox's nslookup
+answers it, as the ucode proto handler of OpenWrt main reads it.
 
 On 25.12, wireguard.sh gives the endpoint to wg, which refuses the config of the
 whole interface at its next start. A write that sends such a host for an enabled
@@ -274,7 +275,7 @@ On OpenWrt main, the ucode proto handler leaves out the endpoint and keeps the
 peer. The write answers 200, sets the peer without the endpoint, and says so
 with the new `X-Kernel-Status: omitted`. A read then shows `runtime.endpoint`
 null beside the stored `endpoint_host`. A client that branches on the values of
-`X-Kernel-Status` must take `omitted`.
+`X-Kernel-Status` sees `omitted` there, as it can see a new error code.
 
 ## Reads that change at the upgrade
 
