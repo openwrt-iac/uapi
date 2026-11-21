@@ -55,8 +55,6 @@ const VALID_RA = {
 	"disabled": true, "server": true, "relay": true, "hybrid": true,
 };
 const VALID_RA_FLAGS = [ "managed-config", "other-config", "home-agent", "none" ];
-// odhcpd takes any ra_default, and dnsmasq serves DHCPv4 on any dhcpv4 but `disabled`.
-const WRITE = { ra_default: { minimum: 0, maximum: 2 }, dhcpv4: { enum: keys(VALID_RA) } };
 
 // uci's blob converter splits an option at spaces and tabs and passes a list entry whole, and
 // parse_ra_flags() of odhcpd stops at the first word that is no flag and keeps the flags before it.
@@ -127,11 +125,10 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json, conn) {
 	let errs = [];
 
 	values.require_present(errs, json, "interface");
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
 
 	if (json.ra != null && !VALID_RA[json.ra])
 		push(errs, { field: "ra", code: "not_in_enum",
@@ -178,7 +175,6 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	validate_new: validate_new,
 	openapi_singular: "DHCP server",
 	openapi_required: ["interface"],
@@ -194,18 +190,17 @@ return {
 	},
 	schema_properties: {
 		interface:   { "x-uapi-read-nullable": true, type: "string" },
-		start:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 4294967295 },
-		limit:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 4294967295 },
-		leasetime:   { type: ["string", "null"], pattern: "^([0-9]+[smhdwMY]?|infinite|deprecated)$",
-		               description: "Lease time: a number of seconds, or a number with a suffix such as h or d, or `infinite`, or `deprecated`, as LuCI writes them" },
+		start:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 254 },
+		limit:       { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 254 },
+		leasetime:   { type: ["string", "null"], pattern: "^[0-9]+[smhdwMY]?$" },
 		ignore:      { type: "boolean", default: false },
 		force:       { type: "boolean", default: false },
 		dynamicdhcp: { type: "boolean", default: true },
 		ra:          { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA) },
 		dhcpv6:      { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA) },
-		ra_default:  { type: ["integer", "null"], "x-uapi-write": WRITE.ra_default,
+		ra_default:  { type: ["integer", "null"], minimum: 0, maximum: 2,
 		               description: "When odhcpd announces this device as default router in its router advertisements. 0 or null, when the router has an IPv6 default route and the interface a global prefix. 1, when the interface has a prefix, a ULA one included. 2, always." },
-		dhcpv4:      { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": WRITE.dhcpv4,
+		dhcpv4:      { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_RA),
 		               description: "DHCPv4 service on this interface. LuCI offers `disabled` and `server`, and its DHCP setup writes `server`. dnsmasq serves on every value but `disabled`. An unset value is served by the dnsmasq of OpenWrt 25.12, and taken as `disabled` by the dnsmasq of OpenWrt main, so a read of null serves DHCPv4 on one and not on the other. odhcpd has no DHCPv4 relay and serves on every value but `disabled` too, but only when `dhcp/odhcpd` sets `maindhcp`, and it takes null as `disabled`." },
 		ra_flags:    { type: ["array", "null"], items: { type: "string", enum: VALID_RA_FLAGS },
 		               description: "Flags that odhcpd sets in the router advertisements of this interface. Without the option, odhcpd sets only `other-config` (O). `managed-config` (M) tells clients to ask DHCPv6 for an address. `none` sets no flag, and LuCI writes it when no flag is selected. A read gives the flags that odhcpd sets: uci passes it the words of an option split at spaces and tabs, or each list entry whole, and odhcpd stops at the first word that is no flag name and keeps the flags before it. When it sets none, such as for an option of spaces, the read gives `none`. null or `[]` removes the option, which gives `other-config`. odhcpd also sets `managed-config` when `dhcpv6_pd_preferred`, which uapi does not model, is set with DHCPv6 prefix delegation." },

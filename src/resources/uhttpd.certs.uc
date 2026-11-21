@@ -1,9 +1,6 @@
 let values = require('values');
 let as_int = values.as_int;
 
-// px5g makes a certificate of 0 days, which has expired when it is made.
-const WRITE = { days: { minimum: 1 } };
-
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
 	return {
@@ -32,9 +29,8 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	if (json.commonname == null || json.commonname == "")
 		push(errs, { field: "commonname", code: "required",
 		             message: "is required (cert CN)" });
@@ -48,13 +44,12 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	openapi_singular: "uhttpd certificate",
 	id_prefix: "c",
 	openapi_required: ["commonname"],
 	schema_properties: {
-		days:         { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 49710, "x-uapi-write": WRITE.days,
-		                description: "Certificate validity in days. A write takes 1 to 49710: px5g makes a certificate that has already expired for 0, and wraps a larger number. A read also gives a stored 0" },
+		days:         { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 36500,
+		                description: "Certificate validity in days" },
 		bits:         { "x-uapi-read-nullable": true, type: "integer", minimum: 1024,
 		                description: "RSA key size in bits" },
 		commonname:   { "x-uapi-read-nullable": true, type: "string", description: "X.509 CN (required)" },

@@ -3,12 +3,11 @@ let platform_bool = values.platform_bool;
 let ucode_int = values.ucode_int;
 
 const VALID_MODES = {
-	"ap": true, "sta": true, "adhoc": true, "wds": true, "monitor": true, "mesh": true, "ahdemo": true,
+	"ap": true, "sta": true, "adhoc": true, "wds": true, "monitor": true, "mesh": true,
 };
 // wifi-scripts sets up no interface in mode wds, and LuCI writes a WDS access point or station as
-// mode ap or sta with option wds, so only a read takes wds. LuCI also writes ahdemo, which
-// wifi-scripts skips as it skips a section without a mode.
-const WRITE_MODES = filter(keys(VALID_MODES), (m) => !(m in [ "wds", "ahdemo" ]));
+// mode ap or sta with option wds, so only a read takes wds.
+const WRITE_MODES = filter(keys(VALID_MODES), (m) => m != "wds");
 // In these modes mac80211.sh can pass the SSID to wdev.uc inside a single-quoted shell
 // argument, and the JSON encoding leaves a single quote as it is.
 const SHELL_SSID_MODES = { "monitor": true, "adhoc": true, "mesh": true };
@@ -17,15 +16,12 @@ const VALID_ENCRYPTION = {
 	"psk": true, "psk2": true, "psk-mixed": true,
 	"sae": true, "sae-mixed": true,
 	"wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true,
-	"sae-compat": true, "wpa3-192": true, "wpa-mixed": true,
-	// parse_encryption in wifi-scripts takes these as the older names of sae and sae-mixed.
-	"psk3": true, "psk3-mixed": true,
 	// LuCI writes these, and the shell wifi-scripts read the open or shared WEP authentication.
 	"wep-open": true, "wep-shared": true,
 };
 // LuCI appends a forced cipher, as in psk2+ccmp, to these modes of the enum, and
 // parse_encryption in wifi-scripts also reads the older aes spellings.
-const CIPHER_MODES = [ "psk", "psk2", "psk-mixed", "sae", "wpa", "wpa2", "wpa3", "wpa3-mixed", "wpa3-192", "wpa-mixed" ];
+const CIPHER_MODES = [ "psk", "psk2", "psk-mixed", "sae", "wpa", "wpa2", "wpa3", "wpa3-mixed" ];
 const CIPHERS = [ "ccmp", "ccmp256", "gcmp", "gcmp256", "tkip", "tkip+ccmp",
                   "aes", "tkip+aes", "aes+tkip", "ccmp+tkip" ];
 for (let m in CIPHER_MODES)
@@ -73,11 +69,10 @@ const R1KH_ID_RE = regexp(R1KH_ID_PATTERN);
 
 // The modes whose key wifi-scripts writes as a line: a passphrase or a PSK for hostapd, or a psk or
 // sae_password for wpa_supplicant.
-const KEY_LINE_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae": true, "sae-mixed": true, "sae-compat": true,
-                         "psk3": true, "psk3-mixed": true };
+const KEY_LINE_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae": true, "sae-mixed": true };
 // The modes whose key supplicant.uc writes as psk in mode sta and adhoc. Plain sae gets sae_password,
 // which wpa_supplicant takes at any length.
-const STA_PSK_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae-mixed": true, "psk3-mixed": true };
+const STA_PSK_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae-mixed": true };
 // supplicant.uc puts the key between double quotes as it is, and wpa_supplicant ends a config line at a
 // `#` outside a quoted string.
 const STA_COMMENT_RE = /^[^"]*"([^"]*"[^"]*")*[^"]*#/;
@@ -95,7 +90,7 @@ function base_encryption(e) {
 // psk-mixed. owe gets no fast transition key management, so hostapd does not cap its nasid. A
 // section with no mode reads as mode ap, as fromUci() reads it.
 const BELOW_WPA2 = { "none": true, "wep": true, "wep-open": true, "wep-shared": true, "psk": true, "wpa": true };
-const EAP = { "wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true, "wpa3-192": true, "wpa-mixed": true };
+const EAP = { "wpa": true, "wpa2": true, "wpa3": true, "wpa3-mixed": true };
 const LOCAL_FT_KEYS = { "psk": true, "psk2": true, "psk-mixed": true };
 const ROAMING_ENCRYPTION = filter(keys(VALID_ENCRYPTION), (e) => !BELOW_WPA2[base_encryption(e)]);
 const FT_ENCRYPTION = filter(ROAMING_ENCRYPTION, (e) => base_encryption(e) != "owe");
@@ -214,9 +209,8 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json, conn, id, delta) {
 	let errs = [];
-	let named = delta ?? json;
 
 	values.require_present(errs, json, "device");
 
@@ -226,21 +220,15 @@ function validate(json, conn, id, delta, partial, stored) {
 		push(errs, { field: "mode", code: "required",
 		             message: "must not be null: wifi-scripts sets up no interface without a mode. Leave mode out of a PATCH to keep it, or out of a create or a PUT to store ap" });
 
-	// The message keeps the text that the schema check gave before a read took ahdemo. It lists wds,
-	// which rules() refuses.
-	if ((json.mode != null && !VALID_MODES[json.mode]) || (named.mode == "ahdemo" && stored?.mode != "ahdemo"))
-		push(errs, { field: "mode", code: "not_in_enum", write: true,
-		             message: sprintf("must be one of %J", filter(keys(VALID_MODES), (m) => m != "ahdemo")) });
+	if (json.mode != null && !VALID_MODES[json.mode])
+		push(errs, { field: "mode", code: "not_in_enum",
+		             message: "must be one of " + join(", ", WRITE_MODES) });
 
 	if (json.encryption != null && !VALID_ENCRYPTION[json.encryption])
 		push(errs, { field: "encryption", code: "not_in_enum",
 		             message: "unknown encryption value" });
 
-	// LuCI writes an EAP SSID without a key, so only a write that changes the encryption to an EAP
-	// mode needs one. A PUT of the read sends the encryption back without the masked key.
-	let needs_key = json.encryption != null && !NO_KEY_ENCRYPTION[json.encryption]
-	                && (!EAP[base_encryption(json.encryption)]
-	                    || (named.encryption != null && named.encryption != stored?.encryption));
+	let needs_key = json.encryption != null && !NO_KEY_ENCRYPTION[json.encryption];
 	if (needs_key && (json.key == null || json.key == ""))
 		push(errs, { field: "key", code: "required",
 		             message: sprintf("is required when encryption is %J", json.encryption) });
@@ -312,7 +300,7 @@ function rules(json, radio_on, conn) {
 			err("key", "out_of_range", "must be 8 to 63 bytes, or 64 hex digits, in mode ap: wifi-scripts gives hostapd no key for another length", on);
 		else if (length(ap_key) == 64 && !hex)
 			err("key", "invalid_format", "must be hex digits when it is 64 bytes long in mode ap: wifi-scripts gives it to hostapd as a PSK", on);
-		else if (hex && (base in [ "sae", "psk3" ]))
+		else if (hex && base == "sae")
 			err("key", "conflict", "must not be 64 hex digits with encryption sae in mode ap: hostapd takes it as a PSK, and SAE needs a passphrase", on);
 	}
 
@@ -447,13 +435,13 @@ return {
 		network:    { type: ["string", "null"],
 		              description: "Network interface this SSID bridges into" },
 		mode:       { type: "string", enum: keys(VALID_MODES), "x-uapi-write": { enum: WRITE_MODES }, default: "ap",
-		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A read also reports the ahdemo that LuCI writes, which wifi-scripts skips. A write refuses a change to it, and a write that sends a stored ahdemo back passes, such as a PUT of the read. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
+		              description: "A write refuses mode wds, for which wifi-scripts sets up no interface. LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds, and a write that leaves it as it is is refused for it only when it sets the SSID up. A create or a PUT that sends no mode stores ap, and a write that sends a null mode is refused. A PATCH that sends no mode leaves a section without one as it is, and the read of such a section reports ap" },
 		ssid:       { type: ["string", "null"], "x-uapi-write": { maxLength: SSID_MAX },
 		              description: sprintf("SSID broadcast (or joined in sta mode). A write refuses more than %d bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A write that leaves the SSID as it is is refused for a problem that it already had only when it sets the SSID up or moves it into a mode that the problem applies to", SSID_MAX) },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none",
 		              description: "Encryption mode. A write refuses wep with `conflict` unless the router sets WEP up. That needs the shell wifi-scripts, which OpenWrt builds only without `CONFIG_WIFI_SCRIPTS_UCODE`, and the daemon of the mode built with WEP: hostapd in mode ap, and wpa_supplicant in mode sta or adhoc. uapi asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does. It refuses wep in mode mesh, which takes none. The ucode wifi-scripts, which OpenWrt builds by default, give the daemon no WEP key, and the SSID runs without encryption. The rule covers the wep-open and wep-shared that LuCI writes, and any stored value that starts with wep. A write that leaves a stored WEP value as it is is refused for it only when it sets the SSID up or changes its mode" },
 		key:        { type: "string", writeOnly: true,
-		              description: "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. LuCI writes an EAP SSID without a key, so such an SSID needs one only in a write that sends `encryption`. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write that leaves the key as it is is refused for a problem that it already had only when it sets the SSID up or changes its mode or encryption" },
+		              description: "Encryption passphrase; accepted on write, masked on read. Required for every encryption other than none, wep and owe when no key is stored yet, which validate() enforces. It is not a schema conditional, because a read-modify-write body cannot carry a masked field. A key with a newline is refused, because wifi-scripts writes it into the daemon's config as one line. With psk, psk2, psk-mixed, sae or sae-mixed, a write also refuses a key that the daemon refuses or misreads. In mode ap, the key must be 8 to 63 bytes, or 64 hex digits other than with plain sae. In mode sta or adhoc, other than with plain sae, the key must be 8 to 63 bytes with no control character, because wifi-scripts gives wpa_supplicant every key as a passphrase, a key of 64 hex digits too. In mode sta, adhoc or mesh, the key must not hold a `#` after an odd number of double quotes. uapi counts bytes. A write that leaves the key as it is is refused for a problem that it already had only when it sets the SSID up or changes its mode or encryption" },
 		has_key:    { type: "boolean", readOnly: true,
 		              description: "True if a key is configured (cleartext never returned)" },
 		disabled:   { type: "boolean", default: false,

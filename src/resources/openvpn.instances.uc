@@ -17,14 +17,6 @@ const VALID_PROTO = {
 	"udp6": true, "tcp6": true, "tcp6-client": true, "tcp6-server": true,
 };
 const VALID_DEV   = { "tun": true, "tap": true };
-// openvpn also takes these: a dev_type `null`, a device that carries no traffic, a port 0, and a
-// verb above 11.
-const WRITE = {
-	dev_type: { enum: [ ...keys(VALID_DEV), null ] },
-	port: { minimum: 1 },
-	rport: { minimum: 1 },
-	verb: { maximum: 11 },
-};
 // Filesystem paths on the router. The shape excludes shell meta + relative
 // paths so a malformed value cannot break out of /etc/openvpn or smuggle
 // arguments past the daemon's argv handling.
@@ -160,9 +152,8 @@ function _check_path(errs, field, value) {
 		             message: "must be an absolute filesystem path (no shell meta)" });
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
 	_check_path(errs, "ca",       json.ca);
 	_check_path(errs, "cert",     json.cert);
 	_check_path(errs, "key",      json.key);
@@ -200,7 +191,6 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	openapi_singular: "openvpn instance",
 	merge_for_patch: merge_for_patch,
 	id_prefix: "o",
@@ -208,12 +198,11 @@ return {
 		enabled:          { type: "boolean", default: false },
 		client:           { type: "boolean", default: false, description: "True to run as a client; false (the default) runs as a server." },
 		dev:              { type: ["string", "null"], description: "Interface name (tun0, tap0, etc.)." },
-		dev_type:         { type: ["string", "null"], enum: [ ...keys(VALID_DEV), "null", null ], "x-uapi-write": WRITE.dev_type,
-		                    description: "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives, and a write refuses a change to it." },
+		dev_type:         { type: ["string", "null"], enum: [...keys(VALID_DEV), null] },
 		proto:            { type: ["string", "null"], enum: [...keys(VALID_PROTO), null] },
-		port:             { type: ["integer", "null"], minimum: 0, maximum: 65535, "x-uapi-write": WRITE.port },
+		port:             { type: ["integer", "null"], minimum: 1, maximum: 65535 },
 		lport:            { type: ["integer", "null"], minimum: 0, maximum: 65535 },
-		rport:            { type: ["integer", "null"], minimum: 0, maximum: 65535, "x-uapi-write": WRITE.rport },
+		rport:            { type: ["integer", "null"], minimum: 1, maximum: 65535 },
 		remote:           { type: ["array", "null"], items: { type: "string" },
 		                    description: "host[:port] entries; client tries them in order." },
 		local:            { type: ["string", "null"], description: "Bind to this local IP." },
@@ -231,13 +220,12 @@ return {
 		client_to_client: { type: "boolean", default: false },
 		duplicate_cn:     { type: "boolean", default: false },
 		keepalive:        { type: ["string", "null"], description: "`interval timeout` pair." },
-		ping:             { type: ["integer", "null"], minimum: 0, maximum: 2147483647 },
-		ping_restart:     { type: ["integer", "null"], minimum: 0, maximum: 2147483647 },
+		ping:             { type: ["integer", "null"], minimum: 1, maximum: 3600 },
+		ping_restart:     { type: ["integer", "null"], minimum: 1, maximum: 86400 },
 		persist_key:      { type: "boolean", default: false },
 		persist_tun:      { type: "boolean", default: false },
 		comp_lzo:         { type: ["string", "null"], enum: ["yes", "no", "adaptive", null] },
-		compress:         { type: ["string", "null"], enum: ["lzo", "lz4", "lz4-v2", "stub", "stub-v2", "migrate", "frames_only", null],
-		                    description: "Compression framing. `frames_only` is LuCI's name for a bare `compress`, which the init script writes for it." },
+		compress:         { type: ["string", "null"], enum: ["lzo", "lz4", "lz4-v2", "stub", "stub-v2", null] },
 		cipher:           { type: ["string", "null"], description: "Legacy data cipher (e.g. AES-256-CBC)." },
 		auth:             { type: ["string", "null"], description: "HMAC digest (SHA256, etc.)." },
 		ncp_ciphers:      { type: ["string", "null"], description: "Colon-separated negotiable data ciphers." },
@@ -256,7 +244,7 @@ return {
 		status:           { type: ["string", "null"], description: "Status file path." },
 		log:              { type: ["string", "null"] },
 		log_append:       { type: ["string", "null"] },
-		verb:             { type: ["integer", "null"], minimum: 0, maximum: 2147483647, "x-uapi-write": WRITE.verb },
+		verb:             { type: ["integer", "null"], minimum: 0, maximum: 11 },
 		mute:             { type: ["integer", "null"], minimum: 0 },
 		key:              { type: "string", writeOnly: true,
 		                    description: "Path to private key PEM. Write-only; reads return has_key." },

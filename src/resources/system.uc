@@ -53,8 +53,8 @@ return {
 	toUci: toUci,
 	validate: validate,
 	schema_properties: {
-		hostname:     { type: ["string", "null"], pattern: "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*\\.?$",
-		                description: "System hostname (alphanumerics, dashes, underscores, dots). A write takes a trailing dot, as LuCI does" },
+		hostname:     { type: ["string", "null"], pattern: "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$",
+		                description: "System hostname (alphanumerics, dashes, underscores, dots)" },
 		description:  { type: ["string", "null"],
 		                description: "Free-form system description shown in LuCI" },
 		notes:        { type: ["string", "null"],

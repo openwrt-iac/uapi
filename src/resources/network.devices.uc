@@ -8,9 +8,6 @@ const VALID_TYPES = {
 	"bridge": true, "8021q": true, "8021ad": true, "macvlan": true,
 	"veth": true, "tun": true, "tap": true,
 };
-// netifd sets up a type that it does not know, such as the bonding or vrf that LuCI writes, as a
-// plain device, and the netifd of OpenWrt main takes vid 0.
-const WRITE = { type: { enum: keys(VALID_TYPES) }, vid: { minimum: 1 } };
 
 function fromUci(section) {
 	let anonymous = !!section['.anonymous'];
@@ -42,17 +39,21 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json) {
 	let errs = [];
 
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
-	// Only the name: a `config device` section with only name + options
-	// (e.g. a macaddr/mtu override on an existing kernel device) is valid uci
-	// and is exactly what config_generate emits for per-device macaddr on some
-	// targets. Requiring type would be stricter than the platform.
 	values.require_present(errs, json, "name");
 
-	if (json.type == "8021q" && json.vid == null)
+	// type is optional: a `config device` section with only name + options
+	// (e.g. a macaddr/mtu override on an existing kernel device) is valid uci
+	// and is exactly what config_generate emits for per-device macaddr on some
+	// targets. Requiring type would be stricter than the platform. Validate the
+	// enum only when a type is actually present.
+	if (json.type != null && json.type != "" && !VALID_TYPES[json.type])
+		push(errs, { field: "type", code: "not_in_enum",
+		             message: "must be one of bridge, 8021q, 8021ad, macvlan, veth, tun, tap" });
+
+	if (json.type == "8021q" && (json.vid == null || json.vid == ""))
 		push(errs, { field: "vid", code: "required",
 		             message: "is required when type is 8021q" });
 
@@ -80,7 +81,6 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	openapi_singular: "network device",
 	openapi_required: ["name"],
 	openapi_conditional: [
@@ -90,11 +90,10 @@ return {
 	schema_properties: {
 		name:    { "x-uapi-read-nullable": true, type: "string",
 		           description: "Device name as seen by netifd / the kernel" },
-		type:    { "x-uapi-read-nullable": true, type: "string", "x-uapi-write": WRITE.type,
-		           description: "Device type that a write sets. A read also gives a type that uapi does not write, such as the bonding or vrf that LuCI writes, and netifd sets up a type that it does not know as a plain device" },
+		type:    { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_TYPES) },
 		ports:   { type: ["array", "null"], items: { type: "string" } },
-		vid:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 4094, "x-uapi-write": WRITE.vid,
-		           description: "VLAN id for 8021q / 8021ad devices. A write takes 1 to 4094, and a read gives a stored 0, which the netifd of OpenWrt main takes" },
+		vid:     { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 4094,
+		           description: "VLAN id for 8021q / 8021ad devices" },
 		ifname:  { type: ["string", "null"],
 		           description: "Underlying parent interface (e.g. for macvlan/8021q)" },
 		mtu:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 68 },

@@ -976,7 +976,7 @@ t.describe('unbound.server parity additions', () => {
 		t.assert_equal(u.domain, 'lan');
 	});
 	t.it('validate rejects bad rebind_protection', () => {
-		let errs = unbound.validate({ rebind_protection: "9" });
+		let errs = unbound.validate({ rebind_protection: 9 });
 		t.assert_equal(errs[0].field, 'rebind_protection');
 		t.assert_equal(errs[0].code, 'not_in_enum');
 	});

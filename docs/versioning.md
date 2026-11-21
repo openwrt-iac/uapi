@@ -229,7 +229,7 @@ which fields.
 
 A request can also be narrower than the response, since 3.2.0, where a read
 returns a value
-that the request schema does not take. Four kinds of value qualify:
+that the request schema does not take. Three kinds of value qualify:
 
 - a stored option that the daemon ignores or cannot use, such as `mtu` below 68
   or a route
@@ -238,10 +238,7 @@ that the request schema does not take. Four kinds of value qualify:
   `listen_port` -1 for a
   service name that /etc/services does not know,
 - a `network/interfaces.proto` that uapi does not model, such as the `6in4` that
-  LuCI writes,
-- a value that the daemon takes and a write does not, such as an mwan3
-  `probe_count` above 10, the `bonding` type of `network/devices` that LuCI
-  writes, or the `HELPER` target of `firewall/rules`.
+  LuCI writes.
 
 The response declares what a read can return, and the request declares what a
 write can send,
@@ -250,14 +247,10 @@ server refuses it
 too, except where the rule is in `validate_new()`, such as the -1 of
 `network/wireguard_peers.persistent_keepalive`: there the server takes a write
 that leaves the
-stored value as it is. The server also takes a write that sends back a value of
-the fourth kind, a PUT of the read too, and refuses one that changes a field to
-it, with the message that it gave before the read widened. The description of
-each such field says so. A `firewall/rules` PUT of `HELPER` stays refused,
-because a PUT removes the `set_helper` option, which uapi does not model, and
-firewall4 skips a HELPER rule without it. A module declares the difference
-with `x-uapi-write`, and `tests/unit/write_overlay_test.uc` checks each such
-keyword against the refusal in `validate()`.
+stored value as it is. A module declares the difference with `x-uapi-write`, and
+`tests/unit/write_overlay_test.uc` checks each such keyword against the refusal
+in
+`validate()`.
 
 The response half of a curated resource declares no `pattern`, since 3.2.0. A
 pattern says what a

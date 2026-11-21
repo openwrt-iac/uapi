@@ -5,8 +5,6 @@ let as_int = values.as_int;
 // values.SHELL_WORD_RE, because the init script expands these unquoted, plus a double quote,
 // which opens a string in dnsmasq's config.
 const FILE_RE = "^[^ \t\n\r\"*?[]*$";
-// dnsmasq takes a larger cache and clamps it.
-const WRITE = { cachesize: { maximum: 1000000 } };
 
 function fromUci(section) {
 	return {
@@ -58,9 +56,9 @@ function toUci(json) {
 	return out;
 }
 
-function validate(json, conn, id, delta, partial, stored) {
+function validate(json) {
 	let errs = [];
-	values.write_bounds(errs, delta ?? json, WRITE, stored);
+
 	return errs;
 }
 
@@ -72,7 +70,6 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
-	openapi_write_back: keys(WRITE),
 	schema_properties: {
 		domain:            { type: ["string", "null"], pattern: values.DNSMASQ_TEXT_RE },
 		local:             { type: ["string", "null"], pattern: values.DNSMASQ_TEXT_RE,
@@ -80,9 +77,8 @@ return {
 		noresolv:          { type: "boolean", default: false },
 		rebind_protection: { type: "boolean", default: true },
 		expandhosts:       { type: "boolean", default: false },
-		cachesize:         { "x-uapi-read-nullable": true, type: "integer", minimum: 0, "x-uapi-write": WRITE.cachesize },
-		port:              { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 65535,
-		                     description: "DNS port. 0 turns the DNS server of dnsmasq off, as next to another resolver" },
+		cachesize:         { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 1000000 },
+		port:              { "x-uapi-read-nullable": true, type: "integer", minimum: 1, maximum: 65535 },
 		domainneeded:      { type: "boolean", default: true },
 		boguspriv:         { type: "boolean", default: true },
 		filterwin2k:       { type: "boolean", default: false },

@@ -75,8 +75,8 @@ t.describe('network.rules.validate', () => {
 		t.assert_deep_equal(rules.validate({ lookup: 254, suppress_prefixlength: 0, priority: 29999 }, null), []);
 		t.assert_deep_equal(rules.validate({ lookup: 43 }, null), []);
 	});
-	t.it('rejects a negative priority', () => {
-		let errs = full_validate(rules, { src: '192.168.1.0/24', priority: -1, lookup: 42 }, null);
+	t.it('rejects priority out of range', () => {
+		let errs = full_validate(rules, { src: '192.168.1.0/24', priority: 99999, lookup: 42 }, null);
 		let pe = filter(errs, function(e) { return e.field == "priority"; });
 		t.assert_equal(pe[0].code, "out_of_range");
 	});
