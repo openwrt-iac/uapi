@@ -24285,7 +24285,7 @@
 			},
 			"post": {
 				"summary": "Mint a new token over HTTP",
-				"description": "Scope: uapi:tokens:rw (or *:rw). Requested scopes MUST be a strict subset of the caller's own; escalation returns 403 scope_escalation_blocked. The cleartext bearer is returned exactly once.",
+				"description": "Scope: uapi:tokens:rw (or *:rw). Requested scopes MUST be equal to or narrower than the caller's own. A scope that the caller does not hold returns 403 scope_escalation_blocked. The cleartext bearer is returned exactly once.",
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -25347,7 +25347,7 @@
 							"type": "string"
 						},
 						"minItems": 1,
-						"description": "MUST be a strict subset of the caller's own scopes; escalation returns 403 scope_escalation_blocked"
+						"description": "MUST be equal to or narrower than the caller's own scopes. A scope that the caller does not hold returns 403 scope_escalation_blocked"
 					},
 					"expires_in_seconds": {
 						"type": [

@@ -15,7 +15,7 @@ generated client takes the new base URL from the v4 spec's `servers` block.
 ## The special endpoints move under `/uapi/...`
 
 The authenticated special endpoints now live under the domain their scopes
-already named (announced in 3.X.Y, #319): `/tokens` becomes `/uapi/tokens` (and
+already named (announced in 3.5.0, #319): `/tokens` becomes `/uapi/tokens` (and
 `/tokens/<id>` becomes `/uapi/tokens/<id>`), `/metrics` becomes `/uapi/metrics`,
 `/diagnostics` becomes `/uapi/diagnostics`, `/batch` becomes `/uapi/batch`, and
 `/auth/whoami` becomes `/uapi/whoami`. The scopes are unchanged (`uapi:tokens`,
@@ -30,13 +30,13 @@ old path or label stops matching.
 
 ## `dhcp/leases6` merges into `dhcp/leases`
 
-The `/dhcp/leases6` endpoint is removed (announced in 3.X.Y, #320). `GET
+The `/dhcp/leases6` endpoint is removed (announced in 3.5.0, #320). `GET
 /dhcp/leases` still returns the IPv4 leases, and `GET /dhcp/leases?family=v6`
 returns the IPv6 ones from odhcpd's statefile. The entry id is the MAC for v4
 entries and the IP for v6 ones, so `GET /dhcp/leases/<ip>?family=v6` looks a v6
 entry up. The `Link` to the next page keeps `family`. 3.x ignored `family`, so
 any value listed the IPv4 leases. Now a value other than `v4` or `v6` answers
-400 `bad_request` (announced in 3.X.Y, #391).
+400 `bad_request` (announced in 3.5.0, #391).
 
 The items do not change, but one schema now describes both families. A v4 entry
 has `mac`, and a v6 entry has `iaid`, `interface`, `ia_type` and
@@ -65,7 +65,7 @@ alone, so a client that must not see the IPv6 leases cannot keep `dhcp:leases`.
 
 The response body does not change: v3 already returned `id` and `runtime` on
 every CRUD and singleton resource. The v4 spec now puts both in the `required`
-list of each of these response schemas (announced in 3.X.Y, #322). The four
+list of each of these response schemas (announced in 3.5.0, #322). The four
 resources that document their `runtime` fields keep that shape. The others
 declare `runtime` as an object with a common description, and it holds `{}`
 when the resource reads no live state. A generated client can now type both
@@ -76,7 +76,7 @@ envelope and do not change.
 
 The `ErrorEnvelope.code` enum no longer lists `unsupported_media_type` (415),
 which was reserved and never emitted: uapi never rejects a body on
-`Content-Type` (announced in 3.X.Y, #323). Clients branching on it must drop
+`Content-Type` (announced in 3.5.0, #323). Clients branching on it must drop
 that branch.
 
 ## A write is refused for any stored error the section holds
@@ -173,7 +173,7 @@ fw4's `parse_bool` keeps its eight spellings. Evidence: ubox `6f78fa4`, pinned
 in `docs/ucode-quirks.md` (#312).
 
 Two defaults follow the daemon too. The 3.4.0 announcement named only the
-spellings, and 3.X.Y announced these defaults (#369). An absent `log_remote`
+spellings, and 3.5.0 announced these defaults (#369). An absent `log_remote`
 reads `true`, as log.init takes it (`log_remote:bool:1`). A stock
 `/etc/config/system` holds no `log_remote`, so this read changes on a stock
 router. An absent usteer `syslog` reads `false`, as usteer's `set_config` resets
@@ -189,7 +189,7 @@ in 3.x, so a plan that holds `true` turns password or root login back on.
 its `run-openwrt.sh` starts a queue only when `[ "$(config_get "$section"
 enabled)" -eq 1 ]` holds. An absent `enabled`, or `yes`, `on` or `true` written
 by hand, read `true` in v3 for a queue that sqm left off, and now reads `false`
-(announced in 3.X.Y, #372). A queue that LuCI made holds `1` or `0` and reads
+(announced in 3.5.0, #372). A queue that LuCI made holds `1` or `0` and reads
 the same. A plan that sets `enabled = true` on such a queue now writes `1`,
 which starts SQM there. A value such as `01`, `+1` or ` 1` reads `true`, because
 the shell test takes it as 1.
@@ -199,7 +199,7 @@ the shell test takes it as 1.
 wifi-scripts sets up nothing for a section without a `mode` (mac80211.sh skips
 an absent mode as it skips an unknown one), so the read now answers `null`
 instead of `"ap"` (announced in 3.4.0, #307). The write side changes the same
-way (announced in 3.X.Y, #376): a `null` mode is accepted and removes the
+way (announced in 3.5.0, #376): a `null` mode is accepted and removes the
 option, leaving a section that sets up nothing. A create or PUT that sends no
 mode stores none, so a client that creates an access point must send
 `mode: "ap"`.
