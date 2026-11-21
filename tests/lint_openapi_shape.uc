@@ -37,8 +37,7 @@ function check_schema(node, path) {
 	// satisfy: JSON Schema requires both to pass, so the null the type invites is refused by
 	// the enum. `mwan3/globals.loglevel` shipped that way, declaring ["string","null"] with a
 	// four-name enum, so the document rejected a null the runtime answers 200 to. Read
-	// nullability belongs in x-uapi-read-nullable, which widens type and enum together on the
-	// response half only.
+	// nullability belongs in x-uapi-read-nullable, which widens type and enum together.
 	if (type(node.enum) == "array") {
 		let t = node.type;
 		let type_null = (t == "null");
