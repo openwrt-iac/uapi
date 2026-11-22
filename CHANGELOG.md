@@ -14,9 +14,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   one, and the spec's `servers` URL ends in `/api/v4`. Every client must change
   its base URL. `GET /uhttpd/instances/main` reads the new entry and gets a new
   ETag, and a write to `main` that keeps only the 3.x entry answers 422
-  `conflict`. The `docs/deprecations.md` of 3.5.0 has no notice of the move.
-  `docs/versioning.md` has said since 3.0.0 that v4 mounts at `/api/v4`.
-  Migration note in `docs/migration-v3-to-v4.md`. (#437)
+  `conflict`. `docs/versioning.md` has said since 3.0.0 that v4 mounts at
+  `/api/v4`. Migration note in `docs/migration-v3-to-v4.md`. (#437)
 - **BREAKING: a list cursor that ends on an anonymous section holds a hash.**
   The id of an anonymous section is its libuci name, which holds the position
   of the section in its package. After a delete of an earlier section, 3.x
@@ -24,9 +23,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   item. A page that ends on an unmanaged section now gives `c_<id>.<hash>`, with
   a hash of the ETags of the items up to it, and the cursor answers 400
   `invalid_cursor` when one of them changed. A bare `c_<id>` of an unmanaged
-  section answers 400 too. 3.5.0 did not announce it, so it uses the tightening
-  carve-out of `docs/versioning.md`: a client could not tell whether the page
-  of such a cursor skipped an item. Migration note in
+  section answers 400 too. In 3.x a client could not tell whether the page of
+  such a cursor skipped an item. Migration note in
   `docs/migration-v3-to-v4.md`. (#429)
 - **BREAKING: the HTTP token mint refuses a scope that the server does not
   know.** `POST /uapi/tokens` checks each scope as `uapi-token create` does. A
@@ -63,26 +61,22 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `synflood_rate` of `abc`, or a burst that is no integer, is now an error of
   the section, because fw4 then applies no ruleset, and it blocks every write
   that does not replace it. Announced in 3.5.0 (#407, #408), and in 3.4.0 for a
-  stored error (#308). One change of `synflood_rate` was not announced. A
-  stored rate without a unit, such as `25`, read as the integer 25 in 3.x and
-  now reads as the string `25/second`. The 3.5.0 notice did not cover this
-  change of type. Every rate reads as a string so that a Terraform client can
-  type the field, because Terraform has no type that is an integer or a string.
+  stored error (#308). A stored rate without a unit, such as `25`, read as the
+  integer 25 in 3.x and now reads as the string `25/second`. Every rate reads
+  as a string so that a Terraform client can type the field, because Terraform
+  has no type that is an integer or a string.
   A write takes such a string, or an integer that is a rate per second. A rate
   that overflows 64 bits in the kernel with the burst, such as `1/minute` with a
   burst of 4294967295, answers 422 `out_of_range`, and a stored one is an error
   of the section. 3.x took such a write, and fw4 then applied no ruleset while
-  `syn_flood` was on. This refusal uses the carve-out of `docs/versioning.md`
-  for a tightening that refuses a payload that produced broken state. Migration
-  note in `docs/migration-v3-to-v4.md`. (#423)
+  `syn_flood` was on. Migration note in `docs/migration-v3-to-v4.md`. (#423)
 - **BREAKING: `firewall/defaults.syn_flood` reads what fw4 applies.** LuCI's
   zones form writes `synflood_protect` and removes `syn_flood`, and fw4 reads
   `synflood_protect` first. 3.x read only `syn_flood`, so after a LuCI save it
   read `false` while fw4 protected. v4 reads `synflood_protect`, and
   `syn_flood` only when uci holds no `synflood_protect`. Such a section gets
-  another ETag at the upgrade. The 3.5.0 notice of #408 named two other
-  firewall reads and did not cover this one. A write of true stores
-  `synflood_protect '1'` and removes `syn_flood`, as LuCI does. A write of
+  another ETag at the upgrade. A write of true stores `synflood_protect '1'`
+  and removes `syn_flood`, as LuCI does. A write of
   false removes `synflood_protect` and stores `syn_flood '0'`, where LuCI
   removes both, so that a write that keeps false leaves a stored `syn_flood
   '0'` as it is. In 3.x a write over a stored `synflood_protect` answered 200
@@ -101,10 +95,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with a digit or a dash, such as `1wan`, and a write of such a
   `firewall/zones.name` answers 422 `invalid_format`. Its request schema
   declared such a name valid, and now declares `^[a-zA-Z_][a-zA-Z0-9_-]*$`. A
-  stored one blocks every write of its section. 3.x took these writes, and no
-  3.5.0 notice covers them. They use the carve-out of `docs/versioning.md` for a
-  tightening that refuses a payload that produced broken state. Migration note
-  in `docs/migration-v3-to-v4.md`. (#435)
+  stored one blocks every write of its section. 3.x took these writes.
+  Migration note in `docs/migration-v3-to-v4.md`. (#435)
 - **A WireGuard peer endpoint that does not resolve follows the proto
   handler.** 3.x committed such an `endpoint_host`. On an up interface `wg set`
   refused the peer and the restore answered 500 `reload_failed_restored`, and on
@@ -114,17 +106,16 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sends such a name for an enabled peer with a key answers 422 `conflict` on
   `endpoint_host` before its commit: a name for which busybox's nslookup gets
   NXDOMAIN, or a reply with no address, such as one that holds only a CNAME.
-  This refuses a payload that 3.x stored on a down interface, under the
-  carve-out of `docs/versioning.md` for a payload that produced broken state no
-  caller can rely on. A lookup that fails for a time, as on a timeout or a
+  This refuses a payload that 3.x stored on a down interface. A lookup that
+  fails for a time, as on a timeout or a
   SERVFAIL, is not refused, because wg retries the name and the interface comes
   up once it resolves. A stored name is not checked. A host that inet_aton reads
   as an IPv4 address, such as `192.168.1.01` or `0x0a000001`, asks no resolver.
   On OpenWrt main, the ucode proto handler gives wg a host of only digits and
   dots as it stands, and wg refuses the config of the whole interface for one
   that inet_aton does not read, such as `10.0.0.256`. A write refuses such a
-  host with 422 `invalid_format` on `endpoint_host`, a stored one too, under the
-  same carve-out. The handler leaves out the endpoint of any other host for
+  host with 422 `invalid_format` on `endpoint_host`, a stored one too. The
+  handler leaves out the endpoint of any other host for
   which nslookup prints no address, and keeps the peer, so the write sets the
   peer without it and answers 200 with the new `X-Kernel-Status: omitted`, a
   value that a client takes as it takes a new error code. Note in
@@ -141,9 +132,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   blocks every write of its peer. A write that sends a zone that names no
   interface of the router, such as `fe80::1%nosuchdev`, for an enabled peer
   with a key, answers 422 `conflict`. A stored one is not checked, because an
-  interface can exist at one time and not at another. No 3.5.0 notice covers
-  this. It uses the carve-out of `docs/versioning.md` for a tightening that
-  refuses a payload that produced broken state. Migration note in
+  interface can exist at one time and not at another. Migration note in
   `docs/migration-v3-to-v4.md`. (#438)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
@@ -338,11 +327,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder` read a list
   that uci holds as an array while the response schema said string, so the
   server broke its own schema for a reachable configuration, such as a
-  multi-radio SSID whose `device` is a list: carve-out (b) of
-  `docs/versioning.md`. The response now declares a string or an array, and a
-  stored list is no error. A request takes `device` and `network` as a list too,
-  since netifd reads either form, and the other four only as a string. A
-  client fails loudly where it does not take the array. (#405)
+  multi-radio SSID whose `device` is a list. The response now declares a string
+  or an array, and a stored list is no error. A request takes `device` and
+  `network` as a list too, since netifd reads either form, and the other four
+  only as a string. A client fails loudly where it does not take the array.
+  (#405)
 - **`mwan3/rules.proto` takes on write what iptables takes, and
   `mwan3/rules.family` reads what mwan3 runs.** A write takes a protocol name in
   any case, since iptables lowercases it, `mobility-header`, and an octal
@@ -353,9 +342,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   mwan3 runs the rule for both families on any value other than `ipv4` or
   `ipv6`, so the response schema drops its enum, and such a value blocks no
   write. A write still takes only `ipv4`, `ipv6` or `any`. 3.x read a list as an
-  array, and `ipv4 ipv6` or an empty string outside its enum: carve-out (b) of
-  `docs/versioning.md`. A client that checks the enum of the read fails loudly
-  on such a value, as in 3.x. (#435)
+  array, and `ipv4 ipv6` or an empty string outside its enum. A client that
+  checks the enum of the read fails loudly on such a value, as in 3.x. (#435)
 - **A WireGuard peer remove checks every section that it sets again before it
   changes the kernel.** A remove of a key that other sections of the interface
   hold set the first of them again, then refused a later one with a malformed
@@ -381,12 +369,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ULID. A POST with an `Idempotency-Key` header outside
   `^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$`, such as a base64 key, answers 400
   `bad_request` as `?idempotency_key=` does, where 3.5.0 answered 201. The
-  3.5.0 spec declared no pattern for the key. The 412, the 409 and the 400 use
-  the carve-out of `docs/versioning.md` for a payload that produced broken
-  state no caller can rely on: 3.5.0 made a write that the precondition of the
-  request refused, and a retry with the same key created a second section. The
-  spec now declares the pattern on `?idempotency_key=`, and `?request_id=` on
-  every operation. (#431)
+  3.5.0 spec declared no pattern for the key. 3.5.0 made a write that the
+  precondition of the request refused, and a retry with the same key created a
+  second section. The spec now declares the pattern on `?idempotency_key=`, and
+  `?request_id=` on every operation. (#431)
 
 ## [3.5.0] - 2026-11-21
 
