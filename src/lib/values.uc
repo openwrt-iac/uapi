@@ -205,7 +205,7 @@ function config_get_words(v) {
 // unbound-uci-ext's seam-file generator. The regex pattern uses a literal
 // newline in the character class because ucode's regex parser treats `\n`
 // inside `[...]` as the two characters `\` and `n`, not as a newline
-// escape (see project memory: project-ucode-quirks). The 256-char ceiling
+// escape. The 256-char ceiling
 // lives in code below because ucode's regex engine rejects `{m,n}` when
 // `n > 255`. MAX_LINE_LEN matches unbound-uci-ext's generator.sh; changing
 // here without changing there desyncs validation.
