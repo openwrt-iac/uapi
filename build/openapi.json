@@ -32550,25 +32550,23 @@
 					},
 					"device": {
 						"type": [
-							"string",
 							"array",
 							"null"
 						],
 						"items": {
 							"type": "string"
 						},
-						"description": "Parent radio (wireless/devices id). netifd sets the SSID up on each radio that the option names, as a list or as words, so a read gives a stored list as an array, and a write takes a list too"
+						"description": "Radios (wireless/devices ids) of this SSID. netifd sets the SSID up on each radio that the option names, as a list or as words split at any whitespace, and a read gives these radios as an array. A write takes a string of words or a list, and stores one radio as a string, as LuCI and `wifi config` write it"
 					},
 					"network": {
 						"type": [
-							"string",
 							"array",
 							"null"
 						],
 						"items": {
 							"type": "string"
 						},
-						"description": "Network interface this SSID bridges into. netifd attaches the SSID to each network that the option names, as a list or as words, and LuCI keeps the form that it finds, so a read gives a stored list as an array, and a write takes a list too"
+						"description": "Network interfaces this SSID bridges into. netifd attaches the SSID to each network that the option names, as a list or as words split at any whitespace, and a read gives these networks as an array. A write takes a string of words or a list, and stores one network as a string, as LuCI writes it"
 					},
 					"mode": {
 						"type": [
@@ -32590,13 +32588,9 @@
 					"ssid": {
 						"type": [
 							"string",
-							"array",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
-						"description": "SSID broadcast (or joined in sta mode). A write refuses more than 32 bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A read gives a list that uci holds as an array, and a write takes only a string"
+						"description": "SSID broadcast (or joined in sta mode). A write refuses more than 32 bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. wifi-scripts gives the daemon a list that uci holds as the JSON text of the list, such as `[ \"home\", \"net\" ]`, and a read gives that text"
 					},
 					"encryption": {
 						"type": "string",
@@ -32759,24 +32753,16 @@
 					"mobility_domain": {
 						"type": [
 							"string",
-							"array",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
-						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, which a write refuses also without 802.11r. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text"
+						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, which a write refuses also without 802.11r. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text"
 					},
 					"nasid": {
 						"type": [
 							"string",
-							"array",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than 253 on an EAP access point, the limit of the RADIUS attribute. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text"
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than 253 on an EAP access point, the limit of the RADIUS attribute. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text"
 					},
 					"reassociation_deadline": {
 						"type": [
@@ -32795,13 +32781,9 @@
 					"r1_key_holder": {
 						"type": [
 							"string",
-							"array",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
-						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, which a write refuses also where hostapd does not read it. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text"
+						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, which a write refuses also where hostapd does not read it. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text"
 					},
 					"pmk_r1_push": {
 						"type": "boolean",
@@ -32919,7 +32901,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Parent radio (wireless/devices id). netifd sets the SSID up on each radio that the option names, as a list or as words, so a read gives a stored list as an array, and a write takes a list too"
+						"description": "Radios (wireless/devices ids) of this SSID. netifd sets the SSID up on each radio that the option names, as a list or as words split at any whitespace, and a read gives these radios as an array. A write takes a string of words or a list, and stores one radio as a string, as LuCI and `wifi config` write it"
 					},
 					"network": {
 						"type": [
@@ -32930,7 +32912,7 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Network interface this SSID bridges into. netifd attaches the SSID to each network that the option names, as a list or as words, and LuCI keeps the form that it finds, so a read gives a stored list as an array, and a write takes a list too"
+						"description": "Network interfaces this SSID bridges into. netifd attaches the SSID to each network that the option names, as a list or as words split at any whitespace, and a read gives these networks as an array. A write takes a string of words or a list, and stores one network as a string, as LuCI writes it"
 					},
 					"mode": {
 						"type": [
@@ -32952,10 +32934,7 @@
 							"string",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
-						"description": "SSID broadcast (or joined in sta mode). A write refuses more than 32 bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A read gives a list that uci holds as an array, and a write takes only a string",
+						"description": "SSID broadcast (or joined in sta mode). A write refuses more than 32 bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. wifi-scripts gives the daemon a list that uci holds as the JSON text of the list, such as `[ \"home\", \"net\" ]`, and a read gives that text",
 						"maxLength": 32
 					},
 					"encryption": {
@@ -33121,10 +33100,7 @@
 							"string",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
-						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, which a write refuses also without 802.11r. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text",
+						"description": "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, which a write refuses also without 802.11r. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text",
 						"pattern": "^[0-9A-Fa-f]{4}$"
 					},
 					"nasid": {
@@ -33132,10 +33108,7 @@
 							"string",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
-						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than 253 on an EAP access point, the limit of the RADIUS attribute. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text",
+						"description": "NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than 1024 bytes, more than 48 with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than 253 on an EAP access point, the limit of the RADIUS attribute. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text",
 						"maxLength": 1024
 					},
 					"reassociation_deadline": {
@@ -33160,10 +33133,7 @@
 							"string",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
-						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, which a write refuses also where hostapd does not read it. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text",
+						"description": "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, which a write refuses also where hostapd does not read it. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text",
 						"pattern": "^[0-9A-Fa-f]{12}$"
 					},
 					"pmk_r1_push": {
@@ -33590,9 +33560,6 @@
 							"string",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
 						"maxLength": 32
 					},
 					"encryption": {
@@ -33764,9 +33731,6 @@
 							"string",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
 						"pattern": "^[0-9A-Fa-f]{4}$"
 					},
 					"nasid": {
@@ -33774,9 +33738,6 @@
 							"string",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
 						"maxLength": 1024
 					},
 					"reassociation_deadline": {
@@ -33799,9 +33760,6 @@
 							"string",
 							"null"
 						],
-						"items": {
-							"type": "string"
-						},
 						"pattern": "^[0-9A-Fa-f]{12}$"
 					},
 					"pmk_r1_push": {
