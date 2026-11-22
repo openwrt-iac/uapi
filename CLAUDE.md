@@ -32,7 +32,9 @@ the table at the bottom of this file is the index.
    uapi never repairs drift on its own: there is no loop to host one, and the
    IaC tool above it already is that loop, so a second corrector would fight the
    first. Persistence is uci's job, boot-time convergence is the daemon's, and
-   being trustworthy about both is uapi's.
+   being trustworthy about both is uapi's. A write may finish its own reload by
+   another path, once and inside the request, when the path of the init script
+   failed: that completes the transaction of principle 3 and repairs no drift.
 
 Before adopting any library, daemon, persistence layer, or abstraction, check it
 against these four. Prefer ucode-native solutions; flag anything requiring a
