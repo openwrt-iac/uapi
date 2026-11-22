@@ -97,9 +97,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   declared such a name valid, and now declares `^[a-zA-Z_][a-zA-Z0-9_-]*$`. A
   stored one blocks every write of its section. 3.x took these writes.
   Migration note in `docs/migration-v3-to-v4.md`. (#435)
-- **A WireGuard peer endpoint that does not resolve follows the proto
-  handler.** 3.x committed such an `endpoint_host`. On an up interface `wg set`
-  refused the peer and the restore answered 500 `reload_failed_restored`, and on
+- **BREAKING: a WireGuard peer endpoint that does not resolve follows the
+  proto handler.** 3.x committed such an `endpoint_host`. On an up interface
+  `wg set` refused the peer and the restore answered 500
+  `reload_failed_restored`, and on
   a down one the write answered 200 `X-Kernel-Status: skipped`. On 25.12,
   wireguard.sh gives the endpoint to wg, which refuses the config of the whole
   interface at its next start for a name that does not exist. So a write that
@@ -118,7 +119,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   handler leaves out the endpoint of any other host for
   which nslookup prints no address, and keeps the peer, so the write sets the
   peer without it and answers 200 with the new `X-Kernel-Status: omitted`, a
-  value that a client takes as it takes a new error code. Note in
+  value that a client takes as it takes a new error code. Migration note in
   `docs/migration-v3-to-v4.md`. (#424)
 - **BREAKING: a WireGuard endpoint with an IPv6 zone that musl refuses answers
   422.** Both proto handlers give wg an IPv6 `endpoint_host` as it stands, and
