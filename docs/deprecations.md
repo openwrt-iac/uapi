@@ -6,9 +6,10 @@ that deprecated it through the release that removes it.
 
 A field is in the table below if and only if it is currently
 accepted-but-deprecated. Once removed (in a major release), the entry moves to
-the "Removed in past releases" section. Contract changes that are not field
-deprecations, and so cannot be expressed as a table row, are announced under
-"Announced response-shape changes".
+the "Removed in past releases" section. A breaking change that is not a
+removal or a rename, such as a value that a write now refuses or a read that
+changes, needs no announcement here. The migration doc of the next major and
+its CHANGELOG entry describe it.
 
 Policy: a deprecation in a minor release means both forms (old and new) are
 accepted; the old form is marked `deprecated: true` in `build/openapi.json` so
@@ -58,9 +59,10 @@ the honest signal available.
 ## Announced response-shape changes
 
 v4 ships every change that 3.x announced here, and `docs/migration-v3-to-v4.md`
-says what each one changes for a client. A change announced for v5 goes here,
-mirrored in the published spec's own "Upcoming in v5" block, which `make
-lint-doc-refs` keeps in sync with this section by count.
+says what each one changes for a client. Since 4.0.0 such a change needs no
+announcement. A maintainer can still list one here ahead of v5, mirrored in the
+published spec's own "Upcoming in v5" block, which `make lint-doc-refs` keeps
+in sync with this section by count.
 
 ## Removed in past releases
 
