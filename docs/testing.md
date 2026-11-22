@@ -491,8 +491,9 @@ dead export is now reported, and all 135 real exports still pass.
 - `lint-defaults` (2.2.2+): for every `fromUci` unconditional default, verifies
   a matching `default:` annotation in `schema_properties`; for every
   `x-uapi-clear-on-omit` flag, verifies the fromUci shape is `section.X ??
-  null`, `as_list_or_null(...)` or `as_word_list_or_null(...)`, and the schema
-  type includes `"null"`.
+  null`, `as_list_or_null(...)`, `as_word_list_or_null(...)` or
+  `values.fw_enum(section.X, ...)`, and the schema type includes `"null"` or
+  the property carries `x-uapi-read-nullable`.
 - `lint-response-nullability` (3.0.0+): calls each resource's `fromUci` on a
   bare section, and once per value of a Request `proto` enum, and fails when a
   field that comes back null is not null-permitted in the Response schema.

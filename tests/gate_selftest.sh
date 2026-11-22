@@ -379,6 +379,16 @@ p.write_text(s.replace(a, 'log_remote:   { type: "boolean", default: true, "x-ua
 EOF
 }
 
+mut_clear_on_omit_reads_fallback() {
+	python3 - <<'EOF'
+import pathlib
+p = pathlib.Path('src/resources/firewall.zones.uc'); s = p.read_text()
+a = 'input: values.fw_enum(section.input, POLICIES),'
+assert a in s, 'zone input read not found'
+p.write_text(s.replace(a, 'input: values.fw_enum(section.input ?? "DROP", POLICIES),', 1))
+EOF
+}
+
 probed=""
 failures=0
 
@@ -635,6 +645,7 @@ probe lint-reserved      "an HCL block keyword as a property"  "HCL block keywor
 probe lint-defaults      "a fromUci default, unannotated"      "absent from schema_properties"     mut_unannotated_default
 probe lint-defaults      "an unannotated shell_bool default"   "has fromUci default true but"      mut_unannotated_bool_default
 probe lint-defaults      "default and clear-on-omit together"  ""                                  mut_default_and_clear_on_omit
+probe lint-defaults      "a clear-on-omit read with a fallback" "its fromUci is not"               mut_clear_on_omit_reads_fallback
 # lint-doc-refs carries five distinct checks, so it gets five probes: one passing check
 # would otherwise vouch for four that were never exercised.
 probe lint-doc-refs      "doc cites a missing path"            "path does not exist"               mut_doc_bad_path

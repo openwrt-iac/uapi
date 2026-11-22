@@ -135,26 +135,28 @@ function find_clear_on_omit_fields(content) {
 // The Terraform plugin-framework rejects an apply with "Provider produced
 // inconsistent result after apply" when a plain Optional attribute (which
 // clear-on-omit-enabled fields must be on the provider side) reads back any
-// value for an absent uci option other than null. So `<jsonkey>: section.X ??
-// null` is the only safe fromUci shape; as_list (returns []), derived
+// value for an absent uci option other than null. as_list (returns []), derived
 // expressions, ternaries, and `?? <non-null>` all break the contract.
 function check_clear_on_omit_shape(content, fields) {
 	let errors = [];
 	for (let field in fields) {
-		// Three shapes read back null for an absent key, which is what a plain-Optional
-		// attribute requires. `as_list` is still excluded: it returns `[]`, which is the
-		// inconsistent-result trap this rule exists for.
+		// Four shapes read back null for an absent key, which is what a plain-Optional
+		// attribute requires: fw_enum returns a value that is not a string as it is. `as_list`
+		// is still excluded: it returns `[]`, which is the inconsistent-result trap this rule
+		// exists for.
 		let scalar_re = regexp(sprintf('\\b%s:\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\?\\?\\s*null', field));
 		let list_re = regexp(sprintf('\\b%s:\\s*as_(word_)?list_or_null\\(', field));
-		if (!match(content, scalar_re) && !match(content, list_re))
-			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is not `section.X ?? null`, `as_list_or_null(...)` or `as_word_list_or_null(...)`; each reads absent as null, which is what a plain-Optional attribute needs. Plain `as_list` returns [] and trips 'Provider produced inconsistent result'", field));
+		let enum_re = regexp(sprintf('\\b%s:\\s*values\\.fw_enum\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,', field));
+		if (!match(content, scalar_re) && !match(content, list_re) && !match(content, enum_re))
+			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is not `section.X ?? null`, `as_list_or_null(...)`, `as_word_list_or_null(...)` or `values.fw_enum(section.X, ...)`; each reads absent as null, which is what a plain-Optional attribute needs. Plain `as_list` returns [] and trips 'Provider produced inconsistent result'", field));
 	}
 	return errors;
 }
 
 // A clearable field must type-allow null. Provider sends explicit JSON null
 // to clear; if the schema type is `"string"` (non-nullable), the wire payload
-// fails the spec itself.
+// fails the spec itself. x-uapi-read-nullable adds null to the type and the enum
+// in both halves of the spec.
 function check_clear_on_omit_type(content, fields) {
 	let errors = [];
 	let want = {};
@@ -166,7 +168,8 @@ function check_clear_on_omit_type(content, fields) {
 		if (!m || !want[m[1]]) continue;
 		let has_null_in_list = !!match(line, regexp('type:\\s*\\[[^]]*"null"[^]]*\\]'));
 		let is_null_scalar   = !!match(line, regexp('type:\\s*"null"'));
-		if (!has_null_in_list && !is_null_scalar)
+		let read_nullable    = index(line, '"x-uapi-read-nullable": true') >= 0;
+		if (!has_null_in_list && !is_null_scalar && !read_nullable)
 			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its type does not include \"null\" (provider sends JSON null to clear; non-nullable type rejects the wire payload)", m[1]));
 	}
 	return errors;

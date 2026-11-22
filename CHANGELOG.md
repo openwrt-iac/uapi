@@ -6,6 +6,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`firewall/zones` `input`, `output_policy` and `forward` carry
+  `x-uapi-clear-on-omit`.** A zone that sets no policy reads null, and fw4
+  applies the policy of `firewall/defaults` to it. Without the flag, the
+  Terraform provider kept a policy that the user removed from the
+  configuration, so it could not put a zone back on that policy. The server
+  does not change: a PUT that leaves a policy out removes the option, as in
+  3.x, and a PATCH that leaves it out keeps it. A client that reads the flag
+  removes a stored policy that its configuration does not set. Migration note
+  in `docs/migration-v3-to-v4.md`. (#448)
+
 ### Changed
 
 - **BREAKING: the mount moves from `/api/v3` to `/api/v4`.** One installation
