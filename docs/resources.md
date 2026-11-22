@@ -236,7 +236,7 @@ dnsmasq, because procd does not run it, runs no check.
 |---|---|---|
 | `system` (singleton) | `config system` | hostname, timezone, log_size, log_ip, log_proto, log_remote, urandom_seed. Reloads `system` and `log`, then `dnsmasq`, `odhcpd` and `unbound` while procd runs each: dnsmasq.init and unbound read the hostname, and odhcpd the timezone. It runs no `dnsmasq --test` check. While `/etc/init.d/unbound` exists, the write takes the lock of `unbound`, so a write to `unbound/server`, `unbound/srv`, `unbound/ext` or the `dhcp` package at the same moment answers `423 locked`, whether unbound runs or not, and when unbound ran before the write, it waits 2 s for unbound to keep running. |
 | `system/timeservers` | `config timeserver` | NTP server list; reloads sysntpd, then `dnsmasq` while procd runs it, because dnsmasq.init reads `enabled` for DNSSEC. It runs no `dnsmasq --test` check. |
-| `system/password` | `/bin/busybox passwd` (non-uci, write-only) | `POST {user, password}` -> 204. Audit-logged without password. |
+| `system/password` | `/bin/busybox passwd` (non-uci, write-only) | `POST {user, password}` -> 204. A user that `/etc/passwd` does not hold answers 422 `conflict`. Audit-logged without password. |
 | `system/authorized_keys` | `/etc/dropbear/authorized_keys` (non-uci) | `GET`/`POST`/`PUT`/`DELETE` for SSH key entries. Server-side key-type validation. |
 | `system/cron_jobs` | `/etc/crontabs/root` (non-uci) | `GET`/`POST`/`DELETE` for one crontab line each. Lines from packages stay as they are. `runtime.crond_running` reports whether crond runs, and `runtime.runs_as_written` flags a line crond misreads. |
 

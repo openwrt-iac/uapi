@@ -299,6 +299,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`POST /system/password` answers 422 for a user that does not exist.** uapi
+  checked only the shape of `user`, so for an unknown user busybox passwd
+  exited 1, and uapi answered 500 `internal_error` and logged it at
+  `daemon.err`. A user that `/etc/passwd` does not hold now answers 422
+  `validation_failed` with code `conflict` on `user`, and passwd does not run.
+  The request failed before too, so no request that succeeded is refused.
+  (#446)
 - **On OpenWrt main, a WireGuard key that the ucode handler skips is an error,
   and its peer gets no route.** The handler matches a key as uci holds it, so it
   skips a peer whose `public_key` holds whitespace or a `#` comment, and leaves

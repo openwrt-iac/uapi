@@ -1249,7 +1249,7 @@ function build_schemas() {
 			"required": ["user", "password"],
 			"properties": {
 				"user":     { "type": "string", "pattern": "^(root|[a-z][a-z0-9_-]*)$",
-				              "description": "Local Unix user to update; usually 'root'" },
+				              "description": "Local Unix user to update, usually `root`. A user that `/etc/passwd` does not hold answers 422 `conflict`, and passwd does not run." },
 				"password": { "type": "string", "minLength": 8,
 				              "writeOnly": true,
 				              "description": "New password (min 8 chars). Never echoed back." },
