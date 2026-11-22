@@ -104,6 +104,34 @@ t.describe('system_access.set_password validation', () => {
 	});
 });
 
+// An unknown user answered 500 internal_error, because uapi ran passwd and passwd exited 1.
+t.describe('system_access.set_password and /etc/passwd', () => {
+	let fs = require('fs');
+	let commands = [], stdin = [];
+	let sa2 = t.load_with({
+		fs: { ...fs,
+			readfile: (path) => path == "/etc/passwd"
+				? "root:x:0:0:root:/root:/bin/ash\nalice:x:1000:1000::/home/alice:/bin/ash\n" : fs.readfile(path),
+			popen: (cmd) => { push(commands, cmd); return { write: (s) => push(stdin, s), close: () => 0 }; } },
+		non_uci: { ...require('non_uci'), with_lock_translated: (c, fn) => ({ result: fn() }),
+			audit_notice: () => null, audit_warning: () => null },
+	}, [ 'system_access' ]);
+
+	t.it('answers 422 conflict on user for a user that /etc/passwd lacks, and runs no passwd', () => {
+		let a = sa2.set_password(ctx(), { user: "mcpnouser", password: "longenough" });
+		let b = sa2.set_password(ctx(), { user: "ali", password: "longenough" });
+		t.assert_deep_equal([ a.status, a.body.errors, b.status, commands ],
+			[ 422, [ { field: "user", code: "conflict", message: 'user "mcpnouser" does not exist' } ], 422, [] ]);
+	});
+
+	t.it('sets the password of a user that /etc/passwd holds', () => {
+		commands = [];
+		let r = sa2.set_password(ctx(), { user: "alice", password: "longenough" });
+		t.assert_deep_equal([ r.status, commands, stdin ],
+			[ 204, [ "/bin/busybox passwd alice >/dev/null 2>&1" ], [ "longenough\n", "longenough\n" ] ]);
+	});
+});
+
 t.describe('system_access.add_key validation', () => {
 	t.it('rejects non-object body with bad_request', () => {
 		t.assert_equal(sa.add_key(ctx(), null).status, 400);

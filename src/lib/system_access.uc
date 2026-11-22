@@ -19,6 +19,14 @@ const VALID_KEY_TYPES = {
 	"sk-ecdsa-sha2-nistp256@openssh.com": true,
 };
 
+// busybox passwd looks the user up with getpwnam and exits 1 when /etc/passwd has no line for it.
+// /etc/shadow need not have one: passwd then writes the hash into /etc/passwd.
+function user_exists(user) {
+	for (let line in split(fs.readfile("/etc/passwd") ?? "", "\n"))
+		if (index(line, user + ":") == 0) return true;
+	return false;
+}
+
 function set_password(ctx, body) {
 	if (type(body) != "object")
 		return errors.error(ctx, "bad_request", "Request body must be a JSON object");
@@ -30,6 +38,8 @@ function set_password(ctx, body) {
 	else if (!match(user, USER_RE))
 		push(errs, errors.field_error("user", "invalid_format",
 			"must be 'root' or a lowercase Unix-shaped name"));
+	else if (!user_exists(user))
+		push(errs, errors.field_error("user", "conflict", sprintf("user %J does not exist", user)));
 	if (type(pw) != "string" || pw == "")
 		push(errs, errors.field_error("password", "required", "is required"));
 	else if (length(pw) < MIN_PASSWORD_LEN)

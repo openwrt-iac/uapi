@@ -156,7 +156,11 @@ read-only collection, and a writable one puts it in its item view.
   `<pw>\n<pw>\n` through stdin (the same recipe LuCI uses for its "Router
   Password" page).
 - **Validation.** `user` must match `^(root|[a-z][a-z0-9_-]*)$`. `password` must
-  be at least 8 characters.
+  be at least 8 characters. A user that `/etc/passwd` does not hold answers
+  `422 conflict` on `user`, and passwd does not run. busybox passwd finds the
+  user with `getpwnam` and exits 1 for an unknown one. `/etc/shadow` need not
+  hold the user: passwd then writes the hash into `/etc/passwd`. LuCI does no
+  such check, but its page only sets the password of `root`.
 - **Audit.** Successful sets emit `uapi-passwd-set <request_id> user="..."`.
   Failures emit `uapi-passwd-failure <request_id> user="..." exit=<n>`. The
   password VALUE is never logged.
