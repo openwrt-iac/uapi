@@ -11,7 +11,8 @@ const LONG = replace(sprintf('%600s', ''), ' ', 'x');
 // and print the file named after the command when a test wrote one, so a test reads what an apply
 // runs without a WireGuard interface or a resolver. A command that matches the shell pattern `fail`
 // then exits 1. The call runs in a child, whose PATH finds the scripts first. `load` is the
-// expression that loads wg there.
+// expression that loads wg there, and the cache of require() holds that wg, so the peer rules that
+// an apply loads follow the same handler.
 function run_wg(uci, call, outputs, fail, load) {
 	let mk = fs.popen("mktemp -d /tmp/uapi-wg-apply.XXXXXX");
 	let dir = trim(mk.read("all") ?? "");
@@ -22,7 +23,7 @@ function run_wg(uci, call, outputs, fail, load) {
 		fs.chmod(dir + "/" + name, 0o755);
 	}
 	for (let cmd, text in outputs ?? {}) fs.writefile(dir + "/" + cmd, text);
-	let script = sprintf("let wg = %s; let c = require('bus').stub({ uci: %J }); c.set_ubus_response('network.interface.wg1', 'status', { up: true }); print(%s ?? 'ok');",
+	let script = sprintf("let wg = global.modules.wg = %s; let c = require('bus').stub({ uci: %J }); c.set_ubus_response('network.interface.wg1', 'status', { up: true }); print(%s ?? 'ok');",
 	                     load ?? "require('wg')", uci, call);
 	let p = fs.popen(sprintf("PATH=%s:\"$PATH\" ucode -L tests -L src/lib -e %s 2>&1", dir, wg.shellquote(script)));
 	let result = trim(p.read("all") ?? "");
@@ -1299,5 +1300,87 @@ t.describe('wg waits for the restart of the ucode handler', () => {
 		let r = settle([ PENDING, UP ], apply, "require('wg')");
 		t.assert_equal(r.result, 'ok/1');
 		t.assert_false(applied(r), 'wg set on a pending interface under wireguard.sh');
+	});
+	// netifd's next setup reads uci, which no longer gives the peer access, so a revoke keeps its
+	// commit where a restore would give the access back.
+	t.it('skips the interface of a remove when the setup never settles, and keeps the write', () => {
+		let r = settle([ PENDING ], sprintf("wg.apply(c, %J)", [ { iface: 'wg1', action: 'remove', public_key: PK } ]));
+		let m = match(r.result, /^ok\/([0-9]+)$/);
+		t.assert_true(m != null && int(m[1]) >= 10 && int(m[1]) <= 17, r.result);
+		t.assert_deep_equal(r.commands, []);
+	});
+});
+
+// One stored peer that wg refuses keeps the whole interface down under both handlers, so a wait for
+// the restart of the ucode handler cannot tell a restart that the write broke from one that was
+// broken before it. The apply names such a peer, as the peer resource judges it on what the write
+// committed, and netifd sets the peers from uci at the next setup.
+t.describe('wg names a stored peer that keeps its interface down', () => {
+	let PENDING = { up: false, pending: true }, UP = { up: true };
+	let set = { iface: 'wg1', action: 'set', public_key: PK, allowed_ips: [ '10.0.0.2/32' ] };
+	let mine = peer({ public_key: PK, allowed_ips: '10.0.0.2/32' });
+	let bad = peer({ public_key: PK2, allowed_ips: '10.0.0.3/33' });
+	// The error of the apply, its applied and blocked lists, and the number of status reads of wg1.
+	function apply(network, ops, status, load) {
+		let call = sprintf("(function() { let n = 0, a = [], b = []; c.set_ubus_response('network.interface.wg1', 'status', () => (n++, %J)); c.set_ubus_response('network.interface.wg2', 'status', %J); let e = wg.apply(c, %J, a, [], b); return sprintf('%%J', [ e, a, b, n ]); })()",
+		                   status, UP, ops);
+		let r = run_wg({ network }, call, null, null, load ?? UCODE_WG);
+		return { result: json(r.result), commands: r.commands };
+	}
+	let sets = (r) => filter(r.commands, (l) => index(l, '|allowed-ips|') >= 0);
+
+	t.it('skips the interface with no wait under the ucode handler, and names the peer', () => {
+		let r = apply({ wg1: WG1, mine, bad }, [ set ], PENDING);
+		t.assert_deep_equal(r.result, [ null, [], [ 'wg1/bad' ], 0 ]);
+		t.assert_deep_equal(r.commands, []);
+	});
+	// wireguard.sh restarts nothing on a peer change, so the interface can still run the peers that
+	// it set before the blocker was stored, until its next start.
+	t.it('under wireguard.sh applies the write to an interface that is still up, and names the peer', () => {
+		let r = apply({ wg1: WG1, mine, bad }, [ set ], UP, "require('wg')");
+		t.assert_deep_equal(r.result, [ null, [ 'wg1' ], [ 'wg1/bad' ], 1 ]);
+		t.assert_deep_equal(sets(r), [ set_of(PK, '10.0.0.2/32') ]);
+		t.assert_deep_equal(apply({ wg1: WG1, mine, bad }, [ set ], PENDING, "require('wg')").result, [ null, [], [ 'wg1/bad' ], 1 ]);
+	});
+	t.it('names no peer that is disabled or has no key, and none of a disabled interface', () => {
+		for (let network in [ { wg1: WG1, mine, bad: { ...bad, disabled: '1' } }, { wg1: WG1, mine, bad: { ...bad, public_key: null } },
+		                      { wg1: { ...WG1, disabled: '1' }, mine, bad } ])
+			t.assert_deep_equal(apply(network, [ set ], UP).result[2], [], network);
+	});
+	t.it('applies one interface of a batch and names the peer that keeps the other down', () => {
+		let r = apply({ wg1: WG1, wg2: WG1, mine, bad, two: { ...mine, '.type': 'wireguard_wg2' } },
+		              [ set, { ...set, iface: 'wg2' } ], PENDING);
+		t.assert_deep_equal(r.result, [ null, [ 'wg2' ], [ 'wg1/bad' ], 0 ]);
+		t.assert_deep_equal(sets(r), [ replace(set_of(PK, '10.0.0.2/32'), '|wg1|', '|wg2|') ]);
+	});
+	// A write of network/interfaces restarts the interface and changes no peer.
+	t.it('a check names the peer, and waits for nothing on a clean interface', () => {
+		let check = [ { iface: 'wg1', action: 'check' } ];
+		t.assert_deep_equal(apply({ wg1: WG1, mine, bad }, check, UP).result, [ null, [], [ 'wg1/bad' ], 0 ]);
+		t.assert_deep_equal(apply({ wg1: WG1, mine }, check, UP).result, [ null, [], [], 0 ]);
+		t.assert_deep_equal(apply({ wg1: WG1, mine, bad }, check, UP, "require('wg')").result, [ null, [], [ 'wg1/bad' ], 0 ]);
+		for (let load in [ UCODE_WG, "require('wg')" ]) {
+			let r = apply({ wg1: WG1, mine }, [ ...check, set ], UP, load);
+			t.assert_deep_equal(r.result, [ null, [ 'wg1' ], [], 1 ], load);
+			t.assert_deep_equal(sets(r), [ set_of(PK, '10.0.0.2/32') ], load);
+		}
+	});
+	t.it('a write that fixed or deleted the peer finds none, and waits for the restart', () => {
+		let r = apply({ wg1: WG1, mine, bad: { ...bad, allowed_ips: '10.0.0.3/32' } }, [ set ], UP);
+		t.assert_deep_equal(r.result, [ null, [ 'wg1' ], [], 1 ]);
+		r = apply({ wg1: WG1, mine }, [ { iface: 'wg1', action: 'remove', public_key: PK2 } ], UP);
+		t.assert_deep_equal(r.result, [ null, [ 'wg1' ], [], 1 ]);
+		t.assert_deep_equal(r.commands, [ 'wg|set|wg1|peer|' + PK2 + '|remove' ]);
+	});
+	// musl refuses the address, so wg refuses the config of the whole interface. A write refuses such a
+	// zone only when it sends it, because an interface can exist at one time and not at another.
+	t.it('names a peer whose zone names no interface of the router, when the handler gives wg its endpoint', () => {
+		let zoned = (host, port) => ({ wg1: WG1, mine, z: peer({ public_key: PK2, allowed_ips: '10.0.0.3/32', endpoint_host: host, endpoint_port: port }) });
+		for (let load in [ UCODE_WG, "require('wg')" ]) {
+			t.assert_deep_equal(apply(zoned('fe80::1%nosuchdev0', '51820'), [ set ], UP, load).result[2], [ 'wg1/z' ], load);
+			t.assert_deep_equal(apply(zoned('fe80::1%lo', '51820'), [ set ], UP, load).result[2], [], load);
+		}
+		for (let port in [ '', 'nosuchservice' ])
+			t.assert_deep_equal(apply(zoned('fe80::1%nosuchdev0', port), [ set ], UP).result[2], [], port);
 	});
 });

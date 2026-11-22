@@ -325,8 +325,26 @@ without uci state change.
    lists every instance without its `respawn` table, of the services that
    `POST /uapi/services/{name}/recover` takes, as `stopped_instances`. See
    [Service recovery](#service-recovery-uapiservicesnamerecover).
-7. **Kernel apply.** For each peer operation the write collected (see below),
-   skip it unless `network.interface.<name>` reports `up`, then run the
+7. **Kernel apply.** It takes the peer operations that the write collected
+   (see below), and a check of each interface that a write of
+   `network/interfaces` leaves on proto wireguard, since netifd restarts it.
+   For each of these interfaces that is enabled, it first asks the peer
+   resource which enabled peers, as the write committed them, hold a value
+   for which wg refuses the config of
+   the whole interface: a live error of the peer, an allowed IP that wg cannot
+   parse, or a link-local %zone that names no interface of the router, which
+   it looks up in `/sys/class/net`. Both proto handlers give wg every peer of
+   the interface at once, so one such peer keeps the interface down, and a
+   wait for its restart cannot tell a restart that the write broke from one
+   that was broken before it. So the write keeps its commit, runs no restore,
+   and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names
+   each such peer. On OpenWrt main the apply skips the interface with no wait,
+   and netifd sets the peers from uci at its next setup. On 25.12 an interface
+   that is still up takes the write. A write that fixes, disables or deletes
+   the peer finds none and goes on as below. A check sets no peer.
+
+   For each peer operation of an interface that no such peer holds, skip it
+   unless `network.interface.<name>` reports `up`, then run the
    matching `wg set`. The ucode handler of OpenWrt main restarts a wireguard
    interface on every peer change, so there the check first waits for a setup
    that is in flight to finish: without the wait the write's own reload would
@@ -336,16 +354,18 @@ without uci state change.
    The waits of an apply end at one deadline 8 s after it starts, whatever the
    number of interfaces, and those of the reconcile of its restore at another.
    An interface that reads down with no setup pending twice, half a second
-   apart, skips. A setup that never settles fails the write with a restore, so
-   the caller gets the 500 for a peer that the platform refuses. The same 500
-   answers a write to an interface that another stored peer already keeps
-   from settling: the platform sets all the peers or none, and uapi cannot
-   tell the two cases apart. Since openwrt ecd9120f04, which fixed
-   openwrt/openwrt#24511, the handler leaves out a key, a preshared key, an
-   endpoint or a keepalive that wg would refuse. Two values still keep the
-   interface from settling: an allowed IP that wg refuses, and an endpoint
+   apart, skips. A setup that never settles fails a write that sets a peer,
+   with a restore, so the caller gets the 500 for a peer that the platform
+   refuses. A write whose operations on the interface only remove peers, a
+   DELETE or a write that disables them, skips the interface instead and
+   keeps its commit: the next setup reads uci, which no longer holds them, and
+   a restore would give back their access. Since openwrt ecd9120f04, which
+   fixed openwrt/openwrt#24511, the handler leaves out a key, a preshared key,
+   an endpoint or a keepalive that wg would refuse. Three values still keep
+   the interface from settling: an allowed IP that wg refuses, an endpoint
    host of digits and dots that inet_aton does not read, such as `10.0.0.256`,
-   which the handler gives wg as an address. A write refuses such a host. The
+   which the handler gives wg as an address, and an IPv6 host that musl
+   refuses. A write refuses each of them that it sends. The
    apply sets a peer as the handler does, without the endpoint of a host that
    does not resolve, and answers `X-Kernel-Status: omitted`. wireguard.sh
    restarts nothing on a peer change, and its failed setup reads pending until
@@ -530,7 +550,9 @@ list until the next `ifup`. The kernel is correct; netifd's bookkeeping lags.
 
 A resource opts in with a `kernel_ops(kind, opts, sec_type, existing, staged)`
 hook returning the operations to apply, where `staged` is the section as the
-write leaves it in uci. It reads the uci options rather than the
+write leaves it in uci. `network/interfaces` returns a check of the interface,
+which sets no peer, when the write leaves it on proto wireguard. The
+hook of `network/wireguard_peers` reads the uci options rather than the
 resource view because the view masks `preshared_key`, and the parent interface
 off the section type because it is not stored as an option, so a `DELETE` can
 only learn it from the section it is about to remove. A rotated public key emits

@@ -63,6 +63,7 @@ return {
     merge_for_patch: function(existing_json, body) { ... },  // nested-object merge
     validate_remove: function(json, conn) { ... return []; },  // judges a DELETE over the read view of the section, after the If-Match check. An error answers 422 validation_failed and nothing is deleted. Only uhttpd/instances declares it, to keep uapi's mount on `main`.
     read_runtime:    function(section, conn) { ... },  // a runtime that a GET reads and a write does not. See "Runtime that only a GET reads" below.
+    sweep_errors:    function(section, conn) { ... return []; },  // errors that only the validation sweep lists, after the others, for a state of the section that a write does not judge. Only network/wireguard_peers declares it, for a peer that keeps its interface down.
     type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
     create_type:     function(body) { ... },
     id_prefix: "x",                    // single char for generated IDs (defaults to type[0])
@@ -382,10 +383,12 @@ A message names its rule and quotes no value. `validate_new()` runs over the
 write-only secrets that the handler carries from uci, and the sweep gives its
 messages to a caller that holds only `:ro`. A property in
 `tests/unit/handler_test.uc` puts a marker into each field of the fixture cases
-and fails on a message that holds it. A write of one resource can make the
-stored values of another live: `validate()` of `network/interfaces` runs
-`validate_new()` of `network/wireguard_peers` over the peers of an interface
-that a write switches to wireguard or enables, and refuses their live errors.
+and fails on a message that holds it. The live errors of one section can
+matter to the writes of others: the kernel apply takes the live errors of each
+`network/wireguard_peers` of an interface as the values that keep the whole
+interface down, and a write of another peer, or of `network/interfaces`,
+answers `X-Kernel-Status: blocked` for them. So `live` must not be `true` for a
+value that the daemon never reads.
 
 The schema check does not see a write-only field that the handler carries from
 uci. The read masks it, uci can hold it in a shape that the schema does not

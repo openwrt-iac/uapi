@@ -265,7 +265,7 @@ for (let p in paths) {
 // which never reach the reload machinery). Both rules below are derived from the sources
 // rather than from a list kept by hand, so a fourth header cannot be added quietly.
 //
-// The five transaction headers travel together and reach only curated-resource writes.
+// The six transaction headers travel together and reach only curated-resource writes.
 // The curated path set is derived from the generator's own ENDPOINTS catalog, so a new
 // resource is covered automatically and a header attached to the wrong block is caught in
 // both directions: declared where it cannot be emitted, or missing where it is.
@@ -273,7 +273,7 @@ for (let p in paths) {
 // The over-declaration half is not hypothetical. `X-Reload-Status` was declared on 15 raw,
 // batch and non-uci write responses that emit nothing, which is as invisible to a generated
 // client as the opposite error.
-const TX_HEADERS = [ "X-Reload-Status", "X-Reload-Services", "X-Reload-Stopped", "X-Kernel-Status", "X-Kernel-Applied" ];
+const TX_HEADERS = [ "X-Reload-Status", "X-Reload-Services", "X-Reload-Stopped", "X-Kernel-Status", "X-Kernel-Applied", "X-Kernel-Blocked" ];
 
 let gen = "";
 let gh = fs.open("build/gen_openapi.uc", "r");
@@ -603,20 +603,20 @@ for (let p in paths) {
 			for (let n in TX_HEADERS) if (exists(h, n)) push(present, n);
 			let where = sprintf("%s %s %s", uc(verb), p, code);
 			// /uapi/batch commits and reloads once for the whole set, so its 207 carries the same
-			// five headers, aggregated. It is not a curated-resource path, so it needs naming
+			// six headers, aggregated. It is not a curated-resource path, so it needs naming
 			// here rather than falling into the "emits none of them" branch below.
 			if (p == "/uapi/batch") {
 				let want = (verb == "post" && code == "207");
 				if (want && length(present) != length(TX_HEADERS))
-					note(where, sprintf("the batch 207 declares %J; it emits all five, aggregated over the sub-writes", present));
+					note(where, sprintf("the batch 207 declares %J; it emits all six, aggregated over the sub-writes", present));
 				else if (!want && length(present) > 0)
 					note(where, sprintf("declares %J, but only the batch 207 carries them", present));
 			}
 			else if (is_curated(p)) {
 				if (length(present) == 0)
-					note(where, "a curated-resource write declares none of the transaction headers; it emits all five");
+					note(where, "a curated-resource write declares none of the transaction headers; it emits all six");
 				else if (length(present) != length(TX_HEADERS))
-					note(where, sprintf("declares only %J of the five transaction headers, which attach_reload_headers sets together", present));
+					note(where, sprintf("declares only %J of the six transaction headers, which attach_reload_headers sets together", present));
 				else tx_responses++;
 			} else if (index(p, "/system/cron_jobs") == 0) {
 				// crontab.uc sets X-Reload-Status alone, for a reload of cron still running.

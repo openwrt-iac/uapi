@@ -506,21 +506,23 @@ changes what a write to `network/wireguard_peers` does there:
   none. So the kernel state of a peer write lands with the restart, after the
   commit. uapi waits up to 8 s for the restart to end, then applies the peer and
   answers, so `X-Kernel-Status: ok` reports the interface after the restart.
-- A restart that does not end in 8 s fails the write with a restore: 500
-  `reload_failed_restored`, or `reload_failed_unrecovered` when the restore
-  fails too. Since openwrt ecd9120f04, the handler leaves out a key, a preshared
+- A restart that does not end in 8 s fails a write that sets a peer with a
+  restore: 500 `reload_failed_restored`, or `reload_failed_unrecovered` when
+  the restore fails too. A write whose operations on the interface only remove
+  peers, a DELETE or a write that disables them, keeps its commit and skips the
+  interface instead, because the next setup reads uci, which no longer holds
+  them. Since openwrt ecd9120f04, the handler leaves out a key, a preshared
   key, an endpoint or a keepalive that wg would refuse. An allowed IP that wg
   refuses still keeps the interface down, and so does an endpoint host of
   digits and dots that inet_aton does not read, which a write refuses, as the
-  next section says. The same 500 answers a write to an interface that another
-  stored peer already keeps down, because uapi cannot tell the two cases apart.
+  next section says. A write to an interface that another stored peer keeps
+  down answers `X-Kernel-Status: blocked`, as the section after it says.
 
 On 25.12, `wireguard.sh` restarts nothing on a peer change, and uapi applies
 the peer with `wg set`, which leaves the other peers up. On main, the peer
 changes of one interface can go in one `POST /uapi/batch`. A batch commits its
 writes once and reloads netifd once, so netifd gets one change of the interface
-to restart it for, not one for each peer. A 500 on a peer write can come from
-another peer of the interface, so read its other peers before you retry.
+to restart it for, not one for each peer.
 `docs/errors.md` (`X-Kernel-Status`) and the kernel apply in
 `docs/architecture.md` give the details.
 
@@ -576,6 +578,43 @@ such a `preshared_key`, or one that uci holds as a list, where wg reads both
 under wireguard.sh. On OpenWrt main, such a key is now an error, so it blocks
 every write of its peer, as the stored errors above do. So no write installs
 the routes of such a peer, where 3.x did. LuCI refuses such a key too.
+
+## A write to a WireGuard interface that a stored peer keeps down answers `blocked`
+
+Both proto handlers give wg every enabled peer of an interface at once, and wg
+refuses the config of the whole interface for one value that it cannot use,
+such as an allowed IP that it cannot parse. A write refuses such a value when
+it sends it, but LuCI or a shell can store one, and an IPv6 link-local
+endpoint whose %zone names an interface keeps the interface down once that
+interface goes away. The interface then does not come up.
+
+3.x answered a write that switched an enabled interface to wireguard, enabled
+a wireguard interface, or created one under the name of stored peers with 422
+`conflict` on `proto` or `disabled` for such a peer. v4 keeps the commit of
+such a write, as LuCI saves it, and answers 200 with the new value
+`X-Kernel-Status: blocked` and the new header `X-Kernel-Blocked`, which names
+each such peer as `<interface>/<id>`. Any other write of `network/interfaces`
+that leaves a wireguard interface enabled answers the same, because netifd
+restarts the interface, where 3.x answered `no_kernel`. A client that relied
+on the 422 to keep the interface off now finds it enabled and down. To get it
+up, fix, disable or delete each peer that `X-Kernel-Blocked` names.
+
+A write of a peer of such an interface keeps its commit too, with no restore,
+and answers `blocked` with the header. On 25.12, 3.x answered
+`X-Kernel-Status: skipped` for it when the interface was down, and v4 names the
+peer. wireguard.sh restarts nothing on a peer change, so an interface that is
+still up takes the write there, `X-Kernel-Applied` names it beside `blocked`,
+and the interface does not come up at its next start. On OpenWrt main, such a
+write answered 500 `reload_failed_restored` when netifd read the restart as
+pending after 8 s, and undid the write, a DELETE included. It now answers
+`blocked` with no wait. A write that fixes, disables or deletes the peer finds
+none and takes the usual path. A batch that also applies another interface
+answers `partial`, with `X-Kernel-Blocked` beside it.
+
+`GET /uapi/diagnostics?validate=1` lists each such peer with code `conflict`
+on the field `""`, and a message that says that it keeps the interface down.
+A client that branches on the values of `X-Kernel-Status` sees `blocked` as it
+can see a new error code. No ETag, token or default changes at the upgrade.
 
 ## Four request headers take effect
 

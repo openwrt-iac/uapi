@@ -41,6 +41,31 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: a write to a WireGuard interface that a stored peer keeps down
+  keeps its commit and answers `X-Kernel-Status: blocked`.** Both proto
+  handlers give wg every enabled peer of an interface at once, and wg refuses
+  the config of the whole interface for one value that it cannot use, so the
+  interface does not come up. A write of `network/interfaces` that switched an
+  enabled interface to wireguard, enabled one, or created one under the name of
+  such a peer answered 422 `conflict`. Such a write, and any other write that
+  leaves a wireguard interface enabled, now keeps its commit, as LuCI saves it,
+  and answers 200 with the new value `blocked` and the new header
+  `X-Kernel-Blocked`, which names each such peer as `<interface>/<id>`. A write
+  of another peer of the interface answers the same, with no restore. On
+  OpenWrt main it answered 500 `reload_failed_restored` when netifd still read
+  the restart as pending after 8 s, and undid the write, a DELETE included. It
+  no longer waits for such an interface. On 25.12 it answered `skipped`, and an
+  interface that is still up takes the write, which `X-Kernel-Applied` names. A
+  write that fixes, disables or deletes the peer takes the usual path, and a
+  batch that also applies another interface answers `partial`. A write that
+  only removes peers of an interface whose restart does not end in 8 s keeps
+  its commit and skips the interface. An allowed IP that wg takes after a `+`
+  or without its whitespace, and a host for which the ucode handler gives wg no
+  endpoint, no longer count as such a value, and an IPv6 zone that names no
+  interface of the router does. `GET /uapi/diagnostics?validate=1` lists such
+  a peer with `conflict` on the field `""`. `docs/errors.md` says that the
+  `X-Reload-*` and `X-Kernel-*` prefixes hold advisory headers only. Migration
+  note in `docs/migration-v3-to-v4.md`. (#462)
 - **BREAKING: a DELETE of `uhttpd/instances/main` that holds uapi's mount
   answers 422.** A PUT or PATCH of `main` that removes uapi's own
   `ucode_prefix` entry was already refused. A DELETE of `main` removed the
@@ -384,10 +409,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the peer answered 200 and installed the routes of `route_allowed_ips` for the
   peer that the handler skips. Such a stored key now blocks every write of its
   peer there with 422 `invalid_format`, under the stored-error rule that 3.5.0
-  announces (#308), so no write installs a route for the peer. A switch of
-  `network/interfaces` to wireguard, or an enable, is no longer refused for the
-  `allowed_ips` or `endpoint_host` of a peer that the handler skips. Note in
-  `docs/migration-v3-to-v4.md`. (#436)
+  announces (#308), so no write installs a route for the peer. The
+  `allowed_ips` or `endpoint_host` of a peer that the handler skips does not
+  keep its interface down. Note in `docs/migration-v3-to-v4.md`. (#436)
 - **A stored value that LuCI or the daemon takes blocks no write.** v4 checks
   each stored section against the schema of its resource (#308), and the
   schemas take what the platform takes, as in 3.5.0 (#410). The rules on what a

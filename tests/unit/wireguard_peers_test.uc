@@ -612,9 +612,10 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 	});
 });
 
-// wireguard.sh gives every enabled peer of an interface to one `wg syncconf`, so the write of the
-// interface that makes its stored peers live is refused for a peer that wg refuses.
-t.describe('network.interfaces refuses a write that makes a stored peer that wg refuses live', () => {
+// Both proto handlers give every enabled peer of an interface to one `wg syncconf`, so one stored peer
+// that wg refuses keeps the interface down. A write of the interface that restarts it keeps its
+// commit and names that peer, as LuCI saves the write and the interface stays down.
+t.describe('network.interfaces answers blocked for a write that restarts an interface that a stored peer keeps down', () => {
 	let ifaces = loadfile('src/resources/network.interfaces.uc')();
 	let h = handler.make(ifaces, { tx: {
 		acquire: function() { return {}; }, release: function() {},
@@ -631,54 +632,72 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		return ubus.stub({ uci: { network } });
 	}
 	let errs = (r) => map(r.body?.errors ?? [], (e) => [ e.field, e.code ]);
+	let kernel = (r) => [ r.status, r.headers["X-Kernel-Status"], r.headers["X-Kernel-Blocked"], r.headers["X-Kernel-Applied"] ];
 
-	t.it('a switch to wireguard names each peer that wg refuses and the fields, and no value', () => {
-		let r = h.patch(world(STATIC, { ...BAD, g_ok: { public_key: PK2 } }), ctx(), 'wg1', WG);
-		t.assert_deep_equal(errs(r), [ [ 'proto', 'conflict' ] ]);
-		let m = r.body.errors[0].message;
-		t.assert_true(index(m, 'g_ka (persistent_keepalive)') >= 0, m);
-		t.assert_true(index(m, 'g_psk (preshared_key, endpoint_port)') >= 0, m);
-		t.assert_true(index(m, 'g_ok') < 0 && index(m, '25x') < 0 && index(m, 'Peer]') < 0 && index(m, 'nosuchservice') < 0, m);
-		// A peer write refuses a parent that is not on wireguard, so the way out is a disabled switch.
-		t.assert_true(index(m, 'Switch with disabled true') >= 0, m);
+	t.it('a switch to wireguard keeps its commit and names each peer that wg refuses, and no value', () => {
+		let c = world(STATIC, { ...BAD, g_ok: { public_key: PK2 } });
+		let r = h.patch(c, ctx(), 'wg1', WG);
+		t.assert_deep_equal(kernel(r), [ 200, 'blocked', 'wg1/g_ka,wg1/g_psk', null ]);
+		t.assert_equal(c._state.uci.network.wg1.proto, 'wireguard');
+		let text = sprintf('%J', r);
+		t.assert_true(index(text, '25x') < 0 && index(text, 'Peer]') < 0 && index(text, 'nosuchservice') < 0, text);
 	});
 
-	t.it('a switch to wireguard passes when such a peer is disabled or has no key, or when every peer is clean', () => {
-		t.assert_equal(h.patch(world(STATIC, { g_ka: { persistent_keepalive: '25x', disabled: '1' } }), ctx(), 'wg1', WG).status, 200);
-		t.assert_equal(h.patch(world(STATIC, { g_ka: { persistent_keepalive: '25x', public_key: null } }), ctx(), 'wg1', WG).status, 200);
-		t.assert_equal(h.patch(world(STATIC, { g_ok: {}, g_ok2: { public_key: PK2, persistent_keepalive: '25' } }), ctx(), 'wg1', WG).status, 200);
-		t.assert_equal(h.patch(world(STATIC, BAD), ctx(), 'wg1', { ...WG, disabled: true }).status, 200);
+	t.it('a switch to wireguard answers no_kernel when such a peer is disabled or has no key, or when every peer is clean', () => {
+		t.assert_deep_equal(kernel(h.patch(world(STATIC, { g_ka: { persistent_keepalive: '25x', disabled: '1' } }), ctx(), 'wg1', WG)),
+		                    [ 200, 'no_kernel', null, null ]);
+		t.assert_deep_equal(kernel(h.patch(world(STATIC, { g_ka: { persistent_keepalive: '25x', public_key: null } }), ctx(), 'wg1', WG)),
+		                    [ 200, 'no_kernel', null, null ]);
+		t.assert_deep_equal(kernel(h.patch(world(STATIC, { g_ok: {}, g_ok2: { public_key: PK2, persistent_keepalive: '25' } }), ctx(), 'wg1', WG)),
+		                    [ 200, 'no_kernel', null, null ]);
+	});
+
+	t.it('a switch with disabled true restarts nothing, and the enable that follows answers blocked', () => {
+		let c = world(STATIC, BAD);
+		t.assert_deep_equal(kernel(h.patch(c, ctx(), 'wg1', { ...WG, disabled: true })), [ 200, 'no_kernel', null, null ]);
+		t.assert_deep_equal(kernel(h.patch(c, ctx(), 'wg1', { disabled: false })), [ 200, 'blocked', 'wg1/g_ka,wg1/g_psk', null ]);
+		t.assert_equal(c._state.uci.network.wg1.disabled, '0');
 	});
 
 	// wg cannot parse such an allowed IP, and a peer write refuses it on every write.
-	t.it('a switch to wireguard also refuses a stored allowed IP that wg cannot parse, on a peer that wg reads', () => {
-		let r = h.patch(world(STATIC, { g_ip: { allowed_ips: [ '10.42.0.2/32', 'foo' ] } }), ctx(), 'wg1', WG);
-		t.assert_deep_equal(errs(r), [ [ 'proto', 'conflict' ] ]);
-		t.assert_true(index(r.body.errors[0].message, 'g_ip (allowed_ips[1])') >= 0, r.body.errors[0].message);
+	t.it('a stored allowed IP that wg cannot parse blocks the interface, on a peer that wg reads', () => {
+		t.assert_deep_equal(kernel(h.patch(world(STATIC, { g_ip: { allowed_ips: [ '10.42.0.2/32', 'foo' ] } }), ctx(), 'wg1', WG)),
+		                    [ 200, 'blocked', 'wg1/g_ip', null ]);
 		for (let off in [ { disabled: '1' }, { public_key: null } ])
-			t.assert_equal(h.patch(world(STATIC, { g_ip: { allowed_ips: [ 'foo' ], ...off } }), ctx(), 'wg1', WG).status, 200, off);
-		r = h.patch(world(STATIC, { g_tab: { allowed_ips: '10.42.0.2/32\t10.42.1.0/24' } }), ctx(), 'wg1', WG);
-		t.assert_true(index(r.body.errors[0].message, 'g_tab (allowed_ips[0])') >= 0, r.body.errors[0].message);
-		r = h.patch(world(STATIC, { g_hash: { allowed_ips: '#c' } }), ctx(), 'wg1', WG);
-		t.assert_true(index(r.body.errors[0].message, 'g_hash (allowed_ips[0])') >= 0, r.body.errors[0].message);
+			t.assert_equal(h.patch(world(STATIC, { g_ip: { allowed_ips: [ 'foo' ], ...off } }), ctx(), 'wg1', WG).headers["X-Kernel-Status"],
+			               'no_kernel', off);
+		for (let ips in [ '10.42.0.2/32\t10.42.1.0/24', '#c' ])
+			t.assert_equal(h.patch(world(STATIC, { g_ip: { allowed_ips: ips } }), ctx(), 'wg1', WG).headers["X-Kernel-Blocked"], 'wg1/g_ip', ips);
 	});
 
-	t.it('the way out that the message gives works: switch disabled, fix the peer, enable', () => {
+	// wg reads an allowed IP without its whitespace, and takes a + before it as the marker of an
+	// incremental update. A write refuses both forms, and the interface comes up with them.
+	t.it('a stored allowed IP that wg takes in another spelling blocks nothing', () => {
+		for (let ips in [ [ '10.42.0.2/32', '+10.42.3.0/24' ], '10.42.0.2/32\t' ])
+			t.assert_equal(h.patch(world(STATIC, { g_ip: { allowed_ips: ips } }), ctx(), 'wg1', WG).headers["X-Kernel-Status"], 'no_kernel', ips);
+		t.assert_equal(h.patch(world(STATIC, { g_ip: { allowed_ips: [ '-10.42.3.0/24' ] } }), ctx(), 'wg1', WG).headers["X-Kernel-Status"], 'blocked');
+		let real = global.modules.wg;
+		global.modules.wg = uc;
+		let r = [ h.patch(world(STATIC, { g_ip: { allowed_ips: [ ' 10.42.0.2/32 ', '10.42.3.0/24' ] } }), ctx(), 'wg1', WG),
+		          h.patch(world(STATIC, { g_ip: { allowed_ips: [ '10.42.0.2/32 10.42.3.0/24' ] } }), ctx(), 'wg1', WG) ];
+		global.modules.wg = real;
+		t.assert_deep_equal(map(r, (x) => x.headers["X-Kernel-Status"]), [ 'no_kernel', 'blocked' ]);
+	});
+
+	t.it('the way out works: fix the peer, and the next write of the interface answers no_kernel', () => {
 		let ph = handler.make(wgp, { tx: {
 			acquire: function() { return {}; }, release: function() {},
 			reload: function() { return null; }, check_services: function() { return null; },
 		} });
 		let c = world(STATIC, { g_ka: BAD.g_ka });
-		t.assert_equal(h.patch(c, ctx(), 'wg1', WG).status, 422);
-		t.assert_equal(ph.patch(c, ctx(), 'g_ka', { persistent_keepalive: 25 }).status, 422);
-		t.assert_equal(h.patch(c, ctx(), 'wg1', { ...WG, disabled: true }).status, 200);
+		t.assert_equal(h.patch(c, ctx(), 'wg1', WG).headers["X-Kernel-Status"], 'blocked');
 		t.assert_equal(ph.patch(c, ctx(), 'g_ka', { persistent_keepalive: 25 }).status, 200);
-		t.assert_equal(h.patch(c, ctx(), 'wg1', { disabled: false }).status, 200);
+		t.assert_deep_equal(kernel(h.patch(c, ctx(), 'wg1', { mtu: 1400 })), [ 200, 'no_kernel', null, null ]);
 	});
 
 	// The ucode handler of OpenWrt main skips a peer whose key does not match its pattern, so wg
 	// reads none of its values.
-	t.it('under the ucode handler a switch or an enable passes for a peer that the handler skips', () => {
+	t.it('under the ucode handler a peer that the handler skips blocks nothing', () => {
 		let skipped = { g_ip: { public_key: 'not-a-key', allowed_ips: [ 'foo' ], endpoint_host: 'a#b' } };
 		let real = global.modules.wg;
 		global.modules.wg = uc;
@@ -686,26 +705,30 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 		          h.patch(world({ ...WG, disabled: '1' }, skipped), ctx(), 'wg1', { disabled: false }),
 		          h.patch(world(STATIC, { g_ip: { allowed_ips: [ 'foo' ] } }), ctx(), 'wg1', WG) ];
 		global.modules.wg = real;
-		t.assert_deep_equal(map(r, errs), [ [], [], [ [ 'proto', 'conflict' ] ] ]);
+		t.assert_deep_equal(map(r, (x) => x.headers["X-Kernel-Status"]), [ 'no_kernel', 'no_kernel', 'blocked' ]);
 	});
 
-	t.it('a write of an interface already live on wireguard does not check its peers', () => {
-		t.assert_equal(h.patch(world(WG, BAD), ctx(), 'wg1', { mtu: 1400 }).status, 200);
+	// netifd restarts the interface for any change, and the restart gives wg every peer again.
+	t.it('a write of an interface already live on wireguard answers blocked too, and one that disables it does not', () => {
+		t.assert_deep_equal(kernel(h.patch(world(WG, BAD), ctx(), 'wg1', { mtu: 1400 })), [ 200, 'blocked', 'wg1/g_ka,wg1/g_psk', null ]);
+		t.assert_deep_equal(kernel(h.patch(world(WG, BAD), ctx(), 'wg1', { disabled: true })), [ 200, 'no_kernel', null, null ]);
+		t.assert_deep_equal(kernel(h.patch(world(WG, BAD), ctx(), 'wg1', {})), [ 200, 'no_kernel', null, null ]);
+		t.assert_equal(h.remove(world(WG, BAD), ctx(), 'wg1').headers["X-Kernel-Status"], 'no_kernel');
 	});
 
-	t.it('enabling a wireguard interface refuses such a peer on disabled, also a PUT that leaves disabled out', () => {
+	t.it('enabling a wireguard interface answers blocked, also a PUT that leaves disabled out', () => {
 		let off = { ...WG, disabled: '1' };
-		let r = h.patch(world(off, BAD), ctx(), 'wg1', { disabled: false });
-		t.assert_deep_equal(errs(r), [ [ 'disabled', 'conflict' ] ]);
-		t.assert_true(index(r.body.errors[0].message, 'Fix or disable each of them first') >= 0, r.body.errors[0].message);
-		t.assert_deep_equal(errs(h.replace(world(off, BAD), ctx(), 'wg1', { proto: 'wireguard', addresses: WG.addresses })),
-		                    [ [ 'disabled', 'conflict' ] ]);
-		t.assert_equal(h.patch(world(off, BAD), ctx(), 'wg1', { mtu: 1400 }).status, 200);
+		t.assert_deep_equal(kernel(h.patch(world(off, BAD), ctx(), 'wg1', { disabled: false })), [ 200, 'blocked', 'wg1/g_ka,wg1/g_psk', null ]);
+		t.assert_deep_equal(kernel(h.replace(world(off, BAD), ctx(), 'wg1', { proto: 'wireguard', addresses: WG.addresses })),
+		                    [ 200, 'blocked', 'wg1/g_ka,wg1/g_psk', null ]);
+		t.assert_deep_equal(kernel(h.patch(world(off, BAD), ctx(), 'wg1', { mtu: 1400 })), [ 200, 'no_kernel', null, null ]);
 	});
 
-	t.it('a create checks the stored peers of the name that it sends', () => {
+	t.it('a create under the name of stored peers answers blocked', () => {
 		let c = world(STATIC, BAD, 'lan');
-		t.assert_deep_equal(errs(h.create(c, ctx(), { id: 'wg1', ...WG })), [ [ 'proto', 'conflict' ] ]);
+		let r = h.create(c, ctx(), { id: 'wg1', ...WG });
+		t.assert_deep_equal(kernel(r), [ 200, 'blocked', 'wg1/g_ka,wg1/g_psk', null ]);
+		t.assert_equal(c._state.uci.network.wg1.proto, 'wireguard');
 	});
 
 	// netifd cannot bring the interface up with a listen port that /etc/services does not resolve.
@@ -787,6 +810,153 @@ t.describe('network.interfaces refuses a write that makes a stored peer that wg 
 	t.it('the sweep reports nothing for the peers of a live or disabled wireguard interface', () => {
 		for (let iface in [ WG, { ...WG, disabled: '1' } ])
 			t.assert_deep_equal(h.sweep(world(iface, BAD)), [], iface);
+	});
+});
+
+// One stored peer that wg refuses keeps its whole interface down, and a write of another peer cannot
+// tell a restart that it broke from one that was broken before it. It keeps its commit and names that
+// peer, as LuCI saves it. A write that fixes or deletes the peer finds none and takes the usual path.
+t.describe('network.wireguard_peers answers blocked for a write to an interface that another stored peer keeps down', () => {
+	let PENDING = { up: false, pending: true }, DOWN = { up: false };
+	function world(a, status) {
+		let c = ubus.stub({ uci: { network: {
+			wg1: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' },
+			a: { '.type': 'wireguard_wg1', '.anonymous': false, public_key: PK, allowed_ips: [ '10.42.0.2/33' ], ...(a ?? {}) },
+			b: { '.type': 'wireguard_wg1', '.anonymous': false, public_key: PK2, allowed_ips: [ '10.42.0.3/32' ] },
+		} } });
+		c.set_ubus_response('network.interface.wg1', 'status', status ?? PENDING);
+		return c;
+	}
+	// The peer rules that the apply loads require wg from the cache, so it holds the wg under test.
+	function on(m, call) {
+		let real = global.modules.wg;
+		global.modules.wg = m;
+		let h = handler.make(t.load_with({ wg: m }, [ '../resources/network.wireguard_peers' ]), { tx: {
+			acquire: function() { return {}; }, release: function() {},
+			reload: function() { return null; }, check_services: function() { return null; },
+			wg_apply: m.apply, wg_reconcile: function() { return null; },
+		} });
+		let r = null, caught = null;
+		try { r = call(h); } catch (e) { caught = e; }
+		global.modules.wg = real;
+		if (caught != null) die(caught);
+		return r;
+	}
+	let kernel = (r) => [ r.status, r.headers["X-Kernel-Status"], r.headers["X-Kernel-Blocked"], r.headers["X-Kernel-Applied"] ];
+	let reads = (c) => length(filter(c._state.ubus_calls, (x) => x[1] == "status"));
+	const B = { interface: 'wg1', public_key: PK2, allowed_ips: [ '10.42.0.4/32' ] };
+
+	t.it('a create, PUT, PATCH and DELETE of another peer keep their commit and wait for nothing under the ucode handler', () => {
+		let c = world();
+		let r = on(uc, (h) => [ h.create(c, ctx(), { ...B, id: 'n' }), h.replace(c, ctx(), 'b', B),
+		                         h.patch(c, ctx(), 'b', { description: 'x' }), h.remove(c, ctx(), 'n') ]);
+		t.assert_deep_equal(map(r, kernel), [ [ 200, 'blocked', 'wg1/a', null ], [ 200, 'blocked', 'wg1/a', null ],
+		                                      [ 200, 'blocked', 'wg1/a', null ], [ 204, 'blocked', 'wg1/a', null ] ]);
+		t.assert_deep_equal([ c._state.uci.network.b.allowed_ips, c._state.uci.network.b.description, exists(c._state.uci.network, 'n') ],
+		                    [ [ '10.42.0.4/32' ], 'x', false ]);
+		t.assert_equal(reads(c), 0);
+	});
+
+	// wireguard.sh restarts nothing on a peer change, so it reads the interface once, as before.
+	t.it('under wireguard.sh a write answers blocked too, and skipped for a down interface with no known blocker', () => {
+		let c = world(null, DOWN);
+		t.assert_deep_equal(kernel(on(wg, (h) => h.patch(c, ctx(), 'b', { description: 'x' }))), [ 200, 'blocked', 'wg1/a', null ]);
+		t.assert_equal(reads(c), 1);
+		c = world({ allowed_ips: [ '10.42.0.2/32' ] }, DOWN);
+		t.assert_deep_equal(kernel(on(wg, (h) => h.patch(c, ctx(), 'b', { description: 'x' }))), [ 200, 'skipped', null, null ]);
+	});
+
+	t.it('a write that fixes the peer, or deletes it, finds none and waits for the restart', () => {
+		for (let m in [ uc, wg ]) {
+			let c = world(null, DOWN);
+			t.assert_deep_equal(kernel(on(m, (h) => h.patch(c, ctx(), 'a', { allowed_ips: [ '10.42.0.2/32' ] }))), [ 200, 'skipped', null, null ]);
+			t.assert_true(reads(c) > 0);
+			c = world(null, DOWN);
+			t.assert_deep_equal(kernel(on(m, (h) => h.remove(c, ctx(), 'a'))), [ 204, 'skipped', null, null ]);
+			t.assert_false(exists(c._state.uci.network, 'a'));
+		}
+	});
+
+	t.it('a write that enables the peer that keeps the interface down keeps its commit and names it', () => {
+		let c = world({ disabled: '1', allowed_ips: [ '10.42.0.2/32' ], endpoint_host: 'fe80::1%nosuchdev0', endpoint_port: '51820' });
+		t.assert_deep_equal(kernel(on(uc, (h) => h.patch(c, ctx(), 'a', { disabled: false }))), [ 200, 'blocked', 'wg1/a', null ]);
+		t.assert_equal(c._state.uci.network.a.disabled, '0');
+	});
+});
+
+// The live flag of an error says whether wg reads the value, and the apply takes the live errors of
+// a peer as the values that keep its interface down, so the flag decides for the writes of the
+// other peers too.
+t.describe('network.wireguard_peers names only the values that keep the interface down', () => {
+	function world(a) {
+		return ubus.stub({ uci: { network: {
+			wg1: { '.type': 'interface', '.anonymous': false, proto: 'wireguard' },
+			a: { '.type': 'wireguard_wg1', '.anonymous': false, public_key: PK, allowed_ips: [ '10.42.0.2/32' ], ...a },
+		} } });
+	}
+	let on = (m, a) => t.load_with({ wg: m }, [ '../resources/network.wireguard_peers' ]).blockers(world(a), 'wg1');
+	let live = (m, a) => map(t.load_with({ wg: m }, [ '../resources/network.wireguard_peers' ]).validate_new({ ...wgp.fromUci({ ...a, '.name': 'a' }), id: 'a' }, world(a)),
+	                         (e) => [ e.field, e.live ]);
+
+	// The ucode handler leaves the endpoint out for a port that it cannot read, and for an empty one,
+	// which only a hand edit stores, so wg never reads the host.
+	t.it('under the ucode handler a host gives wg nothing without a port that the handler reads', () => {
+		for (let host in [ '10.0.0.256', 'a:b' ]) {
+			t.assert_deep_equal(on(uc, { endpoint_host: host, endpoint_port: '51820' }), [ 'a' ], host);
+			t.assert_deep_equal(on(uc, { endpoint_host: host }), [ 'a' ], host);
+			for (let port in [ '', 'nosuchservice', '0' ])
+				t.assert_deep_equal(on(uc, { endpoint_host: host, endpoint_port: port }), [], [ host, port ]);
+		}
+		t.assert_deep_equal(live(uc, { public_key: PK, endpoint_host: '10.0.0.256', endpoint_port: '' }), [ [ 'endpoint_host', false ] ]);
+		t.assert_deep_equal(live(uc, { public_key: PK, endpoint_host: '10.0.0.256' }), [ [ 'endpoint_host', true ] ]);
+		t.assert_deep_equal(live(uc, { public_key: PK, endpoint_host: 'a:b', endpoint_port: 'nosuchservice' }),
+		                    [ [ 'endpoint_host', false ], [ 'endpoint_port', false ] ]);
+	});
+	// wireguard.sh gives wg the endpoint with any port, and refuses the config for one that it cannot read.
+	t.it('under wireguard.sh a port that wg cannot read keeps the interface down with its host', () => {
+		t.assert_deep_equal(on(wg, { endpoint_host: 'a:b', endpoint_port: 'nosuchservice' }), [ 'a' ]);
+		t.assert_deep_equal(live(wg, { public_key: PK, endpoint_host: 'a:b', endpoint_port: 'nosuchservice' }),
+		                    [ [ 'endpoint_host', true ], [ 'endpoint_port', true ] ]);
+	});
+	t.it('an allowed IP that wg takes without its whitespace, or after a +, keeps nothing down', () => {
+		for (let ips in [ [ '10.42.0.2/32', '+10.42.3.0/24' ], '10.42.0.2/32\t' ])
+			t.assert_deep_equal(on(wg, { allowed_ips: ips }), [], ips);
+		t.assert_deep_equal(on(uc, { allowed_ips: [ ' 10.42.0.2/32 ', '+ 10.42.3.0/24' ] }), []);
+		for (let ips in [ [ '-10.42.3.0/24' ], [ '10.42.0.2/32 10.42.3.0/24' ], [ '+10.42.3.0/33' ] ])
+			t.assert_deep_equal(on(uc, { allowed_ips: ips }), [ 'a' ], ips);
+	});
+	// wireguard.sh expands the escapes of a key, so wg reads `\075` as the `=` of a key. The ucode
+	// handler gives wg a key with padding bits that are not zero, which wg refuses.
+	t.it('a key keeps the interface down only when wg reads no key from it', () => {
+		t.assert_deep_equal(on(wg, { public_key: substr(PK, 0, 43) + '\\075' }), []);
+		t.assert_deep_equal(on(wg, { preshared_key: substr(PK2, 0, 43) + '\\075' }), []);
+		t.assert_deep_equal(on(wg, { preshared_key: 'K\\n[Peer]' }), [ 'a' ]);
+		t.assert_deep_equal(on(uc, { public_key: substr(PK, 0, 42) + '5=' }), [ 'a' ]);
+		t.assert_deep_equal(on(uc, { public_key: PK + ' # b' }), []);
+	});
+	// netifd installs no route for such a length, and wg takes it, so the interface comes up.
+	t.it('a prefix length with a leading zero keeps nothing down', () => {
+		t.assert_deep_equal(on(wg, { allowed_ips: [ '10.0.0.0/08' ], route_allowed_ips: '1' }), []);
+	});
+
+	// A zone that names no interface of the router is no error of the section, so only the sweep and
+	// the apply see it. The errors of a write already block every write of the peer.
+	t.it('the sweep lists a peer that keeps its interface down, with the fields and no value', () => {
+		let h = handler.make(wgp);
+		let sweep = (a, iface) => {
+			let c = world(a);
+			if (iface != null) c._state.uci.network.wg1 = { ...c._state.uci.network.wg1, ...iface };
+			return map(h.sweep(c), (f) => map(f.errors, (e) => [ e.field, e.code, e.message ]));
+		};
+		let r = sweep({ allowed_ips: [ '10.42.0.2/33' ], endpoint_host: 'fe80::1%nosuchdev0', endpoint_port: '51820' });
+		t.assert_equal(length(r), 1);
+		t.assert_deep_equal(r[0][length(r[0]) - 1],
+		                    [ '', 'conflict', 'keeps the interface wg1 down: wg refuses the config of the whole interface for allowed_ips[0], endpoint_host of this peer, so the interface does not come up at its next start. Fix or disable this peer' ]);
+		t.assert_deep_equal(sweep({ endpoint_host: 'fe80::1%nosuchdev0', endpoint_port: '51820' })[0][0][2],
+		                    'keeps the interface wg1 down: wg refuses the config of the whole interface for endpoint_host of this peer, so the interface does not come up at its next start. Fix or disable this peer');
+		t.assert_deep_equal(sweep({ endpoint_host: 'fe80::1%nosuchdev0', endpoint_port: '51820' }, { disabled: '1' }), []);
+		t.assert_deep_equal(sweep({ endpoint_host: 'fe80::1%nosuchdev0', endpoint_port: '51820', disabled: '1' }), []);
+		t.assert_deep_equal(sweep({}), []);
 	});
 });
 
