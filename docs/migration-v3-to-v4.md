@@ -1,10 +1,10 @@
 # Migration v3 to v4
 
 What changes between the v3 and v4 majors of the API, and what a client must do.
-The deprecation window of each change ran from the 3.x release that announced
-it, not from v4. Each section names that release, and the `docs/deprecations.md`
-of that release holds the announcement. The last section lists the reads that
-change at the upgrade, and what that does to ETags and to a plan made on 3.x.
+The removals and renames were announced in 3.x. The other changes are listed
+here, and a section names the 3.x release that announced its change when one
+did. The section "Reads that change at the upgrade" lists those reads, and what
+that does to ETags and to a plan made on 3.x.
 
 ## The mount moves to `/api/v4`
 
@@ -234,7 +234,7 @@ decimal or octal, such as `08`, blocks every write, since mwan3, iptables and
 `ip` cannot use it. A write that changes the encryption of an SSID to an EAP
 mode needs a key, and one that sends back the stored mode does not.
 
-Three refusals were not announced in 3.5.0. A `mwan3/rules` section with
+v4 adds three more refusals. A `mwan3/rules` section with
 `src_port` or `dest_port` and a `proto` of `tcp` or `udp` in another case, such
 as `TCP`, answers 422 `conflict` on `proto`, because mwan3 then drops the ports
 and the rule matches every port. A `firewall/zones.name` that starts with a
@@ -242,11 +242,9 @@ digit or a dash, such as `1wan`, answers 422 `invalid_format`, because fw4 skips
 such a zone. A stored one of these two blocks every write of its section. A
 `mwan3/rules.proto` of `dccp` or `ipcomp` answers 422 `invalid_format`, because
 iptables 1.8.10 and musl do not know them, and mwan3 then loads none of the
-rules of the family. A stored one reads as it is. 3.x took all three. They use
-the carve-out of `docs/versioning.md` for a tightening that refuses a payload
-that produced broken state. A `mwan3/rules.proto` name in any case,
-`mobility-header` and an octal number with more leading zeros, such as `000017`,
-pass as in 3.x.
+rules of the family. A stored one reads as it is. 3.x took all three. A
+`mwan3/rules.proto` name in any case, `mobility-header` and an octal number
+with more leading zeros, such as `000017`, pass as in 3.x.
 
 Some reads now give the value as the daemon parses it: a firewall policy,
 target, `reflection_src` or family as fw4 reads it, an option of several words
@@ -357,11 +355,10 @@ reads the rate as fw4 applies it, always with the whole unit, so `25/m` reads
 `25/minute` (announced in 3.5.0, #408).
 
 A stored rate without a unit, such as `25`, read as the integer 25 in 3.x. v4
-reads it as the string `25/second`, and the response declares a string. The
-3.5.0 notice did not cover this change of type. Every rate reads as a string
-so that a Terraform client can type the field, because Terraform has no type
-that is an integer or a string. A client generated from the schema must take a
-string there.
+reads it as the string `25/second`, and the response declares a string. Every
+rate reads as a string so that a Terraform client can type the field, because
+Terraform has no type that is an integer or a string. A client generated from
+the schema must take a string there.
 
 A write takes such a string, or an integer that is a rate per second. The
 kernel refuses a limit whose rate plus burst overflows 64 bits, such as a rate
@@ -371,8 +368,7 @@ the burst overflow 64 bits. fw4 then applies no ruleset while `syn_flood` is
 on. v4 refuses such a write with 422 `out_of_range` on `synflood_rate`. A
 stored one is an error of the section that blocks every write that does not
 fix it, and the sweep marks it live while `syn_flood` is on. 3.x took such a
-write. This refusal uses the carve-out of `docs/versioning.md` for a tightening
-that refuses a payload that produced broken state.
+write.
 
 A `firewall/defaults.synflood_burst` reads as fw4 parses it, so `0x10` reads 16
 and `1e3` reads 1000, where 3.x read null.
@@ -381,10 +377,9 @@ LuCI's zones form writes `synflood_protect` and removes `syn_flood`. fw4 applies
 `synflood_protect`, and reads `syn_flood` only when uci holds no
 `synflood_protect`. 3.x read only `syn_flood`, so after LuCI turned the
 protection on, `firewall/defaults.syn_flood` read `false` while fw4 protected.
-v4 reads the value that fw4 applies. The 3.5.0 notice did not cover this read.
-A plan that holds `false` from a 3.x read of such a section shows a diff, and
-its apply turns the protection off. Set it to `true` in the plan to keep the
-protection.
+v4 reads the value that fw4 applies. A plan that holds `false` from a 3.x read
+of such a section shows a diff, and its apply turns the protection off. Set it
+to `true` in the plan to keep the protection.
 
 A write of true now stores `synflood_protect '1'` and removes `syn_flood`, as
 LuCI does. A write of false removes `synflood_protect` and stores `syn_flood
@@ -468,13 +463,12 @@ whole interface at its next start for a name that does not exist. A write that
 sends such a name for an enabled peer with a key answers 422 `conflict` on
 `endpoint_host`, before its commit: a name for which busybox's nslookup gets
 NXDOMAIN, or a reply with no address, such as one that holds only a CNAME. This
-refuses a payload that 3.x stored on a down interface, under the carve-out of
-`docs/versioning.md` for a payload that produced broken state no caller can rely
-on: the interface did not come up again. A lookup that fails for a time, as on a
-timeout or a SERVFAIL, is not refused, because wg retries the name and the
-interface comes up once it resolves. A host that inet_aton reads as an IPv4
-address, such as `192.168.1.01`, `10.1` or `0x0a000001`, asks no resolver,
-because wg reads it as an address too.
+refuses a payload that 3.x stored on a down interface, which then did not come
+up again. A lookup that fails for a time, as on a timeout or a SERVFAIL, is not
+refused, because wg retries the name and the interface comes up once it
+resolves. A host that inet_aton reads as an IPv4 address, such as
+`192.168.1.01`, `10.1` or `0x0a000001`, asks no resolver, because wg reads it
+as an address too.
 
 On both platforms, the proto handler gives wg an IPv6 address as it stands, and
 musl's getaddrinfo reads its %zone. It takes digits up to 4294967295 on any
@@ -486,15 +480,14 @@ peer too, and a stored one blocks every write of its peer. A write that sends a
 zone that names no interface of the router, such as `fe80::1%nosuchdev`, for an
 enabled peer with a key, answers 422 `conflict`. 3.x took both. On an up
 interface, the write answered 500 after the restore. A down interface did not
-come up at its next start. This uses the same carve-out.
+come up at its next start.
 
 On OpenWrt main, the ucode proto handler gives wg a host of only digits and dots
 as it stands. wg refuses the config of the whole interface for one that
 inet_aton does not read, such as `10.0.0.256` or `1.2.3.4.5`. A write refuses
 such a host with 422 `invalid_format` on `endpoint_host`, on a disabled peer
 too, and a stored one blocks every write of its peer until a write replaces it.
-This refuses a payload that 3.x stored on a down interface, under the same
-carve-out.
+This refuses a payload that 3.x stored on a down interface.
 
 The handler leaves out the endpoint of any other host for which busybox's
 nslookup prints no address, and keeps the peer. The write answers 200, sets the
@@ -606,7 +599,4 @@ without an error. v4 gives a page that ends on an unmanaged section the cursor
 `c_<id>.<hash>` and answers 400 `invalid_cursor` when an item up to that section
 changed. A cursor `c_<id>` of an unmanaged section, which 3.x gave or a client
 builds, answers 400 `invalid_cursor` too. Follow `X-Next-Cursor` or the `Link`
-as they come, and read the list again from the first page after a 400. 3.x did
-not announce this change. It uses the tightening carve-out of
-`docs/versioning.md`, because a client could not tell whether the page of such
-a cursor skipped an item.
+as they come, and read the list again from the first page after a 400.
