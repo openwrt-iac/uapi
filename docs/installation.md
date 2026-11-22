@@ -3,9 +3,20 @@
 ## Prerequisites
 
 A router running **OpenWrt main**, or the next OpenWrt release cut from it.
-uapi 4.x needs a netifd that carries `e97e36f` (2026-07-16). OpenWrt 25.12 does
-not carry it, so apk does not install 4.x there, and a 25.12 router stays on
-uapi 3.5.0. `docs/migration-v3-to-v4.md` says how to move such a router to 4.x.
+uapi 4.x needs a netifd that carries `e97e36f`, and the package says so with
+the dependency `netifd>=2026.07.17` (the date of that commit). OpenWrt 25.12
+ships `netifd-2026.02.26~cbb83a18-r2`, so apk does not install 4.x there:
+
+- `apk add` of a 4.x APK prints `ERROR: unable to select packages:
+  netifd-2026.02.26~cbb83a18-r2: breaks: uapi-<version>-r1[netifd>=2026.07.17]`
+  and changes nothing.
+- A 25.12 router that runs 3.x from the project feed keeps 3.x on
+  `apk upgrade` and prints nothing about it. `apk list --upgradable` still
+  shows 4.x.
+- A new 25.12 router cannot `apk add uapi` once the feed serves only 4.x. It
+  installs the 3.5.0 APK from the GitHub Release of v3.5.0.
+
+`docs/migration-v3-to-v4.md` says how to move such a router to 4.x.
 Pulled-in dependencies are all in OpenWrt's `base` feed: `uhttpd`,
 `uhttpd-mod-ucode`, `ucode`, the `ucode-mod-{ubus,uci,fs,digest,log,io}` mods,
 and `rpcd-mod-iwinfo` (for the wireless `runtime` block). The package's
