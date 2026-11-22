@@ -300,6 +300,11 @@ A plan that holds `mode = "ap"` from a 3.x read of such a section now writes
 With no `encryption` stored, that access point is open. Before you apply, set
 `mode` to `null` to keep the SSID down, or set its `encryption` and `key`.
 
+For Terraform, a plan refreshes first, so a `mode` that the configuration does
+not set reads null, and the apply writes nothing for it. Only a configuration
+that sets `mode = "ap"` writes it. Remove `mode` from such a configuration to
+keep the SSID down.
+
 A section without a mode no longer blocks a write that turns its radio on, and
 the validation sweep marks its errors `live: false`. A write to it is still
 checked as mode `ap`.
@@ -337,17 +342,30 @@ with no enum.
 
 ## Two firewall reads say what fw4 applies
 
-fw4 gives a `firewall/zones` section without `input`, `output` or `forward` the
-policy of `firewall/defaults`, and DROP when that section has none. 3.x read
-`REJECT` for it. v4 reads `null` (announced in 3.5.0, #408), and the schemas
-declare null and no `default` for the three fields. `firewall/defaults` gives
-the policy that fw4 applies. A write of the read, or a null, stores no policy,
-so the zone keeps the policy of `firewall/defaults`. A plan that holds `REJECT`
-from a 3.x read now writes it, and the zone then rejects where it took the
-policy of `firewall/defaults` before. Set the field to null in the plan to keep
-that policy. This differs from the 3.5.0 notice, which said that v4 reads what
-fw4 applies: fw4 applies the policy that `firewall/defaults` holds, so the zone
-reads null, and `firewall/defaults` reads the policy.
+fw4 gives a `firewall/zones` section without `input`, `output_policy` or
+`forward` the policy of `firewall/defaults`, and DROP when that section has
+none. 3.x read `REJECT` for it. v4 reads `null` (announced in 3.5.0, #408), and
+the schemas declare null and no `default` for the three fields.
+`firewall/defaults` gives the policy that fw4 applies. A write of the read, or a
+null, stores no policy, so the zone keeps the policy of `firewall/defaults`. A
+plan that holds `REJECT` from a 3.x read now writes it, and the zone then
+rejects where it took the policy of `firewall/defaults` before. Set the field to
+null in the plan to keep that policy. This differs from the 3.5.0 notice, which
+said that v4 reads what fw4 applies: fw4 applies the policy that
+`firewall/defaults` holds, so the zone reads null, and `firewall/defaults` reads
+the policy.
+
+The three fields carry `x-uapi-clear-on-omit`. A PUT that leaves one out removes
+the option, as in 3.x, and the zone takes the policy of `firewall/defaults`
+again. A PATCH that leaves one out keeps it.
+
+For Terraform, a plan refreshes first, so a policy that the zone does not set
+reads null, and the apply writes nothing for it. Only a policy that the
+configuration sets writes its value, so a Terraform user edits nothing for this
+change of the read. To put a zone back on the policy of `firewall/defaults`,
+remove the attribute from the configuration. A provider that reads the flag
+also removes a policy that the zone stores and the configuration does not set,
+so set each policy that the zone must keep.
 
 fw4 takes a `firewall/defaults.synflood_rate` with a unit, such as
 `25/minute`, or a prefix of the unit, such as `25/m`. 3.x read null for it. v4
@@ -573,6 +591,14 @@ A plan that sets one of these fields to its 3.x read shows a diff after the
 upgrade. Its apply writes that value, and the daemon then does what the 3.x read
 said, which it did not do before. Refresh the state and check each such diff
 before you apply. The sections above name the cases that matter most.
+
+For Terraform, a plan refreshes first. A field that the configuration does not
+set takes the new read, and the apply writes nothing for it. Only a field that
+the configuration sets writes its value. So a Terraform user edits nothing for a
+read that changed, unless the configuration sets that field. A field that
+carries `x-uapi-clear-on-omit`, such as a policy of `firewall/zones`, is the
+exception: when the configuration does not set it, the apply removes the
+option that uci holds.
 
 The spec `default` of eight fields changes with the read: `system.log_remote` is
 `true`, `usteer/config.syslog` and `sqm/queues.enabled` are `false`,

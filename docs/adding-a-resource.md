@@ -208,8 +208,9 @@ both):
 
 1. **fromUci shape**: the field's assignment in fromUci's returned dict must be
    exactly `<jsonkey>: section.<ucikey> ?? null`, `<jsonkey>:
-   as_list_or_null(section.<ucikey>)` or `<jsonkey>:
-   as_word_list_or_null(section.<ucikey>)`, the three shapes that read an absent
+   as_list_or_null(section.<ucikey>)`, `<jsonkey>:
+   as_word_list_or_null(section.<ucikey>)` or `<jsonkey>:
+   values.fw_enum(section.<ucikey>, ...)`, the four shapes that read an absent
    key as null. No plain `as_list()` (returns `[]` for null, not null itself),
    no derivation, no aliasing to another field. The Terraform plugin-framework
    rejects the apply with "Provider produced inconsistent result after apply" if
@@ -217,8 +218,9 @@ both):
    other than null.
 
 2. **Nullable type**: the `type:` declaration must include `"null"` (e.g. `type:
-   ["string", "null"]`). The provider sends explicit JSON null to clear; a
-   non-nullable type fails the spec itself.
+   ["string", "null"]`), or the property carries `x-uapi-read-nullable`, which
+   adds null to its type and its enum in both halves. The provider sends
+   explicit JSON null to clear, and a non-nullable type fails the spec itself.
 
 Safe (passes the lint):
 
@@ -251,8 +253,11 @@ Unsafe (lint fails):
 Conservative scope: only annotate when there is **evidence** a field is
 leftover-prone (e.g. survives an adopt + proto switch). The set today is
 `network/interfaces` `netmask`, `broadcast`, `gateway`, `ip6gw` and
-`ip6prefix`. `ip6prefix` is an array, and it qualifies because a list field
-reads `null` when uci does not hold it (`docs/deprecations.md`).
+`ip6prefix`, and `firewall/zones` `input`, `output_policy` and `forward`.
+`ip6prefix` is an array, and it qualifies because a list field reads `null`
+when uci does not hold it (`docs/deprecations.md`). A zone that sets no policy
+takes the one of `firewall/defaults`, and without the flag a Terraform user who
+removes the attribute keeps the old policy.
 
 A field cannot be both `default:` and `"x-uapi-clear-on-omit": true`. Defaulted
 fields would cause perpetual non-converging diffs if the provider treats them as

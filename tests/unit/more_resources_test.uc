@@ -43,6 +43,26 @@ t.describe('firewall.zones', () => {
 		t.assert_equal(c._state.uci.firewall.z_lan.input, null);
 	});
 
+	// The three carry x-uapi-clear-on-omit, so the Terraform provider leaves a removed attribute
+	// out of its PUT, and that has to put the zone back on the policy of firewall/defaults.
+	t.it('a PUT that leaves a policy out removes it, and a PATCH that leaves it out keeps it', () => {
+		let zh = handler.make(zones, { tx: { acquire: () => ({}), release: () => null,
+		                                     reload: () => null, check_services: () => null } });
+		let ctx = { request_id: "01hx0000000000000000000000" };
+		let c = ubus.stub({ uci: { firewall: {
+			z_lan: { '.type': 'zone', '.anonymous': false, name: 'lan',
+			         input: 'ACCEPT', output: 'DROP', forward: 'REJECT' },
+		} } });
+		t.assert_equal(zh.patch(c, ctx, 'z_lan', { masq: true }).status, 200);
+		let stored = c._state.uci.firewall.z_lan;
+		t.assert_deep_equal([ stored.input, stored.output, stored.forward ], [ 'ACCEPT', 'DROP', 'REJECT' ]);
+		t.assert_equal(zh.replace(c, ctx, 'z_lan', { name: 'lan' }).status, 200);
+		stored = c._state.uci.firewall.z_lan;
+		t.assert_deep_equal([ stored.input, stored.output, stored.forward ], [ null, null, null ]);
+		let read = zh.get_one(c, ctx, 'z_lan').body;
+		t.assert_deep_equal([ read.input, read.output_policy, read.forward ], [ null, null, null ]);
+	});
+
 	t.it('toUci preserves network list', () => {
 		let u = zones.toUci({ name: 'lan', input: 'ACCEPT', network: ['lan', 'lan2'] });
 		t.assert_deep_equal(u.network, ['lan', 'lan2']);
