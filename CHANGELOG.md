@@ -393,6 +393,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   precondition of the request refused, and a retry with the same key created a
   second section. The spec now declares the pattern on `?idempotency_key=`, and
   `?request_id=` on every operation. (#431)
+- **A feed write answers when the feed host does not.** `POST /packages/feeds`
+  runs `apk update` after it writes the feed file, and apk waits 60 s for a
+  fetch that makes no progress. With a host that did not answer, uhttpd killed
+  the request at its 60 s timeout. The client got no answer, and the apk that
+  ran on kept its database lock, so the next apk write answered 500. uapi now
+  passes `reload_budget_s` of `config limits` (20 s unless set) to apk as
+  `--timeout`, and kills `apk update` when it runs longer. The request then
+  answers 200 with the feed written, and `update_status` says that `apk update`
+  did not finish within the bound and was killed. `apk add` and `apk del` get
+  the same `--timeout` but are not killed, because a kill can leave a package
+  half installed. An install whose refresh was killed does not try the add
+  again. (#447)
 
 ## [3.5.0] - 2026-11-21
 

@@ -6,13 +6,14 @@ let fs = require('fs');
 // responses that gained it, or whose schema did not require it, and dhcp_leases_test.uc pins the
 // items of make_collection.
 
-function ctx() { return { request_id: "01hx0000000000000000000000" }; }
+function ctx() { return { request_id: "01hx0000000000000000000000", limits: { reload_budget_s: 20 } }; }
 
 const DIR = '/tmp/uapi-test-runtime';
 const KEY_A = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl a@x';
 const KEY_B = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb b@x';
 
-// /etc/dropbear and /etc/apk/repositories.d live under DIR, and the global lock beside it.
+// /etc/dropbear and /etc/apk/repositories.d live under DIR, and the global lock beside it. apk update
+// runs through run_bounded, which the stub answers as a refresh that worked.
 function at(path) {
 	if (path == '/var/lock/uapi.lock') return DIR + '.lock';
 	return replace(path, /^\/etc\/(dropbear|apk\/repositories\.d)/, DIR);
@@ -27,7 +28,7 @@ const APK = {
 function with_stubbed(names, fn) {
 	fs.mkdir(DIR);
 	for (let f in fs.lsdir(DIR)) fs.unlink(DIR + '/' + f);
-	let mod = t.load_with_fs({ ...fs,
+	let fsx = { ...fs,
 		readfile: (p) => fs.readfile(at(p)),
 		stat: (p) => fs.stat(at(p)),
 		open: (p, m) => fs.open(at(p), m),
@@ -36,7 +37,10 @@ function with_stubbed(names, fn) {
 		rename: (a, b) => fs.rename(at(a), at(b)),
 		lsdir: (p) => fs.lsdir(at(p)),
 		popen: (cmd) => ({ read: () => APK[cmd] ?? "", close: () => 0 }),
-	}, [ 'transaction', 'non_uci', ...names ]);
+	};
+	let tx = t.load_with_fs(fsx, [ 'transaction' ]);
+	let mod = t.load_with({ fs: fsx, transaction: { ...tx, run_bounded: () => ({ code: 0, output: "" }) } },
+	                      [ 'non_uci', ...names ]);
 	let caught = null;
 	try { fn(mod); } catch (e) { caught = e; }
 	for (let f in fs.lsdir(DIR)) fs.unlink(DIR + '/' + f);

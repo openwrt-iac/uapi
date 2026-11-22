@@ -25880,7 +25880,8 @@
 						"type": "boolean"
 					},
 					"update_status": {
-						"type": "string"
+						"type": "string",
+						"description": "Set by a create only. `ok` when the `apk update` after the write refreshed every feed. Otherwise why it failed, or that it did not finish within `reload_budget_s` of `config limits` and was killed. The feed file is written in every case."
 					},
 					"runtime": {
 						"type": "object",

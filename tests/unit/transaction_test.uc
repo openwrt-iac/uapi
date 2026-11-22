@@ -1384,7 +1384,7 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		fs.writefile(dir + "/dnsmasq", "#!/bin/sh\necho 'dnsmasq: reading'; exec sleep 5\n");
 		fs.chmod(dir + "/dnsmasq", 0755);
 		let start = clock(true);
-		let r = tx.run_test([ dir + "/dnsmasq", "--test" ], 300);
+		let r = tx.run_bounded([ dir + "/dnsmasq", "--test" ], 300);
 		let end = clock(true);
 		system("rm -rf " + dir);
 		let ms = (end[0] - start[0]) * 1000 + (end[1] - start[1]) / 1000000;
@@ -1494,7 +1494,7 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		system(sprintf("rm -rf %s; mkdir -p %s", dir, dir));
 		fs.writefile(dir + "/dnsmasq", "#!/bin/sh\ncat >/dev/null\n");
 		fs.chmod(dir + "/dnsmasq", 0755);
-		fs.writefile(dir + "/run.uc", sprintf("require('fs').writefile(%J, '' + require('transaction').run_test([ %J ], 2000).code);\n",
+		fs.writefile(dir + "/run.uc", sprintf("require('fs').writefile(%J, '' + require('transaction').run_bounded([ %J ], 2000).code);\n",
 		                                      dir + "/code", dir + "/dnsmasq"));
 		let stdin = fs.popen("ucode -L src/lib " + dir + "/run.uc", "w");
 		for (let i = 0; i < 40 && !fs.readfile(dir + "/code"); i++) sleep(100);
