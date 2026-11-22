@@ -666,3 +666,14 @@ changed. A cursor `c_<id>` of an unmanaged section, which 3.x gave or a client
 builds, answers 400 `invalid_cursor` too. Follow `X-Next-Cursor` or the `Link`
 as they come. After a 400 on a page after the first, read the list again from
 the first page.
+
+## A DELETE of `uhttpd/instances/main` answers 422
+
+3.x refused a PUT or PATCH of `main` that removed uapi's own `ucode_prefix`
+entry, but a DELETE of `main` removed the section with the entry and answered
+204. The next request then got a 404 from uhttpd. v4 answers 422
+`validation_failed` with code `conflict` on `ucode_prefix` for a DELETE of
+`main` while it holds the entry, also in `/uapi/batch`, and deletes nothing. A
+DELETE of another instance, or of a `main` without the entry, works as before.
+A client that manages `main` and deletes it at teardown, as a Terraform destroy
+does, gets the 422. Remove `main` from its state instead.

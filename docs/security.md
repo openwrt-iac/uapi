@@ -56,12 +56,12 @@ What uapi defends against, what it doesn't, and what the operator should do.
     `429 too_many_requests` with `Retry-After`. Default is 100/s burst 200
     per token; tunable via `/etc/config/uapi`.
 11. **uhttpd self-lockout.** `uhttpd/instances` refuses a PATCH or a PUT on
-    the `main` instance that would strip uapi's own `ucode_prefix` entry, with
-    `422 conflict`, instead of leaving uapi unreachable. The guard has limits
-    ([#441](https://github.com/openwrt-iac/uapi/issues/441)): a `DELETE
-    /uhttpd/instances/main`, and a `/raw/uhttpd` write that removes the section
-    or the entry, still remove the mount. The next request then gets a 404 from
-    uhttpd.
+    the `main` instance that would strip uapi's own `ucode_prefix` entry, and a
+    DELETE of `main` while it holds that entry, with `422 conflict`, instead of
+    leaving uapi unreachable. A `/raw/uhttpd` write runs no such check
+    ([#441](https://github.com/openwrt-iac/uapi/issues/441)). A raw write that
+    removes the section or the entry still removes the mount, and the next
+    request then gets a 404 from uhttpd. `docs/raw.md` says why.
 12. **Network self-lockout.** Advisory rather than a refusal, because unlike
     item 11 there is a legitimate version of the write: renumbering the
     management VLAN or moving to an out-of-band path. A `network/interfaces`

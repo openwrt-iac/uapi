@@ -80,6 +80,14 @@ function validate(json, conn, id) {
 	return errs;
 }
 
+function validate_remove(json) {
+	if (json.id != "main" || !uapi_prefix_present(json)) return [];
+	return [ { field: "ucode_prefix", code: "conflict",
+	           message: sprintf(
+	             "uhttpd 'main' instance holds uapi's ucode_prefix entry %J. Deleting it would make uapi unreachable",
+	             UAPI_PREFIX) } ];
+}
+
 return {
 	package: "uhttpd",
 	type: "uhttpd",
@@ -87,6 +95,7 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	validate_remove: validate_remove,
 	openapi_singular: "uhttpd instance",
 	schema_properties: {
 		listen_http:     { type: ["array", "null"], items: { type: "string", "x-uapi-write": { pattern: "^(\\[[0-9A-Fa-f:.]+\\]|[0-9A-Fa-f:.]*):[0-9]+$" } },
@@ -100,7 +109,8 @@ return {
 		                   description: "Path to TLS key file" },
 		cgi_prefix:      { type: ["string", "null"],
 		                   description: "URL prefix served as CGI" },
-		ucode_prefix:    { type: ["array", "null"], items: { type: "string" } },
+		ucode_prefix:    { type: ["array", "null"], items: { type: "string" },
+		                   description: "ucode handlers, each `<url prefix>=<script>`. On `main`, a PUT or PATCH without uapi's own entry, and a DELETE while `main` holds it, answer 422 `conflict` on this field" },
 		lua_prefix:      { type: ["array", "null"], items: { type: "string" } },
 		index_page:      { type: ["array", "null"], items: { type: "string" } },
 		error_page:      { type: ["string", "null"],

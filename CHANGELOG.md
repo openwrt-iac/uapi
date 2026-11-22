@@ -20,6 +20,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: a DELETE of `uhttpd/instances/main` that holds uapi's mount
+  answers 422.** A PUT or PATCH of `main` that removes uapi's own
+  `ucode_prefix` entry was already refused. A DELETE of `main` removed the
+  section with the entry and answered 204, and the next request got a 404 from
+  uhttpd. Such a DELETE now answers 422 `validation_failed` with code
+  `conflict` on `ucode_prefix`, also in `/uapi/batch`, and deletes nothing. A
+  DELETE of another instance, or of a `main` without the entry, works as
+  before. A `/raw/uhttpd` write runs no such check, and `docs/raw.md` says why.
+  Migration note in `docs/migration-v3-to-v4.md`. (#454)
 - **BREAKING: the mount moves from `/api/v3` to `/api/v4`.** One installation
   serves one API major. The upgrade removes the `/api/v3`, `/api/v2` and
   `/api/v1` entries from `ucode_prefix` of `uhttpd.main` and adds the `/api/v4`

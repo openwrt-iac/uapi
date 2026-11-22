@@ -61,6 +61,7 @@ return {
 
     // Optional, less common:
     merge_for_patch: function(existing_json, body) { ... },  // nested-object merge
+    validate_remove: function(json, conn) { ... return []; },  // judges a DELETE over the read view of the section, after the If-Match check. An error answers 422 validation_failed and nothing is deleted. Only uhttpd/instances declares it, to keep uapi's mount on `main`.
     read_runtime:    function(section, conn) { ... },  // a runtime that a GET reads and a write does not. See "Runtime that only a GET reads" below.
     type_predicate:  function(t) { ... },  // dynamic-type resources (e.g. wireguard_<iface>)
     create_type:     function(body) { ... },

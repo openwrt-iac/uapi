@@ -130,7 +130,7 @@
 		},
 		{
 			"name": "Uhttpd / Instances",
-			"description": "Per-instance HTTP server config (`config uhttpd`). Self-lockout protection on `main`."
+			"description": "Per-instance HTTP server config (`config uhttpd`). The `main` instance keeps uapi's own `ucode_prefix` entry."
 		},
 		{
 			"name": "Uhttpd / Certs",
@@ -35787,7 +35787,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "ucode handlers, each `<url prefix>=<script>`. On `main`, a PUT or PATCH without uapi's own entry, and a DELETE while `main` holds it, answer 422 `conflict` on this field"
 					},
 					"max_requests": {
 						"type": [
@@ -35945,7 +35946,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "ucode handlers, each `<url prefix>=<script>`. On `main`, a PUT or PATCH without uapi's own entry, and a DELETE while `main` holds it, answer 422 `conflict` on this field"
 					},
 					"max_requests": {
 						"type": [

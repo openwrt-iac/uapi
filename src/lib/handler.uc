@@ -1097,6 +1097,11 @@ function make(resource, opts) {
 				if (pc != null)
 					return { ok: false, kind: "precondition_failed",
 					         message: pc.body.message };
+				if (resource.validate_remove != null) {
+					let errs = resource.validate_remove(existing_view, c);
+					if (length(errs) > 0)
+						return { ok: false, kind: "validation", errors: errs };
+				}
 				mgmt_device = mgmt_device_of(resource, null, existing_view);
 				c.uci_delete(p, id);
 				collect_kernel_ops(kops, "remove", null, existing['.type'], existing);
