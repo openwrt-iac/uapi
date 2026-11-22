@@ -122,13 +122,13 @@ minors while the major is in flight.
 - Rebase the preparation branch onto `main` after every merge into `main`,
   so breaking PRs start from a current base and conflicts stay small.
 - Until the release, the preparation branch still serves the current API
-  prefix. The mount move is the last commit before the rc tag.
+  prefix. The mount move is the last commit before the tag.
 - At release time: cut the maintenance branch of the old major from `main`
   (`v3` for 3.x), with a copy of the `main` ruleset that has no bypass actor.
   Rebase the preparation branch onto `main` one last time, merge it into
-  `main`, delete it and its ruleset, then run the rc flow below. From then, a
-  fix of the old major lands on its maintenance branch by PR, and is carried to
-  `main` when it applies there. The old major's releases are tagged on its
+  `main`, delete it and its ruleset, then run the release flow below. From then,
+  a fix of the old major lands on its maintenance branch by PR, and is carried
+  to `main` when it applies there. The old major's releases are tagged on its
   maintenance branch. After such a tag, copy the new section of its
   `CHANGELOG.md` into the one of `main`, and take out of the `[Unreleased]`
   of `main` each entry that the section carries, so the released sections of
@@ -140,11 +140,16 @@ from 3.5.0 on.
 
 ## Release flow
 
-### Major versions ship as `-rc` first
+### No release candidate while uapi has few users
 
-For any MAJOR bump, tag `vX.0.0-rc1` (or `-rc2`, etc.) BEFORE the final
-`vX.0.0`. The release-apk workflow auto-detects `-rc/-alpha/-beta/-pre`
-and marks the GitHub release as a prerelease (its
+uapi cuts no release candidate while it has few declared users. Before a
+major, the maintainers of the downstream clients, the Terraform provider and
+uapi-mcp, review the migration guide and the spec of `main`. uapi fixes what
+they report before the tag. An RC makes sense again when uapi is in the
+official OpenWrt package feeds and has outside users.
+
+The RC mechanism stays for that time. The release-apk workflow auto-detects
+`-rc/-alpha/-beta/-pre` and marks the GitHub release as a prerelease (its
 `case "$TAG" in *-rc*|*-alpha*|*-beta*|*-pre*) PRE=--prerelease ;;` block).
 
 **RCs do NOT publish to the apk feed.** The feed aggregator at
@@ -161,23 +166,12 @@ install one download the APK from the release page and
 `apk add --allow-untrusted /tmp/uapi-<rc>.apk` deliberately. Same
 path the maintainer uses to dogfood the RC on the live router.
 
-Announce the RC explicitly to known downstream consumers - the
-`openwrt-iac/uapi` Terraform provider author, anyone with a published
-client - and give them a ~1-2 week window to file wire-surface
-feedback. Promote `rc<N>` to the final `vX.0.0` only after the window
-closes with no fundamental issues outstanding. v2.0.0 went straight to
-stable and immediately surfaced material provider-side feedback; this
-rule exists to convert that "post-release scramble" into "pre-release
-polish".
-
-Skip RCs for MINOR or PATCH unless the change set is unusually large.
-
 Per-release steps (operator does these in order). A 3.x release takes the
 same steps on `v3`: its PR targets `v3`, its tag goes on `v3`, and each step
 that names `main` names `v3` for it.
 
-1. **Cut a release candidate branch** if the release is substantive
-   (`v2.0.0-rc1`). For patch releases, just work on a topic branch.
+1. **Cut a release branch**, `release/v<version>`. For a major, do the
+   downstream review above first.
 2. **Update `VERSION`** to the target value. **Regenerate** the OpenAPI:
    `make openapi`. Commit.
 3. **Close the changelog section.** Run `scripts/changelog-missing.sh
@@ -185,9 +179,7 @@ that names `main` names `v3` for it.
    tagged on (`main` for 4.x, `v3` for 3.x), and fix whatever it lists. On
    that branch itself the script takes it as the default, and on a topic
    branch it refuses to guess. Then rename `## [Unreleased]`
-   to `## [x.y.z] - <date>`, and put an empty `## [Unreleased]` above it.
-   Do this for `rc` releases too. A final release after RCs gets a short
-   section of its own that points at the RC sections, as 3.0.0 does. The
+   to `## [x.y.z] - <date>`, and put an empty `## [Unreleased]` above it. The
    release PR takes the `changelog-not-needed` label, because it moves
    entries rather than adds one. Commit.
 4. **Run the full test suite locally**: `make test coverage`. The CI runs
@@ -349,6 +341,9 @@ Before tagging:
 
 - [ ] Candidate sweep done for this version number (see above), and its
   outcome noted even if nothing was eligible.
+- [ ] For a major: the maintainers of the Terraform provider and uapi-mcp
+  reviewed the migration guide and the spec of `main`, and what they reported
+  is fixed.
 - [ ] `VERSION` matches the target tag.
 - [ ] `build/openapi.json`'s `info.version` matches (`make openapi-check`).
 - [ ] `scripts/changelog-missing.sh <previous-tag> <line>` prints nothing
