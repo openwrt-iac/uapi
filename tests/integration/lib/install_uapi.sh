@@ -1,5 +1,7 @@
 SSH="tests/vm/ssh.sh"
-UAPI_PREFIX_ENTRY="/api/v3=/usr/share/uapi/main.uc"
+UAPI_PREFIX_ENTRY="/api/v4=/usr/share/uapi/main.uc"
+# A standing box that ran the 3.x suite still mounts main.uc at /api/v3.
+UAPI_OLD_PREFIX_ENTRY="/api/v3=/usr/share/uapi/main.uc"
 
 # Everything the box runs. Named once so the push and the fingerprint below
 # cannot drift apart and start attesting to a different set of files than the
@@ -56,7 +58,7 @@ package_depends() {
 
 # Bootstrap: install deps, push every source file in a single tar stream and
 # the compact spec after it, wire the uhttpd prefix, restart. Each request to
-# /api/v3 forks a fresh ucode child that reads the on-disk source, so per-test
+# /api/v4 forks a fresh ucode child that reads the on-disk source, so per-test
 # isolation only needs a clean token store, not a re-copy of the source tree.
 #
 # The sentinel records WHICH tree is installed, not merely that something is.
@@ -117,6 +119,7 @@ bootstrap_uapi() {
 	# The fingerprint is written last and only on success, so a push that dies
 	# halfway leaves no claim about what is installed and the next run retries.
 	$SSH "touch /etc/uapi.insecure
+	      uci -q del_list uhttpd.main.ucode_prefix='$UAPI_OLD_PREFIX_ENTRY' || true
 	      uci -q del_list uhttpd.main.ucode_prefix='$UAPI_PREFIX_ENTRY' || true
 	      uci add_list uhttpd.main.ucode_prefix='$UAPI_PREFIX_ENTRY'
 	      uci commit uhttpd

@@ -8,7 +8,7 @@ OLD_APK=${2:-}
 [ -z "$OLD_APK" ] || [ -f "$OLD_APK" ] || { echo "no such file: $OLD_APK"; exit 1; }
 
 SSH="tests/vm/ssh.sh"
-URL=http://127.0.0.1:8080/api/v3
+URL=http://127.0.0.1:8080/api/v4
 
 fail() { echo "FAIL: $*"; exit 1; }
 
@@ -37,7 +37,7 @@ echo "--- apk add the uapi package ---"
 $SSH 'apk add --allow-untrusted /tmp/uapi.apk 2>&1 | tail -10'
 
 echo "--- post-install: uci-defaults should have wired the prefix and removed itself ---"
-$SSH 'uci show uhttpd.main.ucode_prefix' | grep -q '/api/v3=/usr/share/uapi/main.uc' \
+$SSH 'uci show uhttpd.main.ucode_prefix' | grep -q '/api/v4=/usr/share/uapi/main.uc' \
 	|| fail "ucode_prefix not wired by uci-defaults"
 $SSH 'test ! -e /etc/uci-defaults/99-uapi' || fail "uci-defaults script was not removed after running"
 
@@ -46,7 +46,7 @@ assert_store_kept "after a fresh install"
 $SSH 'cmp /etc/config/uapi /usr/share/uapi/config.template' || fail "/etc/config/uapi is not the template"
 $SSH 'uapi-token list' || fail "uapi-token list failed on a store without tokens"
 
-echo "--- /api/v3/healthz reachable ---"
+echo "--- /api/v4/healthz reachable ---"
 healthz=$(curl -sS -w "\n%{http_code}" "$URL/healthz")
 echo "$healthz"
 echo "$healthz" | tail -1 | grep -q '^200$' || fail "healthz expected 200"
@@ -87,7 +87,7 @@ $SSH 'mv /tmp/uapi.store /etc/config/uapi'
 
 echo "--- apk remove cleans up the uhttpd prefix ---"
 $SSH 'apk del uapi 2>&1 | tail -5'
-$SSH 'uci show uhttpd.main.ucode_prefix' 2>/dev/null | grep '/api/v3=' && fail "ucode_prefix still wired after removal" || true
+$SSH 'uci show uhttpd.main.ucode_prefix' 2>/dev/null | grep '/api/v4=' && fail "ucode_prefix still wired after removal" || true
 echo "  prefix removed"
 
 echo "--- /etc/config/uapi preserved across remove ---"
@@ -113,6 +113,7 @@ if [ -n "$OLD_APK" ]; then
 	$SSH 'apk add --allow-untrusted /tmp/uapi.apk 2>&1 | tail -5'
 	$SSH 'cmp /etc/config/uapi /tmp/uapi.conf.before' || fail "the upgrade changed /etc/config/uapi"
 	assert_store_kept "after the upgrade with tokens"
+	$SSH 'uci show uhttpd.main.ucode_prefix' | grep '/api/v3=' && fail "the upgrade left the /api/v3 mount" || true
 	upgraded=$(curl -sS -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $OLD_TOKEN" "$URL/system")
 	[ "$upgraded" = "200" ] || fail "a token of the old release expected 200 after the upgrade, got $upgraded"
 

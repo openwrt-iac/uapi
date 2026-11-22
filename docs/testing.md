@@ -664,7 +664,7 @@ bodies failed.
 
 Generated at build time (`make openapi`) from the inline `schema_properties`
 blocks in each resource module. Shipped as `/usr/share/uapi/openapi.json` and
-surfaced at `/api/v3/openapi.json`. The uapi release APK and the test VM carry
+surfaced at `/api/v4/openapi.json`. The uapi release APK and the test VM carry
 it without whitespace, and `make stage` fails unless that copy parses to the
 same JSON value as `build/openapi.json`, key order included (see
 `docs/packaging.md`). The uapi package of the OpenWrt packages feed copies

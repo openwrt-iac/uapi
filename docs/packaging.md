@@ -110,7 +110,7 @@ make stage     # populate build/openwrt/uapi/files/
 `tools/compact_json.py` writes the spec into the APK without whitespace, and the
 stage fails unless that copy parses to the same JSON value as
 `build/openapi.json`, with the keys in the same order. `main.uc` reads the file
-whole into every request process that serves `GET /api/v3/openapi.json`, and
+whole into every request process that serves `GET /api/v4/openapi.json`, and
 uhttpd does not compress it. The compact copy is about 30% smaller.
 `build/openapi.json` stays indented in the repository, because reviews read its
 diffs. The uapi package of the OpenWrt packages feed builds from the release
@@ -162,10 +162,10 @@ the script runs at first boot instead. That single run:
    the same moment is kept. On an existing store it only sets mode 0600, because
    `uapi-token create` up to 3.2.0 made a missing store 0644 and libuci keeps
    the mode of the file at each commit.
-2. Strips any older mount (`/api/v2=`, `/api/v1=`) from
+2. Strips any older mount (`/api/v3=`, `/api/v2=`, `/api/v1=`) from
    `uhttpd.main.ucode_prefix`, so an upgraded box does not serve the same
    `main.uc` under a prefix whose surface no longer exists.
-3. Adds `/api/v3=/usr/share/uapi/main.uc` unless it is already listed.
+3. Adds `/api/v4=/usr/share/uapi/main.uc` unless it is already listed.
 4. If step 2 or 3 changed something, commits the uhttpd config and, if uhttpd is
    enabled, reloads it.
 
@@ -199,7 +199,7 @@ restart, because the previous version keeps writing those directories until
 uhttpd stops it. A request of the previous version still in flight at the
 restart can write one again, and that one stays until a reboot.
 
-After that, `https://<router>/api/v3/healthz` is reachable if uhttpd is enabled.
+After that, `https://<router>/api/v4/healthz` is reachable if uhttpd is enabled.
 
 The post-install message, printed only when the token store holds no token yet
 (so upgrades and reinstalls stay quiet):
@@ -209,8 +209,8 @@ uapi installed. Bootstrap:
   1. Create a token:    uapi-token create --name <label> --scope '*:rw'
   2. Verify reachable:  uclient-fetch -qO - --no-check-certificate \
                           --header="Authorization: Bearer <token>" \
-                          https://127.0.0.1/api/v3/system
-  3. OpenAPI spec at:   /usr/share/uapi/openapi.json (also GET /api/v3/openapi.json)
+                          https://127.0.0.1/api/v4/system
+  3. OpenAPI spec at:   /usr/share/uapi/openapi.json (also GET /api/v4/openapi.json)
 
 Future upgrades from the project feed:
   uclient-fetch -qO /etc/apk/keys/uapi-feed.pub.pem \
@@ -228,7 +228,7 @@ Future upgrades from the project feed:
 3. Reloads uhttpd, if it is enabled.
 
 These three steps run BEFORE the handler file is deleted. Order matters: if the
-prefix entry survived past handler removal, uhttpd would dispatch `/api/v3/*` to
+prefix entry survived past handler removal, uhttpd would dispatch `/api/v4/*` to
 a missing `main.uc` and every request would 500 until the operator manually
 fixed the uhttpd config. Reorder only with care.
 

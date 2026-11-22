@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-: "${UAPI_BASE:?set UAPI_BASE to https://<router>/api/v3}"
+: "${UAPI_BASE:?set UAPI_BASE to https://<router>/api/v4}"
 : "${UAPI_TOKEN:?set UAPI_TOKEN to a bearer with uhttpd:instances:rw}"
 
 H_AUTH="Authorization: Bearer $UAPI_TOKEN"
@@ -13,7 +13,7 @@ echo "# Read the 'main' uhttpd instance"
 req "$UAPI_BASE/uhttpd/instances/main"; echo
 
 echo
-echo "# DANGER: writes to the 'main' instance that strip /api/v3=/usr/share/uapi/main.uc"
+echo "# DANGER: writes to the 'main' instance that strip /api/v4=/usr/share/uapi/main.uc"
 echo "# from ucode_prefix are rejected with 422 conflict (self-lockout protection)."
 echo
 # Writing this instance restarts the server that is answering the request, so curl usually
@@ -24,7 +24,7 @@ echo "# Example: PATCH that keeps the uapi entry and re-states the listen addres
 req -H "$H_JSON" -X PATCH "$UAPI_BASE/uhttpd/instances/main" -d '{
 	"listen_http": ["0.0.0.0:80", "[::]:80"],
 	"listen_https": ["0.0.0.0:443", "[::]:443"],
-	"ucode_prefix": ["/api/v3=/usr/share/uapi/main.uc"]
+	"ucode_prefix": ["/api/v4=/usr/share/uapi/main.uc"]
 }' || echo "(connection dropped: uhttpd restarted, see below)"
 echo
 

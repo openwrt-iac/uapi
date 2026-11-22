@@ -11,11 +11,11 @@ else
 	rm -f "$tmp"
 fi
 
-# v3 mounts at /api/v3/. On a fresh install we just add it. On an upgrade we strip every
+# v4 mounts at /api/v4/. On a fresh install we just add it. On an upgrade we strip every
 # older mount, because uhttpd would otherwise serve the same main.uc under two prefixes and
-# the removed v2 surface would appear to still exist while answering with v3 semantics.
-NEW='/api/v3=/usr/share/uapi/main.uc'
-OLD='/api/v2=/usr/share/uapi/main.uc /api/v1=/usr/share/uapi/main.uc'
+# the removed v3 surface would appear to still exist while answering with v4 semantics.
+NEW='/api/v4=/usr/share/uapi/main.uc'
+OLD='/api/v3=/usr/share/uapi/main.uc /api/v2=/usr/share/uapi/main.uc /api/v1=/usr/share/uapi/main.uc'
 
 CHANGED=0
 

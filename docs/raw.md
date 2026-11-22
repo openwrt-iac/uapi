@@ -1,4 +1,4 @@
-# `/api/v3/raw/<package>/<id>`: generic uci passthrough
+# `/api/v4/raw/<package>/<id>`: generic uci passthrough
 
 The curated endpoints (`/firewall/rules`, `/network/interfaces`, etc.) wrap a
 small set of OpenWrt config types with stable schemas and Terraform-friendly
@@ -14,7 +14,7 @@ calls; that is per-resource, hand-curated, and read-only.
 ## Stability
 
 **URL structure, verbs, auth/scope behavior, and error envelope are
-stable within a package major** (today: v3.x). The composition rule
+stable within a package major** (today: v4.x). The composition rule
 (`raw:*` permission + the section's domain-tree permission both
 required) is part of the contract and will not loosen across minor
 bumps.
@@ -30,7 +30,7 @@ for that resource if one exists, or open an issue to add one.
 
 ## Shape
 
-`GET /api/v3/raw/<package>` lists every section in the package as an array. Each
+`GET /api/v4/raw/<package>` lists every section in the package as an array. Each
 item has:
 
 ```json
@@ -57,7 +57,7 @@ Before 3.2.0 they landed as options too. A `PATCH` removes these four stored
 options, as a `PUT` does. If you want adoption (rename an anonymous section to a
 uapi-style ULID), the curated endpoints for that type provide `POST .../adopt`.
 
-`GET /api/v3/raw/<package>/<id>` returns one section in the same shape.
+`GET /api/v4/raw/<package>/<id>` returns one section in the same shape.
 
 `id` is always the section name, also when the path gives a position that uci
 resolves, such as `@rule[0]` or `@[-1]`. A write then acts on the section that
@@ -65,7 +65,7 @@ the position named before the lock, and an `id` in its body must be that name. A
 section that stores an option named `id`, such as a zerotier `network`, does not
 show that option, and a `PUT` keeps it.
 
-`POST /api/v3/raw/<package>` creates a section. The request body must include
+`POST /api/v4/raw/<package>` creates a section. The request body must include
 `.type`. If `id` is supplied, it must match `/^[A-Za-z0-9_]+$/` (uci's
 section-name charset) and must not collide with an existing section; otherwise
 uapi returns `422 validation_failed` with field `id` and code `invalid_format`,

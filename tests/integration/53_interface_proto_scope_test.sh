@@ -4,7 +4,7 @@ set -eu
 . tests/integration/lib/install_uapi.sh
 install_uapi
 
-URL=http://127.0.0.1:8080/api/v3
+URL=http://127.0.0.1:8080/api/v4
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 BRIDGE=br-uapi53
 WG_KEY=yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=

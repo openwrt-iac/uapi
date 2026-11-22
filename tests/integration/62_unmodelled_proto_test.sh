@@ -5,7 +5,7 @@ set -eu
 install_uapi
 ensure_proto_handlers || { echo "FAIL: the box lacks a tunnel handler, the uapitest handler of this tree, an ip of iproute2 or ucode-mod-rtnl"; exit 1; }
 
-URL=http://127.0.0.1:8080/api/v3
+URL=http://127.0.0.1:8080/api/v4
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 IFACES="uapi62a uapi62b uapi62c uapi62d uapi62e"
 # On stderr, so that a fail of ends, which runs in a command substitution, still shows.
