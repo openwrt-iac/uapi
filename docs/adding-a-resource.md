@@ -316,8 +316,9 @@ and check each bound against LuCI's form and the daemon that reads the option.
 When a write should send less than a read can give, put the narrower keyword
 under the property's `x-uapi-write`, for example `mtu: { type: ["integer",
 "null"], minimum: 0, "x-uapi-write": { minimum: 68 } }`. The generator puts
-those keywords on the `*Request` schema, and the handler checks them against the
-fields that a request names, so a stored value past them blocks no write. A
+those keywords on the `*Request` schema, where an `enum` among them replaces the
+`pattern` of the property, and the handler checks them against the fields
+that a request names, so a stored value past them blocks no write. A
 field that the request sends back as the read gives it changes nothing, so the
 handler does not check it against them, and a PUT of the read passes. When such
 a stored value is also an error, because the daemon refuses it, a rule of

@@ -156,11 +156,11 @@ section, for a PATCH of either kind as for a PUT:
 
 Before v4 a write that left a stored value alone answered 200, so a broken
 section could still be disabled. Now the fix comes first, or goes through
-`/raw`. A DELETE does not validate. `GET /diagnostics?validate=1` runs the same
-checks over each stored section and lists each error that it finds, so each
-error that it lists now blocks every write of its section. In v4 the same sweep
-is `GET /uapi/diagnostics?validate=1`. A PATCH that sends a valid value for each
-listed field fixes the section in one write.
+`/raw`. A DELETE does not validate. `GET /uapi/diagnostics?validate=1`, which
+3.x serves at `GET /diagnostics?validate=1`, runs the same checks over each
+stored section and lists each error that it finds, so each error that it lists
+now blocks every write of its section. A PATCH that sends a valid value for
+each listed field fixes the section in one write.
 
 A value that the read cannot show is judged too. fw4 stops while it reads a
 `firewall/defaults` section with an option that its parser refuses, such as a
@@ -312,14 +312,17 @@ checked as mode `ap`.
 
 `mwan3.sh` and `mwan3track` both default an unset `family` to `ipv4`, so the
 read now answers `"ipv4"` instead of `null` for a section that stores none
-(announced in 3.4.0, #306). `family` is no longer in the request schema's
-`required`: a write may omit it, and a `null` removes the option, after which
-the read answers `ipv4` again. A plan that holds `null` there sees `ipv4` at
-each read, so make it hold `ipv4`. mwan3 does the same either way. An empty
-`family` reads `ipv4` too, and a list reads as the string that `config_get`
-makes of it. The response declares `family` as a string that every read holds,
-and the request no longer declares null: to remove the option, leave `family`
-out of a PUT or send null in a merge patch.
+(announced in 3.4.0, #306). An empty `family` reads `ipv4` too, and a list
+reads as the string that `config_get` makes of it. The response declares
+`family` as a string that every read holds. A plan that holds `null` there sees
+`ipv4` at each read, so make it hold `ipv4`. mwan3 does the same either way.
+
+`family` is no longer in the `required` list of the request schema, and that
+schema no longer declares null. Only the merge-patch body declares null. To
+remove the option, leave `family` out of a POST or a PUT, or send null in a
+merge patch. The server also takes a null in a POST or a PUT, the same as a
+field that the request leaves out. After the option is removed, the read
+answers `ipv4` again.
 
 ## Two mwan3 values that mwan3 does not run answer 422
 
@@ -377,12 +380,16 @@ rate reads as a string so that a Terraform client can type the field, because
 Terraform has no type that is an integer or a string. A client generated from
 the schema must take a string there.
 
-A write takes such a string, or an integer that is a rate per second. The
-kernel refuses a limit whose rate plus burst overflows 64 bits, such as a rate
-of `18446744073709551615`. It also refuses a slow rate with a large burst, such
-as `1/minute` with a burst of 4294967295, when the nanoseconds per packet times
-the burst overflow 64 bits. fw4 then applies no ruleset while `syn_flood` is
-on. v4 refuses such a write with 422 `out_of_range` on `synflood_rate`. A
+A write takes a string with a rate of 1 or more and the whole unit, `second`,
+`minute`, `hour` or `day`, such as `25/minute`. It refuses a prefix of the unit,
+such as `25/m`, and the string `"25"`, with 422 `invalid_format`. A write also
+takes an integer of 1 or more, which is a rate per second.
+
+The kernel refuses a limit whose rate plus burst overflows 64 bits, such as a
+rate of `18446744073709551615`. It also refuses a slow rate with a large burst,
+such as `1/minute` with a burst of 4294967295, when the nanoseconds per packet
+times the burst overflow 64 bits. fw4 then applies no ruleset while `syn_flood`
+is on. v4 refuses such a write with 422 `out_of_range` on `synflood_rate`. A
 stored one is an error of the section that blocks every write that does not
 fix it, and the sweep marks it live while `syn_flood` is on. 3.x took such a
 write.
@@ -424,11 +431,11 @@ both. An unset bool reads `false`, as in 3.x.
 One check in the type gate now refuses `\n` and `\r` in every curated string on
 write (announced in 3.4.0, #276), so the refusal no longer depends on the
 per-field `LINE_RE`/`ONE_LINE_RE` patterns, which had disagreed about `\r`. The
-only opt-out is `system.notes`, marked `x-uapi-multiline`, which holds several
-lines on purpose. Free-text fields such as descriptions that no daemon reads as
-one line are refused too. That is the announced breaking part. A stored one
-blocks every write of its section, as the #308 section above says. Per-field
-`pattern`s keep their word, quote and glob rules.
+only opt-out is `system.notes`, which holds several lines on purpose, as its
+description in the spec says. Free-text fields such as descriptions that no
+daemon reads as one line are refused too. That is the announced breaking part. A
+stored one blocks every write of its section, as the #308 section above says.
+Per-field `pattern`s keep their word, quote and glob rules.
 
 ## `network/routes.table` and `network/rules.lookup` accept a table name on write
 
@@ -638,4 +645,5 @@ without an error. v4 gives a page that ends on an unmanaged section the cursor
 `c_<id>.<hash>` and answers 400 `invalid_cursor` when an item up to that section
 changed. A cursor `c_<id>` of an unmanaged section, which 3.x gave or a client
 builds, answers 400 `invalid_cursor` too. Follow `X-Next-Cursor` or the `Link`
-as they come, and read the list again from the first page after a 400.
+as they come. After a 400 on a page after the first, read the list again from
+the first page.

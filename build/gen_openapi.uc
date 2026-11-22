@@ -205,9 +205,13 @@ function writable(props, half) {
 // trip as invalid while the server answered 200 to it. The type is not what guards a required
 // field anyway; resource.validate() is, and it answers 422 naming the field for a null `target`
 // on a create. The overlay goes in before the widening, so that an enum it brings admits null too.
+// An enum that the overlay brings is the whole request bound: tests/unit/write_overlay_test.uc
+// takes each of its values at the server, which still applies the pattern of the read. That
+// pattern beside the enum read as a widening, as `any` in the pattern of snmpd/groups.version.
 function request_schema(v) {
 	if (type(v) != "object") return v;
 	let w = overlaid(v, WRITE_OVERLAY);
+	if (v[WRITE_OVERLAY]?.enum != null) delete w.pattern;
 	w = (v[READ_NULLABLE] === true) ? widen_null(w) : strip_marker(w);
 	if (type(w.properties) == "object") w = { ...w, properties: writable(w.properties, request_schema) };
 	if (type(w.items) == "object") w = { ...w, items: request_schema(w.items) };

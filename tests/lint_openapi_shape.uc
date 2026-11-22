@@ -74,6 +74,10 @@ function check_schema(node, path) {
 			note(path + "/enum", sprintf("must be an array, got %J", node.enum));
 		else if (length(node.enum) == 0)
 			note(path + "/enum", "is empty, so nothing can validate against it");
+		// The pattern of a read beside a write enum admitted values outside it, such as `any`
+		// on snmpd/groups.version, and a reader took it for a widening.
+		if (exists(node, "pattern"))
+			note(path + "/pattern", "sits beside an enum, so it can only repeat the enum or refuse a value that it lists");
 	}
 
 	// An `if` with no branch is silently inert: a generator reading it produces

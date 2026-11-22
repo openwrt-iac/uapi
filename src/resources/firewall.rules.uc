@@ -246,7 +246,7 @@ return {
 		           description: sprintf("Human-readable label for this rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
 		target:  { "x-uapi-read-nullable": true, type: "string", enum: [ ...keys(VALID_TARGETS), "HELPER" ],
 		           "x-uapi-write": { enum: keys(VALID_TARGETS) },
-		           description: "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it" },
+		           description: "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it. A target of NOTRACK requires `match.src_zone`, a named zone other than `*`" },
 		enabled: { type: "boolean", default: true },
 		set_mark: { type: ["string", "null"], pattern: values.MARK_RE,
 		            description: "Mark to set, as value or value/mask (decimal or 0x hex, 32-bit). Requires target MARK; mutually exclusive with set_xmark" },
@@ -256,6 +256,7 @@ return {
 		            description: "DSCP class to apply: a symbolic name (CS0-CS7, BE, LE, AF11-AF43, EF, case-insensitive) or a number 0-63. Requires target DSCP" },
 		match: {
 			type: "object",
+			description: "A target of NOTRACK requires `src_zone` here, a named zone other than `*`.",
 			properties: {
 				src_zone:  { type: ["string", "null"] },
 				dest_zone: { type: ["string", "null"] },
