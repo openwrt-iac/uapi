@@ -85,6 +85,9 @@ an extension field:
 }
 ```
 
+A daemon that uapi watches and that stops after the reload reads, for example,
+`unbound stopped after the reload, with exit code 1`.
+
 The unrecovered case adds `restore_error` as well. A restore whose reload had
 not ended when uapi
 stopped waiting reads `reload during restore did not finish: firewall reload was
@@ -95,7 +98,9 @@ that leaves a package because another writer committed to it reads `another
 writer committed to
 the package firewall after the commit of the request, so the restore left it as
 that writer left
-it`.
+it`. A restore after which procd still does not start dnsmasq reads `reload
+during restore failed: procd does not start dnsmasq again after the reload of
+the restore: a stop and a start of dnsmasq did not bring it back`.
 
 ## Field-level codes
 
@@ -151,15 +156,17 @@ Every response carries:
 | `Link: <?cursor=...>; rel="next"` | paginated GETs when more items exist | RFC 8288. Keeps the query parameters that the list declares: `family` on `dhcp/leases` and `managed` on a curated list. |
 | `X-Next-Cursor: c_<id>`      | paginated GETs when more items exist | Convenience companion to `Link`. A page that ends on an unmanaged section gives `c_<id>.<hash>`, with a hash of the ETags of the items up to it, because that id is the position of the section in its package. |
 | `Idempotent-Replayed: true`  | POST replays via `Idempotency-Key`  | Marker that the response was served from cache rather than re-applied. |
-| `X-Reload-Status`            | 2xx on curated-resource writes, the `POST /uapi/batch` 207, and a `system/cron_jobs` write as `unverified` only | `ok` = init script reload exited 0 (NOT a runtime-convergence promise). `no_reload` = no init script ran, because the write changed nothing in uci, or because procd runs none of the daemons that read it, which only a `dhcp` write can meet. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or every init script exited 0 but the `dnsmasq --test` check after a dhcp write did not finish, because it was killed after 10 s or by another SIGKILL. A cron write logs the note to syslog. See `docs/operations.md` § "Success" means exit 0, not runtime convergence. |
-| `X-Reload-Services`          | curated-resource writes and the `POST /uapi/batch` 207, when status=ok or unverified | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`), in order. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. On a batch, the services of the packages that the batch changed, sorted. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it. With all of them running, `dhcp/servers` and `dhcp/hosts` answer `dnsmasq,odhcpd,unbound`, `dhcp/odhcpd` answers `odhcpd,dnsmasq,unbound`, `dhcp/dnsmasq` answers `dnsmasq,unbound`, `system` answers `system,log,dnsmasq,odhcpd,unbound`, `system/timeservers` answers `sysntpd,dnsmasq`, and each `network` resource answers `network,odhcpd`. Each leaves out a daemon that does not run. A batch that holds a `dhcp/odhcpd` write lists `dnsmasq,odhcpd,unbound`. |
+| `X-Reload-Status`            | 2xx on curated-resource writes, the `POST /uapi/batch` 207, and a `system/cron_jobs` write as `unverified` only | `ok` = init script reload exited 0 (NOT a runtime-convergence promise). `no_reload` = no init script ran, because the write changed nothing in uci, or because procd runs none of the daemons that read it, which only a `dhcp` write can meet. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or every init script exited 0 but the `dnsmasq --test` check after a dhcp write did not finish, because it was killed after 10 s or by another SIGKILL. A cron write logs the note to syslog. `stopped` = the write keeps its commit, but a daemon that it reloaded is down and procd will not start it again on its own: procd gave up on a dnsmasq instance after the reload, and a stop and a start of dnsmasq did not bring it back, or less than 10 s of `reload_budget_s` were left for them. `X-Reload-Stopped` names it. `unverified` wins over `stopped`: when the start of dnsmasq has not ended within its 5 s, or another check did not finish, the value is `unverified`, and `X-Reload-Stopped` comes beside it. The recovery is `service dnsmasq restart` on the router, or a write that changes the dhcp config. See `docs/operations.md` § "Success" means exit 0, not runtime convergence. |
+| `X-Reload-Services`          | curated-resource writes and the `POST /uapi/batch` 207, when status=ok, unverified or stopped | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`), in order. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. On a batch, the services of the packages that the batch changed, sorted. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it. With all of them running, `dhcp/servers` and `dhcp/hosts` answer `dnsmasq,odhcpd,unbound`, `dhcp/odhcpd` answers `odhcpd,dnsmasq,unbound`, `dhcp/dnsmasq` answers `dnsmasq,unbound`, `system` answers `system,log,dnsmasq,odhcpd,unbound`, `system/timeservers` answers `sysntpd,dnsmasq`, and each `network` resource answers `network,odhcpd`. Each leaves out a daemon that does not run. A batch that holds a `dhcp/odhcpd` write lists `dnsmasq,odhcpd,unbound`. |
+| `X-Reload-Stopped`           | curated-resource writes and the `POST /uapi/batch` 207, when status=stopped, or unverified when the check found an instance down | Comma-separated list of the procd instances that stay down, each as `<service>/<instance>`, such as `dnsmasq/cfg01411c`. procd will not start them again on its own. `GET /uapi/diagnostics` lists them under `stopped_instances`, with the same names, until they run again. |
 | `X-Kernel-Status`            | 2xx on curated-resource writes, and the `POST /uapi/batch` 207 | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied. `partial` = some were and some were skipped. `omitted` = the apply set a peer without the endpoint that uci holds for it, as the proto handler does: on OpenWrt main, the ucode proto handler leaves out the endpoint of a host that does not resolve, or of a port that it cannot read, and keeps the peer. A read shows the endpoint that the kernel holds in `runtime.endpoint`. `omitted` takes the place of `ok`, and of `partial` when the write also skipped an interface: `X-Kernel-Applied` then names only the interfaces that were applied, so a skipped one is an interface that the write targets and the header does not name. 25.12 never answers `omitted`: wireguard.sh gives wg every endpoint, and a name that does not exist keeps the whole interface down from its next start, so a write that sends one answers `422 conflict` on `endpoint_host` before its commit. `skipped` = it targeted interfaces and none was applied. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path or the write changed nothing in uci. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. On OpenWrt main, netifd restarts the interface on each peer change, so the apply first waits, up to 8 s, for that restart to end. A restart that does not end in time fails the write with a restore (`reload_failed_restored`, or `reload_failed_unrecovered` when the restore fails too). That handler sets all the peers of the interface or none, so the same 500 answers a write to an interface that another stored peer already keeps down. |
 | `X-Kernel-Applied`           | curated-resource writes and the `POST /uapi/batch` 207, when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
 | `X-Kernel-Unread`            | `GET /network/wireguard_kernel_peers` and a read of one of its entries, when an up wireguard interface could not be read | Comma-separated up interfaces with proto=wireguard whose kernel peers uapi could not read, because `wg show <interface> dump` failed or printed a shape that uapi does not read. The list holds no entry for them. Absent when every up interface was read. |
 | `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces`, `network/devices` or `network/bridge_vlans` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddrs`. Advisory: the write already happened and was not refused. On `network/interfaces`, present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddrs` or `netmask` (or deleted the section, reported as `changed=removed`). `network/devices` and `network/bridge_vlans` are matched by device instead, and report `device=<name> changed=created` or `changed=removed` when a create or delete names the caller's device or a bridge that device is a port of. Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /uapi/diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
 
-The four transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
-`X-Kernel-Status`, `X-Kernel-Applied`) say "curated-resource writes" rather than
+The five transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
+`X-Reload-Stopped`, `X-Kernel-Status`, `X-Kernel-Applied`) say
+"curated-resource writes" rather than
 "writes" because that is measured, not assumed: raw passthrough (`/raw/...`) and
 the non-uci writes (`/packages/...`, `/uapi/tokens`, `/system/password`,
 `/system/authorized_keys`, `/system/cron_jobs`) never reach
@@ -170,18 +177,19 @@ the outcome in its body as `runtime.crond_running`, because the init script
 exits 0 even when crond stops. Until 2.5.0 the OpenAPI document
 declared the reload pair on those responses anyway, which is why the wording
 here matters: a client generated from the spec was told to expect a header that
-was never going to arrive. `POST /uapi/batch` does not reach
-`attach_reload_headers` either, but since 3.0.0 its 207 carries the same four
-headers from the batch handler's own aggregation: a batch commits and reloads
-once for the whole set, so there is one outcome to report rather than one per
-sub-request. A pure-read batch runs no transaction and carries none of them.
+was never going to arrive. `POST /uapi/batch` is not a curated-resource write,
+but since 3.0.0 its 207 carries the same headers, from the one result of its
+transaction, which it hands to `attach_reload_headers`: a batch commits and
+reloads once for the whole set, so there is one outcome to report rather than
+one per sub-request. A pure-read batch runs no transaction and carries none of
+them.
 
 Each entry of the batch `results` array also has a `headers` object, with the
 headers of the response of its own sub-request. It always holds `X-Request-Id`,
 as `<request_id>.<index>`. On a 200 it also holds `Content-Type`, the four
 security headers below and the `ETag` of the body, and on a GET of a collection
 that has more than 100 items, `Link` and `X-Next-Cursor`. It never holds the
-four transaction headers, because a sub-request runs no commit and no reload of
+five transaction headers, because a sub-request runs no commit and no reload of
 its own. It never holds `X-Mgmt-Path-Warning` either: a sub-request has no
 `remote_addr`, so the guard finds no management path, and a batch cannot warn
 that it moved the caller's own path.

@@ -1187,7 +1187,7 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 			let also = null;
 			tx.transaction(ubus.stub(), build_params({
 				package: c[0], reload_services: c[1],
-				acquire: function(p, a) { also = a; return {}; }, release: function() {},
+				acquire: function(p, a) { also = a; return {}; }, release: function() {}, watch: () => null,
 			}));
 			t.assert_deep_equal(also, c[2], c[0]);
 		}
@@ -1408,7 +1408,7 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 			let conn = ubus.stub({ uci: { dhcp: { lan: { '.type': 'dhcp', leasetime: '12h' } } } });
 			conn.set_ubus_response("service", "list", (a) => ({ dnsmasq: { instances: { main: { running: true,
 				command: [ dir + "/dnsmasq", "-C", conf("main") ] } } } }));
-			let p = { check_services: noop_check, reload: noop_reload, watch: (cn, s, pkgs) => tx.check_daemons(cn, s, pkgs, 300) };
+			let p = { check_services: noop_check, reload: noop_reload, watch: (cn, s, pkgs, rec) => tx.check_daemons(cn, s, pkgs, rec, 300, 0) };
 			let start = clock(true);
 			let r = batch
 				? tx.multi_transaction(conn, { ...p, packages: [ "dhcp" ], reload_services: { dhcp: [ "dnsmasq" ] },
@@ -1466,7 +1466,7 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 	t.it('runs for a write that commits dhcp, and not for a system write', () => {
 		let checked = (pkg, batch_pkgs) => {
 			let conn = fake([ { main: true } ]);
-			let p = { check_services: noop_check, reload: noop_reload };
+			let p = { check_services: noop_check, reload: noop_reload, watch: (cn, s, pkgs, rec) => tx.check_daemons(cn, s, pkgs, rec, null, 0) };
 			let ran = [];
 			let saved = global.system;
 			global.system = function() { push(ran, true); return 1; };
@@ -1539,6 +1539,7 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 	});
 
 	// The tests above pass their own watch, so this one runs the default checks and the real popen.
+	// The respawn check reads service list once more, after the restore.
 	t.it('a write that reloads dnsmasq runs --test by default, and the restore runs it again', () => {
 		let dir = "/tmp/uapi-test-dnsmasq-check";
 		system(sprintf("rm -rf %s; mkdir -p %s/refuse %s/accept", dir, dir, dir));
@@ -1558,7 +1559,255 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		t.assert_equal(r.kind, "reload_failed_restored");
 		t.assert_equal(r.reload_error, "dnsmasq refuses its config main: bad IP address at line 1 of x");
 		t.assert_equal(conn._state.uci.dhcp.lan.leasetime, "12h");
-		t.assert_equal(n, 3);
+		t.assert_equal(n, 4);
+	});
+});
+
+// The SIGHUP that dnsmasq.init sends after a restart can kill the new dnsmasq, and procd counts
+// each such death across reloads. At the sixth it stops starting the instance until the next
+// reload, and the write that caused it answered 200 with DHCP and DNS down.
+t.describe('transaction, a dnsmasq that procd gave up on after the reload', () => {
+	const RESPAWN = { threshold: 3600, timeout: 5, retry: 5 };
+	const UP = { running: true, pid: 10, respawn: RESPAWN };
+	const WAITING = { running: false, exit_code: 129, respawn: RESPAWN };
+	const HALTED = { running: false, exit_code: 129 };
+	const RID = "01hx0000000000000000000000";
+
+	// procd as the init scripts leave it. Each reload leaves the next state of `reloads`, a stop
+	// lists no instance once `lingers` more calls of service list have shown the old ones, and a
+	// start leaves `started`. `stop` and `start` are what those runs answer.
+	function router(opts) {
+		let procd = { instances: { main: UP }, runs: [], gone_after: null, listed_at_start: null };
+		let conn = ubus.stub({ uci: opts.uci ?? { dhcp: { lan: { '.type': 'dhcp', leasetime: '12h' } },
+		                                         system: { cfg01: { '.type': 'system', hostname: 'OpenWrt' } } } });
+		conn.set_ubus_response("service", "list", function(a) {
+			if (procd.gone_after != null && procd.gone_after-- <= 0) procd.instances = {};
+			if (a.name != null && a.name != "dnsmasq") return {};
+			return { dnsmasq: { instances: procd.instances, triggers: [ DHCP_TRIGGER ] } };
+		});
+		let reloads = [ ...(opts.reloads ?? []) ];
+		procd.reload = function(services, budget, init_dir, action) {
+			push(procd.runs, action ?? "reload");
+			if (action == "stop") {
+				procd.gone_after = opts.lingers ?? 0;
+				return opts.stop;
+			}
+			if (action == "start") {
+				procd.listed_at_start = length(procd.instances);
+				procd.gone_after = null;
+				procd.instances = opts.started ?? { main: UP };
+				return opts.start;
+			}
+			if (length(reloads) > 0) procd.instances = shift(reloads);
+			return null;
+		};
+		return { conn, procd };
+	}
+	let recovery = (procd, budget_ms) => ({ budget: { ms: budget_ms ?? 20000 }, request_id: RID,
+	                                        init: (svc, action, budget) => procd.reload([ svc ], budget, null, action) });
+	function check(instances, opts) {
+		let w = router(opts ?? {});
+		w.procd.instances = instances;
+		let r = tx.dnsmasq_respawn_check(w.conn, [ "dnsmasq" ], 0, recovery(w.procd, opts?.budget_ms))();
+		return [ r, w.procd.runs ];
+	}
+
+	t.it('runs after a reload of dnsmasq only', () => {
+		let w = router({});
+		w.procd.instances = { main: HALTED };
+		t.assert_equal(tx.dnsmasq_respawn_check(w.conn, [ "firewall", "unbound" ], 0, recovery(w.procd)), null);
+		t.assert_equal(tx.dnsmasq_respawn_check(w.conn, [ "dnsmasq" ], 0, recovery(w.procd))([ "firewall" ]), null);
+		t.assert_deep_equal([ length(w.conn._state.ubus_calls), w.procd.runs ], [ 0, [] ]);
+	});
+
+	// One death of the race stops the instance for the 5 s of respawn_timeout, and procd keeps its
+	// respawn table meanwhile.
+	t.it('passes an instance that procd will start again, and stops and starts nothing', () => {
+		t.assert_deep_equal(check({ main: UP, guest: WAITING }), [ null, [] ]);
+	});
+
+	t.it('stops and starts dnsmasq once, and passes when it runs again', () => {
+		t.assert_deep_equal(check({ main: HALTED }), [ null, [ "stop", "start" ] ]);
+		t.assert_deep_equal(check({ main: HALTED }, { stop: "dnsmasq exited with code 1: x" }), [ null, [ "stop", "start" ] ]);
+	});
+
+	t.it('names each instance that stays down after the stop and the start', () => {
+		t.assert_deep_equal(check({ main: HALTED }, { started: { main: HALTED } }), [ { stopped: [ "dnsmasq/main" ] }, [ "stop", "start" ] ]);
+		t.assert_deep_equal(check({ main: HALTED }, { started: {}, start: "dnsmasq exited with code 1: x" }),
+		                    [ { stopped: [ "dnsmasq/main" ] }, [ "stop", "start" ] ]);
+		t.assert_deep_equal(check({ main: UP, guest: HALTED }, { started: { main: UP, guest: HALTED } }),
+		                    [ { stopped: [ "dnsmasq/guest" ] }, [ "stop", "start" ] ]);
+	});
+
+	// The time comes from the reload budget of the request, which uhttpd's 60 s bounds.
+	t.it('skips the stop and the start when less than 10 s of the reload budget is left', () => {
+		t.assert_deep_equal(check({ main: HALTED }, { budget_ms: 9000 }), [ { stopped: [ "dnsmasq/main" ] }, [] ]);
+		t.assert_deep_equal(check({ main: HALTED }, { budget_ms: 10100 }), [ null, [ "stop", "start" ] ]);
+	});
+
+	// A start that comes before the delete of a stop still running leaves dnsmasq out of procd.
+	t.it('does not start dnsmasq while its stop runs, and does not know the end of a start that runs on', () => {
+		t.assert_deep_equal(check({ main: UP, guest: HALTED }, { stop: { unverified: "x" } }),
+		                    [ { stopped: [ "dnsmasq/main", "dnsmasq/guest" ] }, [ "stop" ] ]);
+		t.assert_deep_equal(check({ main: HALTED }, { start: { unverified: "x" } }),
+		                    [ { stopped: [ "dnsmasq/main" ],
+		                        unverified: "procd gave up on dnsmasq after the reload, and the start of dnsmasq that followed its "
+		                                    + "stop was still running after 5 s, so whether dnsmasq runs is unknown" },
+		                      [ "stop", "start" ] ]);
+	});
+
+	t.it('starts once procd lists no instance, or after 2 s', () => {
+		let w = router({ lingers: 3, started: { main: UP, guest: UP } });
+		w.procd.instances = { main: UP, guest: HALTED };
+		t.assert_equal(tx.dnsmasq_respawn_check(w.conn, [ "dnsmasq" ], 0, recovery(w.procd))(), null);
+		t.assert_equal(w.procd.listed_at_start, 0);
+		w = router({ lingers: 1000 });
+		w.procd.instances = { main: HALTED };
+		let start = clock(true);
+		t.assert_equal(tx.dnsmasq_respawn_check(w.conn, [ "dnsmasq" ], 0, recovery(w.procd))(), null);
+		let s = clock(true)[0] - start[0];
+		t.assert_deep_equal([ w.procd.listed_at_start, s >= 1 && s <= 4 ], [ 1, true ]);
+	});
+
+	t.it('reads procd at the end of the wait, since procd reaps the killed dnsmasq after the reload', () => {
+		let w = router({});
+		let start = clock(true);
+		w.conn.set_ubus_response("service", "list", function(a) {
+			let c = clock(true);
+			let late = (c[0] - start[0]) * 1000 + (c[1] - start[1]) / 1000000 >= 100;
+			return { dnsmasq: { instances: { main: late ? HALTED : UP } } };
+		});
+		t.assert_deep_equal(tx.dnsmasq_respawn_check(w.conn, [ "dnsmasq" ], 200, recovery(w.procd, 0))(), { stopped: [ "dnsmasq/main" ] });
+	});
+
+	// The restore reloads dnsmasq on the config from before, so a dnsmasq that stays down fails it.
+	t.it('a restore stops and starts dnsmasq unless the request did already, and fails when it stays down', () => {
+		let run = function(before, opts) {
+			let w = router(opts);
+			let c = tx.dnsmasq_respawn_check(w.conn, [ "dnsmasq" ], 0, recovery(w.procd));
+			if (before) {
+				w.procd.instances = { main: HALTED };
+				c();
+			}
+			w.procd.instances = { main: HALTED };
+			return [ c([ "dnsmasq" ]), w.procd.runs ];
+		};
+		t.assert_deep_equal(run(false, {}), [ null, [ "stop", "start" ] ]);
+		t.assert_deep_equal(run(false, { started: { main: HALTED } }),
+		                    [ "procd does not start dnsmasq/main again after the reload of the restore: a stop and a start of "
+		                      + "dnsmasq did not bring it back", [ "stop", "start" ] ]);
+		t.assert_deep_equal(run(true, {}),
+		                    [ "procd does not start dnsmasq/main again after the reload of the restore: uapi stops and starts "
+		                      + "dnsmasq once per request", [ "stop", "start" ] ]);
+	});
+
+	t.it('logs the recovery to syslog with the request id', () => {
+		let log = require('log');
+		let real = log.syslog, logged = [];
+		log.syslog = (level, msg) => push(logged, [ level, msg ]);
+		check({ main: HALTED });
+		check({ main: HALTED }, { started: { main: HALTED } });
+		log.syslog = real;
+		t.assert_deep_equal(logged, [
+			[ log.LOG_NOTICE, "uapi-dnsmasq-recovery " + RID + " outcome=recovered gave_up=dnsmasq/main "
+			                  + "note=\"a stop and a start of dnsmasq brought it back\"" ],
+			[ log.LOG_WARNING, "uapi-dnsmasq-recovery " + RID + " outcome=stopped gave_up=dnsmasq/main "
+			                   + "note=\"a stop and a start of dnsmasq did not bring it back\"" ],
+		]);
+	});
+
+	// A system write reloads dnsmasq too, and its reload can cost the last respawn as well.
+	function write(pkg, batch, opts) {
+		let w = router(opts);
+		let services = (pkg == "dhcp") ? [ "dnsmasq" ] : [ "system", "dnsmasq" ];
+		let fn = function(c) {
+			if (pkg == "dhcp") c.uci_set(pkg, "lan", "leasetime", "1h");
+			else c.uci_set(pkg, "cfg01", "hostname", "gw");
+			return { ok: true, body: {} };
+		};
+		let p = { check_services: noop_check, reload: w.procd.reload, request_id: RID, wg_apply: opts.wg_apply ?? (() => null),
+		          watch: (cn, s, pkgs, rec) => tx.check_daemons(cn, s, pkgs, rec, null, 0) };
+		let r = batch
+			? tx.multi_transaction(w.conn, { ...p, packages: [ pkg ], reload_services: { [pkg]: services },
+			                                 lock_path: "/tmp/uapi-test-respawn-global.lock",
+			                                 pkg_lock_prefix: "/tmp/uapi-test-respawn-pkg.", fn })
+			: tx.transaction(w.conn, build_params({ ...p, package: pkg, reload_services: services,
+			                                        acquire: function() { return {}; }, release: function() {}, fn }));
+		for (let f in [ "/tmp/uapi-test-respawn-global.lock", ...fs.glob("/tmp/uapi-test-respawn-pkg.*") ]) fs.unlink(f);
+		return { r, runs: w.procd.runs, stored: [ w.conn._state.uci.dhcp.lan.leasetime, w.conn._state.uci.system.cfg01.hostname ] };
+	}
+	let summary = (w) => [ w.r.ok, w.r.kind ?? w.r.reload_status, w.r.reload_stopped, w.runs, w.stored ];
+
+	t.it('a write after which the stop and the start bring dnsmasq back answers ok, and keeps its commit', () => {
+		for (let batch in [ false, true ]) {
+			t.assert_deep_equal(summary(write("dhcp", batch, { reloads: [ { main: HALTED } ] })),
+			                    [ true, "ok", null, [ "reload", "stop", "start" ], [ "1h", "OpenWrt" ] ]);
+			t.assert_deep_equal(summary(write("system", batch, { reloads: [ { main: HALTED } ] })),
+			                    [ true, "ok", null, [ "reload", "stop", "start" ], [ "12h", "gw" ] ]);
+		}
+	});
+
+	t.it('a write after which dnsmasq stays down answers stopped, and keeps its commit', () => {
+		for (let batch in [ false, true ]) {
+			t.assert_deep_equal(summary(write("dhcp", batch, { reloads: [ { main: HALTED } ], started: { main: HALTED } })),
+			                    [ true, "stopped", [ "dnsmasq/main" ], [ "reload", "stop", "start" ], [ "1h", "OpenWrt" ] ]);
+			t.assert_deep_equal(summary(write("system", batch, { reloads: [ { main: HALTED } ], started: {} })),
+			                    [ true, "stopped", [ "dnsmasq/main" ], [ "reload", "stop", "start" ], [ "12h", "gw" ] ]);
+		}
+	});
+
+	// The state of dnsmasq is unknown while its start runs on, and the instance was down when it began.
+	t.it('a write whose start of dnsmasq runs past its bound answers unverified, and names the instance', () => {
+		for (let batch in [ false, true ])
+			t.assert_deep_equal(summary(write("dhcp", batch, { reloads: [ { main: HALTED } ], start: { unverified: "x" } })),
+			                    [ true, "unverified", [ "dnsmasq/main" ], [ "reload", "stop", "start" ], [ "1h", "OpenWrt" ] ]);
+	});
+
+	t.it('a write after which procd waits to respawn dnsmasq answers ok, with no stop and no start', () => {
+		for (let batch in [ false, true ])
+			t.assert_deep_equal(summary(write("dhcp", batch, { reloads: [ { main: WAITING } ] })),
+			                    [ true, "ok", null, [ "reload" ], [ "1h", "OpenWrt" ] ]);
+	});
+
+	t.it('a write that fails after the recovery restores, and its restore does not stop and start dnsmasq again', () => {
+		let w = write("dhcp", false, { reloads: [ { main: HALTED }, { main: HALTED } ], wg_apply: () => "netifd: bad" });
+		t.assert_deep_equal(summary(w), [ false, "reload_failed_unrecovered", null, [ "reload", "stop", "start", "reload" ],
+		                                  [ "12h", "OpenWrt" ] ]);
+		t.assert_equal(w.r.restore_error, "reload during restore failed: procd does not start dnsmasq/main again after the "
+		                                  + "reload of the restore: uapi stops and starts dnsmasq once per request");
+	});
+
+	t.it('the headers of a POST, a DELETE and a batch name what stays down', () => {
+		let handler = require('handler');
+		let w = router({ uci: { dhcp: {} }, reloads: [ { main: HALTED }, { main: HALTED } ], started: { main: HALTED } });
+		let h = handler.make(loadfile('src/resources/dhcp.hosts.uc')(), { tx: {
+			acquire: function() { return {}; }, release: function() {}, check_services: noop_check, reload: w.procd.reload,
+			watch: (cn, s, pkgs, rec) => tx.check_daemons(cn, s, pkgs, rec, null, 0),
+		} });
+		let ctx = { request_id: RID };
+		let headers = (r) => [ r.status, r.headers["X-Reload-Status"], r.headers["X-Reload-Services"], r.headers["X-Reload-Stopped"] ];
+		t.assert_deep_equal(headers(h.create(w.conn, ctx, { id: 'printer', name: 'printer', macs: [ 'aa:00:00:00:00:09' ],
+		                                                    ip: '192.168.1.92' })),
+		                    [ 200, "stopped", "dnsmasq", "dnsmasq/main" ]);
+		t.assert_deep_equal(headers(h.remove(w.conn, ctx, 'printer')), [ 204, "stopped", "dnsmasq", "dnsmasq/main" ]);
+		let b = write("dhcp", true, { reloads: [ { main: UP, guest: HALTED } ], started: { main: UP, guest: HALTED } });
+		t.assert_deep_equal(handler.attach_reload_headers({ status: 207, headers: {} }, b.r).headers,
+		                    { "X-Reload-Status": "stopped", "X-Reload-Services": "dnsmasq", "X-Reload-Stopped": "dnsmasq/guest",
+		                      "X-Kernel-Status": "no_kernel" });
+	});
+
+	t.it('diagnostics lists every instance that procd will not start again, of any service', () => {
+		let conn = ubus.stub();
+		conn.set_ubus_response("service", "list", (a) => ({
+			dnsmasq: { instances: { main: UP, guest: HALTED, lab: WAITING } },
+			odhcpd: { instances: { odhcpd: UP } },
+			oneshot: { instances: { job: { running: false, exit_code: 0 } } },
+			empty: {},
+		}));
+		t.assert_deep_equal(tx.stopped_instances(conn), [ { service: "dnsmasq", instance: "guest" },
+		                                                  { service: "oneshot", instance: "job" } ]);
+		conn.set_ubus_response("service", "list", { _error: "ubus call service.list: Request timed out" });
+		t.assert_deep_equal(tx.stopped_instances(conn), []);
 	});
 });
 
@@ -1573,6 +1822,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		let r = tx.transaction(conn, build_params({
 			package: "dhcp", reload_services: [ "dnsmasq" ], reload_if_running: [ "odhcpd" ],
 			acquire: function() { return {}; }, release: function() {}, check_services,
+			watch: (cn, s, pkgs, rec) => tx.check_daemons(cn, s, pkgs, rec, null, 0),
 			reload: (s) => { push(calls, s); return reload ? reload(s) : null; },
 			fn: function(c, pkg) { c.uci_set(pkg, "lan", "ra", "server"); return { ok: true, body: {} }; },
 		}));
@@ -1697,6 +1947,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 				reload_services: { dhcp: [ "dnsmasq" ], fw: [ "firewall" ] },
 				reload_if_running: { dhcp: [ "odhcpd" ] },
 				lock_path: global, pkg_lock_prefix: prefix, check_services: noop_check,
+				watch: (cn, s, pkgs, rec) => tx.check_daemons(cn, s, pkgs, rec, null, 0),
 				reload: (s) => { push(calls, s); return null; },
 				fn: (c) => ({ ok: true, body: {} }),
 			});

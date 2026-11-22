@@ -129,6 +129,8 @@ function with_reload(result, reload_info) {
 		body.reload_note = "no daemon that reads this package runs, so none was reloaded";
 	else if (result.unverified != null)
 		body.reload_note = result.unverified;
+	else if (result.reload_stopped != null)
+		body.reload_note = sprintf("procd does not start %s again after the reload", join(", ", result.reload_stopped));
 	return result;
 }
 

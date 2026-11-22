@@ -2,6 +2,7 @@ let fs = require('fs');
 let wg = require('wg');
 let limits = require('limits');
 let write_journal = require('write_journal');
+let log = require('log');
 
 // Lock layout (introduced to let concurrent writes to different uci packages
 // proceed in parallel without losing the apk-vs-uci serialization guarantee):
@@ -93,7 +94,9 @@ function now_ms() {
 // outlives exec, so a script that runs `x & wait` hung. Without one it waits only for the shell
 // that puts the reloads in the background. uapi reads the file through /proc, because the shell
 // moves the offset of the descriptor that both hold. `budget` is shared by the reloads of a request.
-function default_reload(services, budget, init_dir) {
+// `action` is reload unless the recovery of dnsmasq runs its stop or its start.
+function default_reload(services, budget, init_dir, action) {
+	action ??= "reload";
 	for (let svc in services)
 		if (type(svc) != "string" || !match(svc, SAFE_NAME_RE))
 			return sprintf("refusing to reload service with unsafe name %J", svc);
@@ -104,7 +107,7 @@ function default_reload(services, budget, init_dir) {
 	let n = length(services);
 	let files = map([ ...services, null ], () => fs.mkstemp("uapi-reload"));
 	let read = (f) => fs.readfile("/proc/self/fd/" + f.fileno()) ?? "";
-	let unstarted = (why) => sprintf("could not start the reload of %s: %s", join(", ", services), why);
+	let unstarted = (why) => sprintf("could not start the %s of %s: %s", action, join(", ", services), why);
 	let err = null;
 	if (index(files, null) >= 0)
 		err = unstarted("cannot create a file for its output");
@@ -124,8 +127,8 @@ function default_reload(services, budget, init_dir) {
 		// a descriptor of 10 or above in the calling shell for `cmd N>&-`, so a subshell closes them.
 		let fds = map(files, (f) => f.fileno());
 		let closed = join(" ", map(fds, (fd) => fd + ">&-"));
-		let steps = map(services, (svc, i) => sprintf("(exec %s; exec %s reload) >&%d 2>&1; c=$?; echo $c >&%d; [ $c = 0 ] || exit",
-			closed, wg.command_line([ (init_dir ?? "/etc/init.d") + "/" + svc ]), fds[i], fds[n]));
+		let steps = map(services, (svc, i) => sprintf("(exec %s; exec %s %s) >&%d 2>&1; c=$?; echo $c >&%d; [ $c = 0 ] || exit",
+			closed, wg.command_line([ (init_dir ?? "/etc/init.d") + "/" + svc ]), action, fds[i], fds[n]));
 		try {
 			let code = system(sprintf("(%s) </dev/null >/dev/null 2>&1 &", join("; ", steps)));
 			if (code != 0) err = unstarted(sprintf("the shell exited with code %d", code));
@@ -142,8 +145,8 @@ function default_reload(services, budget, init_dir) {
 		else if (k == n)
 			break;
 		else if (now_ms() >= budget.until)
-			err = { unverified: sprintf("%s reload was still running when the %g s that uapi waits for the reloads "
-			                            + "of a request ran out, so its result is unknown%s", services[k], budget.ms / 1000.0,
+			err = { unverified: sprintf("%s %s was still running when the %g s that uapi waits for the reloads "
+			                            + "of a request ran out, so its result is unknown%s", services[k], action, budget.ms / 1000.0,
 			                            (k + 1 < n) ? sprintf(", and the reloads of %s follow it unless it fails",
 			                                                  join(", ", slice(services, k + 1))) : "") };
 		else
@@ -268,22 +271,113 @@ function dnsmasq_check(conn, services, run) {
 	};
 }
 
+// procd counts each death of an instance within respawn_threshold of its start, those of the race
+// above included, and a reload keeps the count: instance_config_move() does not copy respawn_count.
+// At the death that takes it above respawn_retry, instance_exit() clears the respawn of the
+// instance, and procd starts it again only on the next reload, which meets the race again.
+// `service list` then shows the instance not running and without its `respawn` table. An instance
+// that waits 5 s for its respawn keeps the table, so the usual death of the race does not count.
+function given_up(i) {
+	return !i.running && i.respawn == null;
+}
+
+// For /uapi/diagnostics, over every service: what procd lists and will not start again on its own,
+// an instance that procd gave up on, or one without respawn that ended.
+function stopped_instances(conn) {
+	let r = null;
+	try { r = conn.call("service", "list", {}); } catch (e) {}
+	let out = [];
+	for (let svc, s in (type(r) == "object") ? r : {})
+		for (let name, i in s?.instances ?? {})
+			if (given_up(i)) push(out, { service: svc, instance: name });
+	return out;
+}
+
+// procd sent the SIGHUP before the reload returned, and the wait gives a loaded router the time to
+// reap the process that it killed.
+const DNSMASQ_REAP_MS = 1000;
+
+// The config of dnsmasq is not at fault, so the write finishes its own reload by another path, once.
+// The stop frees an instance that procd gave up on at once, and the start sends no SIGHUP, so the
+// new instance counts from zero. The wait for procd to list no instance lets the others end on
+// their SIGTERM, so that they count from zero too. The recovery takes its time from what is left
+// of the reload budget of the request, and runs only when every step can have its full bound,
+// because a start while the stop still runs can come before the delete of the stop.
+const RECOVERY_MS = { stop: 3000, gone: 2000, start: 5000 };
+
+function recover_dnsmasq(conn, recovery, lost, all) {
+	let budget = recovery.budget;
+	budget.until ??= now_ms() + budget.ms;
+	let spare = budget.until - now_ms();
+	if (spare < RECOVERY_MS.stop + RECOVERY_MS.gone + RECOVERY_MS.start)
+		return { left: lost, why: sprintf("only %.1f s of the reload budget of the request were left, and a stop and "
+		                                  + "a start of dnsmasq can take 10 s", spare / 1000.0) };
+	let step = (action) => recovery.init("dnsmasq", action, { ms: RECOVERY_MS[action],
+	                                                          until: min(now_ms() + RECOVERY_MS[action], budget.until) });
+	let stop = step("stop");
+	if (type(stop) == "object")
+		return { left: all, why: "its stop was still running after 3 s, so uapi did not start it" };
+	for (let gone = now_ms() + RECOVERY_MS.gone; length(instances(conn, [ "dnsmasq" ])) > 0 && now_ms() < gone; )
+		sleep(100);
+	let start = step("start");
+	if (type(start) == "object")
+		return { unverified: "procd gave up on dnsmasq after the reload, and the start of dnsmasq that followed its "
+		                     + "stop was still running after 5 s, so whether dnsmasq runs is unknown" };
+	let now = instances(conn, [ "dnsmasq" ]);
+	let left = filter(lost, (k) => now[k] == null || given_up(now[k]));
+	return { left, why: join(", ", filter([ sprintf("a stop and a start of dnsmasq %s", (length(left) > 0) ? "did not bring it back"
+	                                                                                                  : "brought it back"),
+	                                        stop, start ], (m) => m != null)) };
+}
+
+// On a restore, which runs the reload on the config from before, a dnsmasq that stays down fails it.
+function dnsmasq_respawn_check(conn, services, wait_ms, recovery) {
+	if (index(services, "dnsmasq") < 0) return null;
+	let tried = false;
+	return function(only) {
+		if (only != null && index(only, "dnsmasq") < 0) return null;
+		sleep(wait_ms);
+		let was = instances(conn, [ "dnsmasq" ]);
+		let lost = filter(keys(was), (k) => given_up(was[k]));
+		if (length(lost) == 0) return null;
+		let r = tried ? { left: lost, why: "uapi stops and starts dnsmasq once per request" }
+		              : recover_dnsmasq(conn, recovery, lost, keys(was));
+		tried = true;
+		let outcome = (r.unverified != null) ? "unfinished" : (length(r.left) > 0) ? "stopped" : "recovered";
+		log.syslog((outcome == "recovered") ? log.LOG_NOTICE : log.LOG_WARNING,
+		           sprintf("uapi-dnsmasq-recovery %s outcome=%s gave_up=%s note=%J", recovery.request_id ?? "-", outcome,
+		                   join(",", lost), r.unverified ?? r.why));
+		if (outcome == "recovered") return null;
+		if (only != null)
+			return sprintf("procd does not start %s again after the reload of the restore: %s", join(", ", r.left ?? lost),
+			               r.unverified ?? r.why);
+		let notes = { stopped: r.left ?? lost };
+		if (r.unverified != null) notes.unverified = r.unverified;
+		return notes;
+	};
+}
+
 // The reload and the restore each run every check, and the first refusal fails them. A system
 // write reloads dnsmasq for the hostname and NTP, and an old refusal or a slow parse of its config
-// must not fail or undo that write, so only a dhcp write runs the dnsmasq check.
-function check_daemons(conn, services, packages, test_ms) {
+// must not fail or undo that write, so only a dhcp write runs the dnsmasq check. The respawn check
+// runs after every reload of dnsmasq: the reload starts every instance that procd gave up on, so
+// one that procd holds stopped afterwards stopped after the reload, not before the write.
+function check_daemons(conn, services, packages, recovery, test_ms, reap_ms) {
 	let checks = filter([ (index(packages ?? [], "dhcp") >= 0)
 	                      ? dnsmasq_check(conn, services, (argv) => run_bounded(argv, test_ms ?? DNSMASQ_TEST_MS)) : null,
-	                      default_watch(conn, services, 2000, 100) ],
+	                      default_watch(conn, services, 2000, 100),
+	                      dnsmasq_respawn_check(conn, services, reap_ms ?? DNSMASQ_REAP_MS, recovery) ],
 	                    (c) => c != null);
 	return function(only) {
-		let unverified = null;
+		let notes = null;
 		for (let c in checks) {
 			let err = c(only);
-			if (type(err) == "object") unverified ??= err;
-			else if (err != null) return err;
+			if (type(err) == "object")
+				notes = { unverified: notes?.unverified ?? err.unverified, stopped: notes?.stopped ?? err.stopped };
+			else if (err != null)
+				return err;
 		}
-		return unverified;
+		return notes;
 	};
 }
 
@@ -291,13 +385,18 @@ function check_daemons(conn, services, packages, test_ms) {
 function run_check(watch, only) {
 	let r = (watch.check != null) ? watch.check(only) : null;
 	if (type(r) != "object") return r;
-	watch.unverified = r.unverified;
+	if (r.unverified != null) watch.unverified = r.unverified;
+	if (r.stopped != null) watch.stopped = r.stopped;
 	return null;
 }
 
-function with_unverified(result, watch) {
-	if (!result?.ok || watch.unverified == null) return result;
-	return { ...result, reload_status: "unverified", unverified: watch.unverified };
+// A write keeps its commit when a check judged nothing or dnsmasq stayed down. `unverified` wins in
+// X-Reload-Status, since the state of a daemon is then unknown, and X-Reload-Stopped still names
+// what the respawn check found down.
+function with_check_notes(result, watch) {
+	if (!result?.ok || (watch.unverified == null && watch.stopped == null)) return result;
+	return { ...result, reload_status: (watch.unverified != null) ? "unverified" : "stopped",
+	         unverified: watch.unverified, reload_stopped: watch.stopped };
 }
 
 // Open + flock a single file. mode is "x" (exclusive) or "s" (shared); always
@@ -483,7 +582,9 @@ function run_inner(conn, pkg, services, fn, apply, restore, ops, kernel, request
 // that it may not have written yet, so they do not run.
 function _make_apply(conn, reload, services, wg_apply, ops, kernel, watch) {
 	return function() {
-		watch.check = watch.start(conn, services, watch.packages);
+		watch.check = watch.start(conn, services, watch.packages,
+		                          { budget: watch.budget, request_id: watch.request_id,
+		                            init: (svc, action, budget) => reload([ svc ], budget, null, action) });
 		let err = reload(services, watch.budget);
 		if (type(err) == "object") {
 			watch.unverified = err.unverified;
@@ -526,7 +627,7 @@ function transaction(conn, params) {
 	let wg_ops = params.wg_ops ?? [];
 	let wg_kernel = { applied: [], omitted: [] };
 	let check_services = params.check_services ?? default_check_services;
-	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ],
+	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ], request_id: params.request_id,
 	              budget: { ms: limits.reload_budget_ms(conn) } };
 
 	// Bare mode: run fn against `conn` without acquiring any lock, taking a
@@ -579,7 +680,7 @@ function transaction(conn, params) {
 	if (caught == null) write_journal.clear();
 	release(lock);
 	if (caught != null) die(caught);
-	return with_unverified(result, watch);
+	return with_check_notes(result, watch);
 }
 
 function services_of(by_package, packages) {
@@ -608,7 +709,7 @@ function multi_transaction(conn, params) {
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
 	let wg_kernel = { applied: [], omitted: [] };
-	let watch = { start: params.watch ?? check_daemons,
+	let watch = { start: params.watch ?? check_daemons, request_id: params.request_id,
 	              budget: { ms: limits.reload_budget_ms(conn) } };
 
 	let svc_err = check_services(services_of(required, packages));
@@ -750,7 +851,7 @@ function multi_transaction(conn, params) {
 	for (let h in acquired) _release_one(h);
 	_release_one(g);
 	if (caught != null) die(caught);
-	return with_unverified(result, watch);
+	return with_check_notes(result, watch);
 }
 
 function with_lock(params) {
@@ -778,4 +879,5 @@ function with_lock(params) {
 return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
          default_acquire_pkg, default_release_pkg, acquire_pkg_waiting,
-         default_check_services, default_reload, default_watch, dnsmasq_check, run_bounded, check_daemons };
+         default_check_services, default_reload, default_watch, dnsmasq_check, dnsmasq_respawn_check, run_bounded,
+         check_daemons, stopped_instances };

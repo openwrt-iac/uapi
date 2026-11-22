@@ -117,7 +117,9 @@ file block while LuCI or a shell holds them. It can sleep while it holds a
 uapi lock: it waits up to 20 s
 in all for the reloads of a request, the stay-up
 watch of an unbound reload polls for up to 2 s under the transaction's locks,
-and the `dnsmasq --test` check of each instance runs for up to 10 s.
+the `dnsmasq --test` check of each instance runs for up to 10 s, and the
+respawn check of a dnsmasq reload waits 1 s, then can stop and start dnsmasq
+within what is left of the 20 s.
 The restore after a failed reload also waits, for up to 5 s, for libuci's flock
 on the package file. A load holds that flock while it parses the file, and a
 `uci commit` while it reads the file again, writes its temp file and syncs it.
@@ -283,14 +285,43 @@ without uci state change.
    fork fails or no file can be made, counts as a refusal. One that `SIGKILL`
    stopped, the timeout or another, judges nothing: the write keeps its
    commit and answers `X-Reload-Status: unverified`. A `system` write reloads
-   dnsmasq too and runs no check, so that a config that dnsmasq refused
+   dnsmasq too and runs no `--test`, so that a config that dnsmasq refused
    before, or a slow parse, cannot fail or undo it. `--test` parses the config
    and the files that it includes, and exits. A config that dnsmasq parses
    but cannot start with, such as two ports that conflict, a lease file in a
    missing directory or a port that another daemon holds, still answers 2xx.
    The restore runs the same check. No write waits for the daemon to start,
    and each pays one parse of the whole config per instance, which grows with
-   its size, and again on a restore.
+   its size, and again on a restore. procd counts each death of an instance
+   that ran less than `respawn_threshold` (3600 s), those of the SIGHUP
+   included, and a reload keeps the count. At the death that takes it above
+   `respawn_retry` (5), procd clears the respawn of the instance and starts it
+   again only on the next reload (`instance_exit()` in `service/instance.c` of
+   procd), which can kill it in the same way. So after every reload of
+   `dnsmasq`, by any write, uapi waits 1 s and reads `service list`. An
+   instance that is not running and has no `respawn` table is one that procd
+   gave up on. One that waits for its respawn keeps the table, so the usual
+   death of the SIGHUP does not count. The reload starts again an instance
+   that procd gave up on, so procd gave up on such an instance during this
+   reload. The config passed, so the write does not restore: it finishes its
+   own reload by another path, once per request. It runs `/etc/init.d/dnsmasq
+   stop`, which frees the given-up instance at once, polls `service list`
+   every 100 ms until procd lists no dnsmasq instance, and runs
+   `/etc/init.d/dnsmasq start`, which sends no SIGHUP and makes instances that
+   count from zero. Both scripts run through the reload shell above. The three
+   steps take up to 3 s, 2 s and 5 s from what is left of the 20 s, and uapi
+   skips them when less than 10 s are left, so they end within the 20 s. A
+   stop still running after its 3 s gets no start, because a start that comes
+   before the delete of the stop leaves dnsmasq out of procd. The write keeps
+   its commit. It answers `X-Reload-Status: ok` when every instance that procd
+   gave up on runs or waits for its respawn after the start, `unverified` when
+   the start was still running after its 5 s, and `stopped` otherwise, with
+   `X-Reload-Stopped`, which names each instance as `dnsmasq/<instance>`, also
+   beside `unverified`. syslog gets `uapi-dnsmasq-recovery` with the request
+   id and the outcome. On a restore, a dnsmasq that stays down after the one
+   stop and start of the request fails the restore. `GET /uapi/diagnostics`
+   lists every instance without its `respawn` table, of any service, as
+   `stopped_instances`.
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
    matching `wg set`. The ucode handler of OpenWrt main restarts a wireguard

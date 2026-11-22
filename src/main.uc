@@ -679,21 +679,12 @@ function batch_dispatch(conn, ctx, token, method, body) {
 	//
 	// A pure-read batch takes no lock and runs no transaction, so `r` carries nothing and
 	// no header is emitted, which matches a read on any other endpoint.
-	let resp = {
+	return handler.attach_reload_headers({
 		status: 207,
 		headers: { "Content-Type": "application/json",
 		           "X-Request-Id": ctx.request_id },
 		body: { results, request_id: ctx.request_id },
-	};
-	if (r.reload_status != null)
-		resp.headers["X-Reload-Status"] = r.reload_status;
-	if (type(r.reload_services) == "array" && length(r.reload_services) > 0)
-		resp.headers["X-Reload-Services"] = join(",", r.reload_services);
-	if (r.kernel_status != null)
-		resp.headers["X-Kernel-Status"] = r.kernel_status;
-	if (type(r.kernel_applied) == "array" && length(r.kernel_applied) > 0)
-		resp.headers["X-Kernel-Applied"] = join(",", r.kernel_applied);
-	return resp;
+	}, r);
 }
 
 function metrics_response(ctx) {
@@ -783,6 +774,7 @@ function diagnostics_response(ctx, conn, scopes, want_validate) {
 		state_dirs: state_dir.used(),
 		limits: limits.load(conn),
 		interrupted_writes: write_journal.stale(),
+		stopped_instances: transaction.stopped_instances(conn),
 		recent_errors: error_ring.read(),
 		request_id: ctx.request_id,
 	};

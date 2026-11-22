@@ -475,6 +475,8 @@ function attach_reload_headers(resp, result) {
 		resp.headers["X-Reload-Status"] = result.reload_status;
 	if (type(result.reload_services) == "array" && length(result.reload_services) > 0)
 		resp.headers["X-Reload-Services"] = join(",", result.reload_services);
+	if (type(result.reload_stopped) == "array" && length(result.reload_stopped) > 0)
+		resp.headers["X-Reload-Stopped"] = join(",", result.reload_stopped);
 	if (result.kernel_status != null)
 		resp.headers["X-Kernel-Status"] = result.kernel_status;
 	if (type(result.kernel_applied) == "array" && length(result.kernel_applied) > 0)
@@ -1404,4 +1406,4 @@ function make_nonuci(resource) {
 }
 
 return { make, make_singleton, make_collection, make_nonuci, translate_tx, load_section,
-         check_schema_types, request_properties };
+         check_schema_types, request_properties, attach_reload_headers };
