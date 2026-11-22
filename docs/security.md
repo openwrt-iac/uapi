@@ -55,15 +55,15 @@ What uapi defends against, what it doesn't, and what the operator should do.
 10. **Resource exhaustion via flood.** Per-token rate limit returns
     `429 too_many_requests` with `Retry-After`. Default is 100/s burst 200
     per token; tunable via `/etc/config/uapi`.
-11. **Bridge-vlan self-lockout.** Surfaced in the project memory: writing
-    bridge-vlans on `br-lan` of the management bridge bricks the router. Use
-    a throwaway bridge for tests; never POST `bridge_vlans` on the management
-    bridge.
-12. **uhttpd self-lockout.** `uhttpd/instances` validate refuses any PATCH
-    or PUT on the `main` instance that would strip uapi's own `ucode_prefix`
-    entry - returning `422 conflict` instead of leaving uapi unreachable.
-13. **Network self-lockout.** Advisory rather than a refusal, because unlike
-    item 12 there is a legitimate version of the write: renumbering the
+11. **uhttpd self-lockout.** `uhttpd/instances` refuses a PATCH or a PUT on
+    the `main` instance that would strip uapi's own `ucode_prefix` entry, with
+    `422 conflict`, instead of leaving uapi unreachable. The guard has limits
+    ([#441](https://github.com/openwrt-iac/uapi/issues/441)): a `DELETE
+    /uhttpd/instances/main`, and a `/raw/uhttpd` write that removes the section
+    or the entry, still remove the mount. The next request then gets a 404 from
+    uhttpd.
+12. **Network self-lockout.** Advisory rather than a refusal, because unlike
+    item 11 there is a legitimate version of the write: renumbering the
     management VLAN or moving to an out-of-band path. A `network/interfaces`
     write that moves the inbound interface's `disabled`, `proto`, `ipaddrs` or
     `netmask` returns `X-Mgmt-Path-Warning`, and so does a `network/devices` or
@@ -72,7 +72,9 @@ What uapi defends against, what it doesn't, and what the operator should do.
     check before writing. Firewall lockout is deliberately not covered: it would
     need fw4 ordering modelled, and the requesting connection survives the
     reload by design, so uapi cannot detect it by observation either. See
-    `docs/operations.md`.
+    `docs/operations.md`. A wrong bridge VLAN on the management bridge, such as
+    `br-lan`, can cut every path to the router. Test `network/bridge_vlans`
+    writes on a bridge that does not carry the management path.
 
 ### Out of scope (not defended)
 
@@ -101,31 +103,10 @@ What uapi defends against, what it doesn't, and what the operator should do.
 
 ## Scope model
 
-Hierarchical, deepest-match wins. Syntax: `<segment>[:<segment>...]:(rw|ro)`.
-
-- `*:rw` / `*:ro` are top-level wildcards.
-- Mid-tree wildcards: `firewall:*:ro` permits ro on every firewall
-  subresource but NOT the bare domain. `*:rules:ro` permits ro on the
-  `rules` subresource of every domain. At the same depth, an exact segment
-  beats a wildcard segment.
-- `rw` implies `ro`; granting `firewall:rw` does NOT also require granting
-  `firewall:ro`.
-- Same-depth conflict (`firewall:rules:rw` + `firewall:rules:ro`):
-  `rw` wins.
-- No matching scope → deny.
-
-### Scope examples
-
-| Caller scopes                | Allowed                                          | Denied                                       |
-|------------------------------|--------------------------------------------------|----------------------------------------------|
-| `*:rw`                       | every endpoint                                    | nothing                                      |
-| `*:ro`                       | every GET                                         | every write                                  |
-| `firewall:rw`                | every firewall endpoint (zones/rules/redirects)   | `network/*`, `dhcp/*`, `system`              |
-| `firewall:rules:rw`          | `firewall/rules` CRUD                             | `firewall/zones`, `firewall/redirects`       |
-| `firewall:*:ro`              | every GET under firewall subresources             | bare `firewall:rw`, `firewall/*` writes      |
-| `firewall:rw` + `network:ro` | firewall CRUD + network read                      | network writes                               |
-| `raw:firewall:rw` + `firewall:ro` | none of `/raw/firewall/...` writes (raw needs BOTH) | nothing escalated                            |
-| `uapi:tokens:rw`             | mint new tokens whose scopes ⊆ caller's           | mint tokens that escalate                    |
+`docs/tokens.md` has the scope syntax, the scope tree and the rules that decide
+a match. In short: the deepest matching scope decides, `rw` implies `ro`, and
+no match denies. A `/raw/` request needs both the raw scope and the domain scope
+of the section, so a grant of `raw:rw` does not bypass a narrow domain scope.
 
 ### Scopes that grant root
 
@@ -343,24 +324,10 @@ that intractable.
 
 ## Audit shape
 
-One syslog line per write at NOTICE:
-
-```
-uapi <request_id> <token_name> AUDIT - <method> <path> <status> [<duration_ms>ms]
-```
-
-One syslog line per 401/403/5xx at WARNING/ERROR:
-
-```
-uapi <request_id> <token_name|-> WARN <code> <method> <path> <status> [<duration_ms>ms]
-uapi <request_id> -             ERROR <code> <method> <path> <status> [<duration_ms>ms]
-```
-
-One syslog line per insecure-bypass request at NOTICE:
-
-```
-uapi-insecure-bypass <request_id> <method> <path> status=<n> remote=<addr>
-```
+Each successful write, each 401 and 403, and each 5xx logs one syslog line with
+the request id and the token name, never the token value. A request through the
+insecure-test marker logs one more line. `docs/operations.md` § Log line format
+has the format.
 
 ### Recommendations for hardened deployments
 

@@ -136,9 +136,10 @@ does. Both checks work the same on either ucode, so a unit test runs them
 through a real file. `ulimit -f` in a child process, with `SIGXFSZ` ignored,
 fails a write to a regular file as a full filesystem does: 0 leaves the file
 empty, and 1 cuts it short after one block. Where a module writes a fixed path
-that a test cannot write, such as `/var/run/uapi.wg.psk`, the stub `fs` of
-`load_with_fs()` in `tests/harness.uc` creates the file in `/tmp` and hands the
-module a handle on `/dev/full`.
+that a test cannot write, such as `/var/run/uapi.wg.psk`, the test passes a
+stub `fs` to `load_with_fs()` of `tests/harness.uc`. The stub creates the file
+in `/tmp` and hands the module a handle on `/dev/full`, as in
+`tests/unit/packages_test.uc` and `tests/unit/wg_test.uc`.
 
 ## OpenWrt runtime integration
 

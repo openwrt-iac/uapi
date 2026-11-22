@@ -91,7 +91,7 @@ Two lock files, in three patterns:
 | `/var/lock/uapi.lock` (SH) | every uci transaction | lets multiple uci writes run in parallel ON DIFFERENT PACKAGES, while still serializing against the global EX |
 | `/var/lock/uapi.lock` (EX) | non-uci writes (apk, system passwords) | blocks all uci transactions for the duration of the non-uci op |
 | `/var/lock/uapi.pkg.<package>.lock` (EX) | a uci transaction on `<package>` | serializes writes to the same package; cross-package writes do not collide |
-| `/var/lock/uapi.pkg.unbound.lock` (EX) | also a uci transaction on `unbound_srv` or `unbound_ext`, and on `dhcp`, or on `system` but not through `system/timeservers`, while `/etc/init.d/unbound` exists, whether unbound runs or not | serializes the writes that restart unbound, so that the stay-up check of one does not see the restart or the config of another. The writes that reload unbound only while procd holds a trigger for it take the lock before they ask procd, so that the restart of a write to unbound cannot fall between the answer and the commit. A restart that outlives its request, see above, is no longer covered |
+| `/var/lock/uapi.pkg.unbound.lock` (EX) | also a uci transaction that restarts unbound or, while `/etc/init.d/unbound` exists, can reload it | serializes those writes, so that the stay-up check of one does not see the restart or the config of another. `docs/architecture.md` § Lock layout lists the writes and the reasons |
 
 This is the recipe taken by `transaction.uc`. New write paths should go through
 one of the three existing entry points (`transaction()`, `multi_transaction()`,
