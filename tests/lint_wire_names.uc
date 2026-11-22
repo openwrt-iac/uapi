@@ -57,6 +57,7 @@ const EXPECTED = {
 
 	"unbound.server.uc:resource_limits":  "rename: `resource` is an HCL block keyword",
 	"firewall.defaults.uc:output_policy": "rename: `output` collides with the chain name",
+	"firewall.defaults.uc:syn_flood":     "syn_flood_opts() writes `synflood_protect`, which fw4 reads first, for true, and `syn_flood` for false",
 	"firewall.zones.uc:output_policy":    "rename: `output` collides with the chain name",
 	"firewall.rules.uc:match":            "structured object flattened into src_port/dest_port and friends",
 	"firewall.nat.uc:match":              "structured object flattened into src_port/dest_port and friends",

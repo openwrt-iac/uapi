@@ -193,6 +193,79 @@ t.describe('firewall.defaults options that fw4 refuses', () => {
 	});
 });
 
+// LuCI's zones form writes synflood_protect, and fw4.uc of 25.12.5 reads it before syn_flood.
+t.describe('firewall.defaults syn_flood says what fw4 applies', () => {
+	let dh = handler.make_singleton(fw_defaults, { tx: { acquire: () => ({}), release: () => null,
+	                                                     reload: () => null, check_services: () => null } });
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let box = (opts) => ubus.stub({ uci: { firewall: {
+		d: { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT', ...opts },
+	} } });
+	let stored = (c) => [ c._state.uci.firewall.d.synflood_protect, c._state.uci.firewall.d.syn_flood ];
+	let writes = (c) => filter(c._state.uci_ops, (op) => index([ "set", "delete", "delete-option" ], op[0]) >= 0);
+	let codes = (r) => map(filter(r.body.errors ?? [], (e) => e.field == "syn_flood"), (e) => e.code);
+
+	t.it('reads synflood_protect, and syn_flood only without it', () => {
+		t.assert_equal(dh.get(box({ synflood_protect: '1' }), ctx).body.syn_flood, true);
+		t.assert_equal(dh.get(box({ synflood_protect: 'off', syn_flood: '1' }), ctx).body.syn_flood, false);
+		t.assert_equal(dh.get(box({ syn_flood: 'yes' }), ctx).body.syn_flood, true);
+	});
+
+	t.it('a write leaves fw4 applying the value, and true writes what LuCI writes', () => {
+		let c = box({ synflood_protect: '1' });
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: false }).body.syn_flood, false);
+		t.assert_deep_equal(stored(c), [ null, '0' ]);
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: true }).body.syn_flood, true);
+		t.assert_deep_equal(stored(c), [ '1', null ]);
+		c = box({ synflood_protect: '1', syn_flood: '1' });
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: false }).status, 200);
+		t.assert_deep_equal(stored(c), [ null, '0' ]);
+		c = box({ synflood_protect: 'on', syn_flood: '1' });
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: null }).body.syn_flood, false);
+		t.assert_deep_equal(stored(c), [ null, null ]);
+	});
+
+	// 3.x wrote syn_flood '0' for false, and the stock section holds syn_flood '1'.
+	t.it('a write that keeps the value writes nothing', () => {
+		for (let opts in [ { synflood_protect: '1' }, { syn_flood: '0' }, { syn_flood: '1' }, { synflood_protect: '0', syn_flood: '1' } ]) {
+			let c = box(opts);
+			let read = dh.get(c, ctx).body.syn_flood;
+			t.assert_equal(dh.patch(c, ctx, { syn_flood: read, input: 'DROP' }).status, 200, opts);
+			t.assert_deep_equal(writes(c), [ [ "set", "firewall", "d", "input", "DROP" ] ], opts);
+		}
+	});
+
+	t.it('a stored synflood_protect that fw4 refuses is an error of syn_flood', () => {
+		let swept = dh.sweep(box({ synflood_protect: 'maybe', syn_flood: '1' }))[0]?.errors ?? [];
+		t.assert_deep_equal(map(swept, (e) => [ e.field, e.code, e.live ]), [ [ "syn_flood", "invalid_format", true ] ]);
+		t.assert_deep_equal(codes(dh.patch(box({ synflood_protect: [ '1' ] }), ctx, { input: 'DROP' })), [ "invalid_format" ]);
+		let c = box({ synflood_protect: 'maybe' });
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: true }).status, 200);
+		t.assert_deep_equal(stored(c), [ '1', null ]);
+		c = box({ synflood_protect: 'maybe', syn_flood: 'maybe' });
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: null }).status, 200);
+		t.assert_deep_equal(stored(c), [ null, null ]);
+	});
+
+	// false keeps a stored false, so it leaves synflood_protect, and true over a synflood_protect
+	// that reads true leaves syn_flood.
+	t.it('a write that leaves a refused option in place is refused', () => {
+		t.assert_deep_equal(codes(dh.patch(box({ synflood_protect: 'maybe' }), ctx, { syn_flood: false })), [ "invalid_format" ]);
+		t.assert_deep_equal(codes(dh.patch(box({ synflood_protect: '1', syn_flood: 'maybe' }), ctx, { syn_flood: true })), [ "invalid_format" ]);
+		let c = box({ synflood_protect: '1', syn_flood: 'maybe' });
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: false }).status, 200);
+		t.assert_deep_equal(stored(c), [ null, '0' ]);
+	});
+
+	t.it('a limit that nft refuses is live while fw4 applies syn_flood', () => {
+		let limit = { synflood_rate: '1/minute', synflood_burst: '4294967295' };
+		for (let opts in [ [ { synflood_protect: '1' }, true ], [ { synflood_protect: '0', syn_flood: '1' }, false ] ]) {
+			let swept = dh.sweep(box({ ...limit, ...opts[0] }))[0]?.errors ?? [];
+			t.assert_deep_equal(map(swept, (e) => [ e.field, e.live ]), [ [ "synflood_rate", opts[1] ] ], opts[0]);
+		}
+	});
+});
+
 t.describe('firewall.redirects', () => {
 	t.it('contract', () => {
 		t.assert_equal(redirects.package, "firewall");

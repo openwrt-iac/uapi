@@ -66,6 +66,21 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `syn_flood` was on. This refusal uses the carve-out of `docs/versioning.md`
   for a tightening that refuses a payload that produced broken state. Migration
   note in `docs/migration-v3-to-v4.md`. (#423)
+- **BREAKING: `firewall/defaults.syn_flood` reads what fw4 applies.** LuCI's
+  zones form writes `synflood_protect` and removes `syn_flood`, and fw4 reads
+  `synflood_protect` first. 3.x read only `syn_flood`, so after a LuCI save it
+  read `false` while fw4 protected. v4 reads `synflood_protect`, and
+  `syn_flood` only when uci holds no `synflood_protect`. Such a section gets
+  another ETag at the upgrade. The 3.5.0 notice of #408 named two other
+  firewall reads and did not cover this one. A write of true stores
+  `synflood_protect '1'` and removes `syn_flood`, as LuCI does. A write of
+  false removes `synflood_protect` and stores `syn_flood '0'`, where LuCI
+  removes both, so that a write that keeps false leaves a stored `syn_flood
+  '0'` as it is. In 3.x a write over a stored `synflood_protect` answered 200
+  and fw4 kept the old value. A `synflood_protect` that fw4 refuses is an error
+  of the section, as the other options of #423 are, under the stored-error
+  rule announced in 3.4.0 (#308). Migration note in
+  `docs/migration-v3-to-v4.md`. (#439)
 - **BREAKING: three mwan3 rule and firewall zone writes that produce broken
   state answer 422.** mwan3 compares the `proto` of `mwan3/rules` with `tcp` and
   `udp` in lower case and drops the ports of another spelling, such as `TCP`, so

@@ -16,6 +16,8 @@ const ROWS = [
 	[ "firewall.defaults.uc", "defaults", "synflood_rate", "! 5/h", "synflood_rate" ],
 	[ "firewall.defaults.uc", "defaults", "synflood_burst", "0x10", "synflood_burst" ],
 	[ "firewall.defaults.uc", "defaults", "drop_invalid", "no", "drop_invalid" ],
+	[ "firewall.defaults.uc", "defaults", "syn_flood", "0", "syn_flood" ],
+	[ "firewall.defaults.uc", "defaults", "synflood_protect", "off", "syn_flood" ],
 	[ "firewall.zones.uc", "z1", "output", "rej", "output_policy" ],
 	[ "firewall.zones.uc", "z1", "family", "inet", "family" ],
 	[ "firewall.zones.uc", "z1", "name", "pro.be", "name" ],
