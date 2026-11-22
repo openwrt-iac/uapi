@@ -105,6 +105,22 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   peer without it and answers 200 with the new `X-Kernel-Status: omitted`, a
   value that a client takes as it takes a new error code. Note in
   `docs/migration-v3-to-v4.md`. (#424)
+- **BREAKING: a WireGuard endpoint with an IPv6 zone that musl refuses answers
+  422.** Both proto handlers give wg an IPv6 `endpoint_host` as it stands, and
+  musl's getaddrinfo reads its %zone. It takes digits up to 4294967295 on any
+  address, and the name of an interface only on a link-local or multicast
+  link-local address. wg refuses the config of the whole interface for any
+  other zone, so the interface does not come up. 3.x took such a write, and on
+  an up interface it answered 500 after the restore. A write now refuses a zone
+  that musl refuses on every router, such as `2001:db8::1%x`, with 422
+  `invalid_format` on `endpoint_host`, on a disabled peer too. A stored one
+  blocks every write of its peer. A write that sends a zone that names no
+  interface of the router, such as `fe80::1%nosuchdev`, for an enabled peer
+  with a key, answers 422 `conflict`. A stored one is not checked, because an
+  interface can exist at one time and not at another. No 3.5.0 notice covers
+  this. It uses the carve-out of `docs/versioning.md` for a tightening that
+  refuses a payload that produced broken state. Migration note in
+  `docs/migration-v3-to-v4.md`. (#438)
 - **BREAKING: some requests and reads follow the daemons more closely.** The
   request schema of `network/rules.ipproto` takes an integer from 1 to 255,
   where 3.x declared an integer or a string. A `dhcp/servers.leasetime` with a

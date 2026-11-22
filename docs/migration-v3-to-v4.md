@@ -450,6 +450,18 @@ interface comes up once it resolves. A host that inet_aton reads as an IPv4
 address, such as `192.168.1.01`, `10.1` or `0x0a000001`, asks no resolver,
 because wg reads it as an address too.
 
+On both platforms, the proto handler gives wg an IPv6 address as it stands, and
+musl's getaddrinfo reads its %zone. It takes digits up to 4294967295 on any
+address, and the name of an interface only on a link-local or multicast
+link-local address. wg refuses the config of the whole interface for any other
+zone. A write now refuses a zone that musl refuses on every router, such as
+`2001:db8::1%x`, with 422 `invalid_format` on `endpoint_host`, on a disabled
+peer too, and a stored one blocks every write of its peer. A write that sends a
+zone that names no interface of the router, such as `fe80::1%nosuchdev`, for an
+enabled peer with a key, answers 422 `conflict`. 3.x took both. On an up
+interface, the write answered 500 after the restore. A down interface did not
+come up at its next start. This uses the same carve-out.
+
 On OpenWrt main, the ucode proto handler gives wg a host of only digits and dots
 as it stands. wg refuses the config of the whole interface for one that
 inet_aton does not read, such as `10.0.0.256` or `1.2.3.4.5`. A write refuses
