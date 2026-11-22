@@ -3,7 +3,8 @@
 The error model is RFC 7807-inspired but not strictly conformant.
 `application/json` throughout. Success responses are the resource value at top
 level (GET/POST/PUT 2xx body **is** the resource; no `{ "data": {...} }`
-wrapper). DELETE success is `204 No Content` with `X-Request-Id` and no body.
+wrapper). DELETE success is `204 No Content` with `X-Request-Id` and no body,
+except on `system/cron_jobs`, where it is `200` with the entry that it removed.
 Errors always carry the envelope below.
 
 ## Envelope
@@ -34,16 +35,13 @@ Every non-2xx response carries this body shape (Content-Type:
 - `errors[]` is only present for `422 validation_failed`. **All** field errors
   are reported together so the client can fix everything in one round trip.
 
-For DELETE success, the response is `204 No Content` with the `X-Request-Id`
-header but no body.
-
 ## Top-level codes
 
 | HTTP | `code`                          | When                                                         |
 |------|----------------------------------|--------------------------------------------------------------|
-| 400  | `bad_request`                   | Malformed JSON, wrong shape, body where none expected, a query parameter value that the endpoint does not declare (a `limit` outside 1 to 500, a `family` other than `v4` or `v6` on `dhcp/leases`, a `managed` other than `true` or `false` on a curated list, a `validate` other than `1` on `/uapi/diagnostics`), no body on a PUT/PATCH, a key or string with a NUL or a control character other than tab, newline and carriage return, which uci cannot store, or the body of a POST, PUT or PATCH that has not arrived in full 10 s after the start of the request, which is checked before the bearer check |
+| 400  | `bad_request`                   | Malformed JSON, wrong shape, body where none expected, a query parameter value that the endpoint does not declare (a `limit` outside 1 to 500, a `family` other than `v4` or `v6` on `dhcp/leases`, a `managed` other than `true` or `false` on a curated list, a `validate` other than `1` on `/uapi/diagnostics`), an `Idempotency-Key` on a POST that does not match `^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$`, no body on a PUT/PATCH, a key or string with a NUL or a control character other than tab, newline and carriage return, which uci cannot store, or the body of a POST, PUT or PATCH that has not arrived in full 10 s after the start of the request, which is checked before the bearer check |
 | 400  | `invalid_cursor`                | Empty or malformed `?cursor=`, one referencing no current item, or one that ends on an unmanaged section when an item up to that section changed |
-| 401  | `unauthorized`                  | No `Authorization` header                                    |
+| 401  | `unauthorized`                  | No `Authorization` header, or one that is not `Bearer <token>` |
 | 401  | `invalid_token`                 | Token not in store, expired, or source IP not in `allowed_cidrs` (either address family) |
 | 403  | `insufficient_scope`            | Token valid, scopes don't cover this verb/path               |
 | 403  | `scope_escalation_blocked`      | `POST /uapi/tokens` requested scopes outside the caller's    |
@@ -61,7 +59,7 @@ header but no body.
 | 500  | `internal_error`                | Bug or unexpected condition                                  |
 | 500  | `reload_failed_restored`        | Daemon reload failed, or a daemon that uapi watches stopped after it. uapi rolled back the uci change |
 | 500  | `reload_failed_unrecovered`     | Reload AND restore failed, the reload of the restore had not ended when uapi stopped waiting for it, or the restore left a package that another writer, such as LuCI or a shell, committed to after the commit of the request, which `restore_error` names. Loudest case; manual recovery |
-| 503  | `service_unavailable`           | ubus unreachable, service not running                        |
+| 503  | `service_unavailable`           | ubus unreachable                                             |
 | 503  | `init_script_missing`           | `/etc/init.d/<svc>` not present for a resource's reload list |
 | 503  | `config_missing`                | `/etc/config/<package>` not present, so a write has nothing to write into: `wireless` on a router without a radio. A DELETE there answers `404 not_found`, because no section can exist. A `POST /uapi/batch` answers 503 for a DELETE there too, because it commits as one write |
 
@@ -147,13 +145,13 @@ Every response carries:
 | `X-Content-Type-Options`     | 200 and error responses (see below) | `nosniff`.                                                             |
 | `Referrer-Policy`            | 200 and error responses (see below) | `no-referrer` (request_id appears in URLs).                            |
 | `Cache-Control`              | 200 and error responses (see below) | `no-store` (token-scoped data).                                        |
-| `ETag`                       | curated GET 200/304 and write success | Quoted hash of this resource's own body (runtime block excluded). Sibling sections do not influence the value. Absent on raw passthrough, the non-uci endpoints and the read-only lease views, which therefore support neither conditional GET nor `If-Match`. |
+| `ETag`                       | curated GET 200/304 and write success | Quoted hash of this resource's own body (runtime block excluded). Sibling sections do not influence the value. Absent on raw passthrough, the non-uci endpoints and the read-only collections `dhcp/leases` and `network/wireguard_kernel_peers`, which therefore support neither conditional GET nor `If-Match`. |
 | `WWW-Authenticate: Bearer`   | every 401                           | `realm="uapi", error="<code>"` (RFC 7235 + RFC 6750).                  |
 | `Retry-After: <seconds>`     | 423 locked, 429 too_many_requests   | Honor with jittered backoff.                                           |
 | `Link: <?cursor=...>; rel="next"` | paginated GETs when more items exist | RFC 8288. Keeps the query parameters that the list declares: `family` on `dhcp/leases` and `managed` on a curated list. |
 | `X-Next-Cursor: c_<id>`      | paginated GETs when more items exist | Convenience companion to `Link`. A page that ends on an unmanaged section gives `c_<id>.<hash>`, with a hash of the ETags of the items up to it, because that id is the position of the section in its package. |
 | `Idempotent-Replayed: true`  | POST replays via `Idempotency-Key`  | Marker that the response was served from cache rather than re-applied. |
-| `X-Reload-Status`            | 2xx on curated-resource writes, the `POST /uapi/batch` 207, and a `system/cron_jobs` write as `unverified` only | `ok` = init script reload exited 0 (NOT a runtime-convergence promise). `no_reload` = no init script ran, because the write changed nothing in uci, or because procd runs none of the daemons that read it, which only a `dhcp` write can meet. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or every init script exited 0 but the `dnsmasq --test` check after a dhcp write did not finish, because it was killed after 10 s or by another SIGKILL. A cron write logs the note to syslog. See `docs/operations.md` "Success != converged". |
+| `X-Reload-Status`            | 2xx on curated-resource writes, the `POST /uapi/batch` 207, and a `system/cron_jobs` write as `unverified` only | `ok` = init script reload exited 0 (NOT a runtime-convergence promise). `no_reload` = no init script ran, because the write changed nothing in uci, or because procd runs none of the daemons that read it, which only a `dhcp` write can meet. `unverified` = the write keeps its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or every init script exited 0 but the `dnsmasq --test` check after a dhcp write did not finish, because it was killed after 10 s or by another SIGKILL. A cron write logs the note to syslog. See `docs/operations.md` § "Success" means exit 0, not runtime convergence. |
 | `X-Reload-Services`          | curated-resource writes and the `POST /uapi/batch` 207, when status=ok or unverified | Comma-separated list of init scripts that ran (e.g. `firewall`, `dnsmasq`), in order. With `unverified`, one of them can still be running, and those after it run when it ends, unless it fails. On a batch, the services of the packages that the batch changed, sorted. A daemon that reads the config but that the router can lack, or that the operator stopped, is reloaded and listed only while procd runs it. With all of them running, `dhcp/servers` and `dhcp/hosts` answer `dnsmasq,odhcpd,unbound`, `dhcp/odhcpd` answers `odhcpd,dnsmasq,unbound`, `dhcp/dnsmasq` answers `dnsmasq,unbound`, `system` answers `system,log,dnsmasq,odhcpd,unbound`, `system/timeservers` answers `sysntpd,dnsmasq`, and each `network` resource answers `network,odhcpd`. Each leaves out a daemon that does not run. A batch that holds a `dhcp/odhcpd` write lists `dnsmasq,odhcpd,unbound`. |
 | `X-Kernel-Status`            | 2xx on curated-resource writes, and the `POST /uapi/batch` 207 | Whether the write reached the kernel, not just uci. `ok` = every interface it targeted was applied. `partial` = some were and some were skipped. `omitted` = the apply set a peer without the endpoint that uci holds for it, as the proto handler does: on OpenWrt main, the ucode proto handler leaves out the endpoint of a host that does not resolve, or of a port that it cannot read, and keeps the peer. A read shows the endpoint that the kernel holds in `runtime.endpoint`. `omitted` takes the place of `ok`, and of `partial` when the write also skipped an interface: `X-Kernel-Applied` then names only the interfaces that were applied, so a skipped one is an interface that the write targets and the header does not name. 25.12 never answers `omitted`: wireguard.sh gives wg every endpoint, and a name that does not exist keeps the whole interface down from its next start, so a write that sends one answers `422 conflict` on `endpoint_host` before its commit. `skipped` = it targeted interfaces and none was applied. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path or the write changed nothing in uci. An interface is skipped when it is down or netifd does not know it, which is not a failure: `ifup` reads the peers from uci. On OpenWrt main, netifd restarts the interface on each peer change, so the apply first waits, up to 8 s, for that restart to end. A restart that does not end in time fails the write with a restore (`reload_failed_restored`, or `reload_failed_unrecovered` when the restore fails too). That handler sets all the peers of the interface or none, so the same 500 answers a write to an interface that another stored peer already keeps down. |
 | `X-Kernel-Applied`           | curated-resource writes and the `POST /uapi/batch` 207, when at least one interface was applied | Comma-separated interfaces whose kernel state the write changed (e.g. `wg0`). |
@@ -165,9 +163,11 @@ The four transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
 "writes" because that is measured, not assumed: raw passthrough (`/raw/...`) and
 the non-uci writes (`/packages/...`, `/uapi/tokens`, `/system/password`,
 `/system/authorized_keys`, `/system/cron_jobs`) never reach
-`attach_reload_headers` and return none of them. `/system/cron_jobs` does reload
-cron, but reports the outcome in its body as `runtime.crond_running`, because
-the init script exits 0 even when crond stops. Until 2.5.0 the OpenAPI document
+`attach_reload_headers`. They return none of these headers, with one
+exception: a `/system/cron_jobs` write answers `X-Reload-Status: unverified`
+when its reload of cron had not ended at the 20 s bound. Otherwise it reports
+the outcome in its body as `runtime.crond_running`, because the init script
+exits 0 even when crond stops. Until 2.5.0 the OpenAPI document
 declared the reload pair on those responses anyway, which is why the wording
 here matters: a client generated from the spec was told to expect a header that
 was never going to arrive. `POST /uapi/batch` does not reach

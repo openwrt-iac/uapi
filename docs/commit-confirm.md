@@ -1,8 +1,8 @@
 # Commit-confirmed apply (deferred design)
 
-**Status: DEFERRED, with the authz model now settled.** Not shipped in 2.3.0,
-2.4.0, 2.4.1 or 2.5.0, and not in 3.0.0. The full per-write implementation was
-built, shipped in the 2.3.0-rc1 pre-release, soaked on live hardware, and then
+**Status: DEFERRED, with the authz model now settled.** No stable release ships
+it. The full per-write implementation was built, shipped in the 2.3.0-rc1
+pre-release, soaked on live hardware, and then
 removed before stable; it is recoverable from commit `a85a5cd`. This file is the
 design and decision record, not a description of shipped behavior.
 
@@ -61,7 +61,9 @@ reload. A single box-global pending window is enforced by an exclusive flock
   only the query form worked. A new arm reads `env.headers`, which holds every
   request header.
 - `GET /confirm` (list), `GET /confirm/<token>` (status), `POST
-  /confirm/<token>` (ack), `DELETE /confirm/<token>` (roll back now).
+  /confirm/<token>` (ack), `DELETE /confirm/<token>` (roll back now). A new arm
+  serves these under `/uapi/confirm`, where the v4 layout puts uapi's own
+  endpoints.
 - Scope `uapi:confirm` (`:ro` for status/list, `:rw` for ack/rollback). Arming
   needed no extra scope. **Superseded**: this is the model the authz section
   below rejects, recorded here because it is what commit `a85a5cd` contains and
@@ -92,16 +94,18 @@ of the mechanism; the flock in Architecture above is the accurate description,
 and the rc1 code in `a85a5cd` behaves as described here.) The Terraform-useful
 shape is `apply-confirm`'s
 `stage` primitive exposed over HTTP so a wrapper can arm once, run the apply,
-then ack once. Locked design (see `docs/roadmap.md`):
+then ack once. Locked design:
 
-- New `POST /confirm` (the bare-collection slot, unrouted today, so a 404 like
-  any unknown path; it was a 405 while the rc1 collection existed). Originally
-  scoped for 2.4.0, which passed without it.
+- New `POST /uapi/confirm`. No route serves it today, so it answers 404 like
+  any unknown path. It was first scoped for 2.4.0, which passed without it.
 - Body names curated **resources/scopes, never raw packages**; uapi derives
   the package set and reload-service union from `RESOURCE_SOURCES` (the same
   fold `/uapi/batch` does).
-- Returns the same `ConfirmWindow` 202 body; ack/rollback/status/list reuse
-  the existing `/confirm` endpoints unchanged.
+- Returns the same `ConfirmWindow` 202 body. Ack, rollback, status and list are
+  the rc1 endpoints under `/uapi/confirm`, with the authz model below.
+- New endpoint, so a minor, not a patch. It waits until `apply-confirm` is
+  stable on the feed and a consumer asks for it. The provider leaves its write
+  path as it is, and the wrap is operator-driven.
 
 ## Authz model (decided)
 
@@ -109,14 +113,14 @@ then ack once. Locked design (see `docs/roadmap.md`):
 to match the revert's blast radius.**
 
 Arming a window, whether by `?confirm=<seconds>` on a write or by
-`POST /confirm`, requires `uapi:confirm:rw` **and** `:rw` on every curated
+`POST /uapi/confirm`, requires `uapi:confirm:rw` **and** `:rw` on every curated
 resource backed by every package in the derived set. ack and rollback require
 the same. Status and list require only `uapi:confirm:ro`.
 
 ### Why arming cannot ride the write's own scope
 
 `apply-confirm` reverts whole uci packages, and one package backs many resources
-(`network` backs 6, `firewall` 6, `dhcp` 6). A token holding only
+(`network` backs 7, `firewall` 6, `dhcp` 5). A token holding only
 `network:routes:rw` could arm a window whose expiry restores the entire
 `network` package to its arm-time snapshot, discarding a concurrent and properly
 authorized write to `network:interfaces` that had already returned `200` and
@@ -143,10 +147,11 @@ which of seven it was.
 
 ### Why ack and rollback are held to the same rule
 
-`DELETE /confirm/<token>` destroys committed state in the window's packages.
-That is the same act as a deadline revert, so it needs the same authority.
+`DELETE /uapi/confirm/<token>` destroys committed state in the window's
+packages. That is the same act as a deadline revert, so it needs the same
+authority.
 
-`POST /confirm/<token>` (ack) disarms the safety net and makes the change
+`POST /uapi/confirm/<token>` (ack) disarms the safety net and makes the change
 permanent. Less destructive, but a token that could not have armed the window
 should not be the one deciding the box is healthy. Holding both to the arming
 rule also means the wrapper that arms is the wrapper that acks, which is the
@@ -160,10 +165,10 @@ before anything depends on it.
 
 ### Why status and list are not scoped per resource
 
-`GET /confirm` and `GET /confirm/<token>` return a token, a deadline and a
-package list, never configured values, so there is nothing to filter the way
-`/uapi/diagnostics?validate=1` has to filter findings. An operator needs to see
-that a window is armed even when it guards packages they cannot write.
+`GET /uapi/confirm` and `GET /uapi/confirm/<token>` return a token, a deadline
+and a package list, never configured values, so there is nothing to filter the
+way `/uapi/diagnostics?validate=1` has to filter findings. An operator needs to
+see that a window is armed even when it guards packages they cannot write.
 
 ### Implementation note
 
@@ -286,3 +291,7 @@ owned by the provider repo. Two rules it must follow:
   auto-revert. `apply; if reachable then ack else let-expire`, never `if exit
   0 then ack`. Otherwise a forgotten ack reverts the whole armed package to
   its arm-time snapshot, silently undoing committed sibling-resource changes.
+- **Expect one window per box for the whole apply.** The pending window is
+  box-global and stays armed until the ack. In that time a second arm, from
+  another operator or a parallel CI run against the same box, gets `409
+  already_armed`.

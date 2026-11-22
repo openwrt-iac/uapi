@@ -57,8 +57,9 @@ time ≈ 1-2s instead of ≈ 5s.
 - No in-memory state across requests. Counters, caches, in-flight maps -
   none of it survives. The metrics and rate-limit subsystems are
   file-backed for exactly this reason.
-- No timers. `commit-confirmed`-style auto-revert needs a background tick;
-  the model precludes it. Deferred with prejudice (see `docs/roadmap.md`).
+- No timers. A commit-confirmed revert needs one, so its design puts the
+  timer in a separate package. `docs/commit-confirm.md` has the design and
+  why it is deferred.
 - Per-request VM startup cost. uhttpd-mod-ucode amortizes this via the
   parent's CoW, but the child still calls module top-level once (the
   copy-on-write avoids reparsing, not re-instantiation).
@@ -69,8 +70,8 @@ Two flock files, used in three patterns:
 
 ```
 /var/lock/uapi.lock                   shared by uci transactions,
-                                       exclusive by non-uci writes
-                                       (apk, system/access, cron_jobs)
+                                       exclusive by non-uci writes (apk,
+                                       password, authorized_keys, cron_jobs)
 /var/lock/uapi.pkg.<package>.lock     exclusive per-package; serializes
                                        writes to the same uci package only
 ```
@@ -82,7 +83,7 @@ Two flock files, used in three patterns:
 | uci write (any one pkg) | SH | EX on that one pkg                     |
 | uci write that restarts unbound (`unbound_srv`, `unbound_ext`), or that can reload it (`dhcp`, and `system` but not `system/timeservers`, while `/etc/init.d/unbound` exists) | SH | EX on that pkg and on `unbound` |
 | uci write (multi pkg, /uapi/batch) | SH | EX on each, sorted lexicographic order |
-| Non-uci write (apk, system/access, cron_jobs) | EX | none                   |
+| Non-uci write (apk, system/password, system/authorized_keys, system/cron_jobs) | EX | none |
 
 The interactions:
 
@@ -801,6 +802,9 @@ On second arrival:
 - Different fingerprint → `409 idempotency_key_conflict`.
 - Past TTL → cache miss; the new request runs and re-populates.
 
+A key that does not match `^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$` answers
+`400 bad_request`, and the request does not run.
+
 Cache hits skip the entire handler stack except auth and the rate limiter -
 the resource handler never runs. A client retrying a network-blipped POST
 gets the original response back, never a duplicate resource.
@@ -821,21 +825,10 @@ Every response carries `X-Request-Id` (a ULID by default; client-supplied
 via `X-Request-Id` header or `?request_id=` query param, validated against
 `^[A-Za-z0-9_-]{8,128}$`).
 
-One syslog line per successful (2xx) writeable request (POST/PUT/DELETE/PATCH)
-at NOTICE, plus per-401/403/5xx at WARNING/ERROR. Other 4xx writes get no
-NOTICE line at all. Reads are NOT audit-logged at
-NOTICE level (the request_id still appears in any error line). `/healthz`
-is excluded from all logging.
-
-Format:
-```
-uapi <request_id> <token_name|-> <severity> <code|-> <method> <path> <status> [<duration_ms>ms]
-```
-
-Operator-facing fields use logfmt: bare for identifier-safe values,
-JSON-escaped otherwise. The `request_id` correlates a wire response with
-its audit line, an error report with the line, and (for batches) the
-batch's request_id with each sub-request's `<request_id>.<index>` line.
+Each successful write, each 401 and 403, and each 5xx logs one syslog line
+that carries the `request_id`, so it ties a response to its line. A `POST
+/uapi/batch` logs one line for the whole request. `docs/operations.md` § Log
+categories and § Log line format have the categories and the format.
 
 ## Where state lives
 
@@ -845,6 +838,8 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | uci configuration            | `/etc/config/<package>`                     | Indefinite        |
 | Authorized SSH keys          | `/etc/dropbear/authorized_keys`             | Indefinite        |
 | Root crontab                 | `/etc/crontabs/root`                        | Indefinite        |
+| Package feeds                | `/etc/apk/repositories.d/<name>.list`       | Indefinite        |
+| Root password hash           | `/etc/shadow`, written by `busybox passwd`  | Indefinite        |
 | DHCP leases                  | `/tmp/dhcp.leases`, the `leasefile` of odhcpd (`/tmp/odhcpd.leases` by default) | Daemon-managed |
 | Routing table names (read)   | `/etc/iproute2/rt_tables`                   | Operator-managed, base-files conffile |
 | Service names (read)         | `/etc/services`                             | Operator-managed, base-files conffile |
@@ -854,6 +849,7 @@ batch's request_id with each sub-request's `<request_id>.<index>` line.
 | Recent errors                | `/var/run/uapi-error-ring/`                 | The last 20, until reboot |
 | Token last-used sentinel     | `/var/run/uapi-token-update/`               | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |
 | Interrupted-write journal    | `/var/run/uapi-interrupted-writes/`         | Until reboot. Each record is named by the pid and the start time of its request process, and removed when its write returns. A write that throws or is killed keeps it, because its commit may have landed. A record whose process is gone, or whose pid another process now holds, is reported by `/uapi/diagnostics` under `interrupted_writes` |
+| WireGuard preshared key      | `/var/run/uapi.wg.psk`, mode 0600           | One `wg set`, unlinked when `wg` returns |
 | Apk install lock             | (apk-internal)                              | Per-operation     |
 | uapi global flock            | `/var/lock/uapi.lock`                       | Per-transaction   |
 | uapi per-package flock       | `/var/lock/uapi.pkg.<pkg>.lock`             | Per-transaction   |
@@ -877,5 +873,6 @@ uapi responsibility - point a `node_exporter` or central collector at the
 box and aggregate there.
 
 `GET /uapi/diagnostics` reports in `state_dirs` whether uapi uses each of these
-directories, as it finds them, without creating or narrowing one.
-`docs/operations.md` § Diagnostics says what each value means and costs.
+directories, as it finds them. `docs/operations.md` § Diagnostics says what
+each value means and costs, and which directories the request itself creates
+before the read.

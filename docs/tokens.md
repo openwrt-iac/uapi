@@ -10,7 +10,7 @@ authorized against a hierarchical scope tree.
 ```sh
 uapi-token create --name <label> --scope <scope> [--scope <scope>...] \
                   [--expires-in <N>[smhd]] [--allowed-cidr <CIDR>...] \
-                  [--force]
+                  [--rate <N>] [--burst <N>] [--force]
 ```
 
 - `--name`: human-readable label. Must be unique: a name that another section of
@@ -23,6 +23,8 @@ uapi-token create --name <label> --scope <scope> [--scope <scope>...] \
   series in `/uapi/metrics`, whose files are named by their labels.
 - `--scope`: at least one. May repeat. Validated against the known scope tree
   (see below); `--force` bypasses.
+- `--rate`, `--burst`: optional per-token rate limit, see
+  [Per-token rate limit](#per-token-rate-limit).
 - `--expires-in`: optional duration. Suffix is one of `s`/`m`/`h`/`d`. The token
   returns `401 invalid_token` with `message: "Token expired"` after the deadline
   passes.
@@ -45,6 +47,7 @@ needed.
 uapi-token list             # short summary: name, scopes, expiry (if set), allowed_cidrs (if set)
 uapi-token show <name>      # detailed view (scopes, expiry, cidrs, last_used_at/ip; no secret)
 uapi-token revoke <name>    # delete a token
+uapi-token scopes [--json]  # the known scope paths, one per line or as a JSON array
 ```
 
 `uapi-token create` and `revoke` take the locks that an HTTP write of the token
@@ -235,8 +238,9 @@ via `/raw/firewall/...` but cannot write them. The domain-tree override
 always wins. This is intentional: granting `raw:rw` should not be a
 backdoor around carefully-crafted curated scopes.
 
-For packages outside the curated set, the domain check uses
-`[<package>]`. Granting `*:rw` or that specific package scope covers it.
+A section type that the type map of `src/raw.uc` does not hold, such as a
+firewall `nat` section or any `mwan3` section, is checked against the package
+alone, `[<package>]`. Granting `*:rw` or that package scope covers it.
 
 ## Per-token rate limit
 

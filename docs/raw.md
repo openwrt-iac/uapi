@@ -137,15 +137,17 @@ Every raw request needs **two** scope checks, evaluated independently:
 1. **Raw tree**: `raw` or `raw:<package>` must permit the verb.
 2. **Domain tree**: the section's `.type` is mapped to its curated domain path
    (`firewall.rule` -> `firewall:rules`, etc.) and the same verb must be
-   permitted there. For packages not in the curated map, the domain path is just
-   `[<package>]`.
+   permitted there. For a section type that the map does not hold, the domain
+   path is just `[<package>]`.
 
 The dual check exists so granting `raw:rw` does not silently bypass a
 carefully-scoped `firewall:rules:ro`. If the deepest matching scope on either
 tree denies, the request is denied.
 
-For packages absent from that map (e.g. `openvpn`, `mwan3`, `usteer`), only
-`*:rw` or a package-level scope like `openvpn:rw` permits the domain side.
+For a section type absent from that map (e.g. any `openvpn`, `mwan3` or
+`usteer` section, or a firewall `nat`), only `*:rw` or a package-level scope
+like `openvpn:rw` permits the domain side. The map is `TYPE_DOMAIN_MAP` in
+`src/raw.uc`.
 
 ## Reload mapping
 
@@ -161,7 +163,10 @@ fallback table for known packages:
 | system     | system, then dnsmasq, odhcpd and unbound, each while procd runs it |
 
 If `/etc/config/ucitrack` has an entry for the package, its `option init` (plus
-`list affects` chain) takes precedence over the fallback table. The fallback
+`list affects` chain) takes precedence over the fallback table. A package with
+neither reloads `/etc/init.d/<package>` when that script exists. Otherwise
+uapi knows no service, and the write answers `reloaded: false` with a
+`reload_note`. The fallback
 follows what a LuCI save reloads, except for `network` and `wireless`. dnsmasq,
 odhcpd and unbound have a procd trigger on `dhcp`, dnsmasq and odhcpd one on
 `system`, and odhcpd one on `network`. LuCI's
@@ -181,21 +186,15 @@ network or wireless write would hold its locks for two more init scripts and,
 while unbound runs, a 2 s watch, would take the lock of `unbound`, which `dhcp`,
 `system` and unbound writes share, and would fail the write with a restore when
 unbound stops for a reason of its own. A raw write of `ula_prefix` reaches
-dnsmasq and unbound at their next reload, such as the one of a `dhcp` write. A
+dnsmasq and unbound at their next reload, such as the one of a `dhcp` write.
+
+dnsmasq, odhcpd and unbound reload only while procd runs them, as for a LuCI
+save. So a router without one of them, or with it stopped, skips it: the write
+does not answer `503 init_script_missing` for it, and does not start it. A
 write to `dhcp` or `system` takes the lock of `unbound` while
-`/etc/init.d/unbound` exists, whether unbound runs or not, so it answers `423
-locked` at the same moment as a write to unbound or another of them
-(`docs/architecture.md` § Lock layout). Each of them is reloaded when its init
-script exists and procd holds a `config.change` trigger for it, which is when a
-LuCI save reloads it, or when the `service list` call fails, since uapi then
-cannot tell. procd holds the triggers from the start of the service to its stop,
-whatever its instances show, so a write starts again a daemon that crashed too
-often, and starts dnsmasq when it enables a `dnsmasq` section while every other
-one is disabled. A router without the daemon, or with the daemon stopped, skips
-it: the write does not answer `503 init_script_missing` for it, and the reload
-does not start it, as the reload of dnsmasq.init and unbound.init would. At
-boot, unbound registers only a trigger on interface events, which starts it 3 s
-after the last of them, so a write before that skips it too.
+`/etc/init.d/unbound` exists, so it answers `423 locked` while a write to
+unbound, or another of them, runs. `docs/architecture.md` § Lock layout and §
+Transaction recipe, step 0, have the rules.
 
 ## Examples
 

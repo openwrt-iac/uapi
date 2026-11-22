@@ -60,7 +60,8 @@ holds no site, or when a "covers all N sites" count in this file or in
 **This audit covers all 60 sites that the command finds.** It used to cover 16
 of the 36 lines that the earlier command found, and nine modules were absent
 from it: `error_ring`, `idempotency`, `metrics`, `mgmt`, `ratelimit`,
-`token_store`, `dhcp.leases`, `dhcp.leases6` and `dhcp.servers`.
+`token_store`, `dhcp.leases`, `dhcp.leases6` (since merged into
+`dhcp.leases`) and `dhcp.servers`.
 
 Every descriptor, pipe and lock below is released on every in-request exit path.
 What the audit did find is listed under [Open findings](#open-findings): a
@@ -138,30 +139,23 @@ under it:
 Four of these hold a lock longer than the write itself takes.
 
 - **The reloads hold the lock for up to 20 s in all.** `default_reload()` waits
-  for the scripts of a request, those of the restore included, for 20 s in all,
-  and then answers without them, so the global SH and the EX locks are held for
-  20 s of reloads at most, plus the checks and the wait of a restore on libuci's
-  flock, and every non-uci write answers 423 meanwhile. A script still running
-  then runs on without the lock, and the next write can commit and reload beside
-  it: its reload of the same service waits for the lock of `procd_lock` within
-  its own 20 s. Before, a script that did not end, or a process that it left
-  running with its pipe open, held the locks until uhttpd killed the request at
-  its script timeout, and the client got no answer from uapi.
+  for the scripts of a request, those of the restore included, for 20 s in all.
+  So the global SH and the EX locks are held for 20 s of reloads at most, plus
+  the checks and the wait of a restore on libuci's flock, and every non-uci
+  write answers 423 meanwhile. A script still running then runs on without the
+  lock, see step 6 of the transaction recipe in `docs/architecture.md`.
 - **The stay-up watch sleeps under the lock.** A reload of `unbound` or
-  `unbound-uci-ext` with a running daemon, which a `dhcp` or `system` write also
-  runs while procd holds a trigger for unbound, polls `service list` every 100
-  ms for up to 2 s (the `sleep()` in `default_watch()`), still holding the
-  global SH and the EX locks. The restore runs the watch again. While it waits,
-  every non-uci write answers 423. The watch needs the lock, because another
-  writer's restart of unbound would read as a stop.
-- **The dnsmasq check parses the whole config under the lock.** After a reload
-  of `dnsmasq` by a write that commits `dhcp`, `run_test()` runs `dnsmasq
-  --test` for each instance, and the restore runs it again, still holding the
-  global SH and the EX locks. The parse grows with the config: a `conf-dir` with
-  500k `address=/x/` lines, as adblock writes, took 0.5 to 0.6 s and 34 to 42 MB
-  of RSS on two x86 machines. While it runs, every non-uci write answers 423.
-  Each run is killed after 10 s, which leaves the write committed with
-  `X-Reload-Status: unverified`, see the row of `run_test()`.
+  `unbound-uci-ext` with a running daemon polls `service list` for up to 2 s
+  (the `sleep()` in `default_watch()`), still holding the global SH and the EX
+  locks, and the restore runs the watch again. Every non-uci write answers 423
+  meanwhile. The watch needs the lock, because another writer's restart of
+  unbound would read as a stop.
+- **The dnsmasq check parses the whole config under the lock.** `run_test()`
+  runs `dnsmasq --test` for each instance after a reload by a write that
+  commits `dhcp`, and again on a restore, still holding the global SH and the
+  EX locks, for up to 10 s each. The parse grows with the config: a `conf-dir`
+  with 500k `address=/x/` lines, as adblock writes, took 0.5 to 0.6 s and 34 to
+  42 MB of RSS on two x86 machines. Every non-uci write answers 423 meanwhile.
 - **The apk paths hold the global EX across network I/O.** `apk add`, `apk
   update` and the retry fetch from the feeds, and uapi sets no timeout of its
   own. Every uci write answers 423 until apk returns. Only uhttpd's script

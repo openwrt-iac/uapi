@@ -16,116 +16,59 @@ background.
 
 Two signals worth wiring into your automation:
 
-- **`X-Reload-Status`** response header on curated-resource writes: `ok` means
-  the init
-  script ran and exited 0, and `no_reload` means that no init script ran. The
-  header is
-  intentionally not a "converged" promise. Each writable resource outside `dhcp`
-  has
-  a reload service that it always runs, so there `no_reload` means that the
-  write changed
-  nothing in uci, such as a PATCH that names no field, or a PUT or a PATCH that
-  sends the values that uci holds.
-  A write that commits nothing reloads nothing, since 3.2.0 for a PATCH and
-  since 3.3.0 for a PUT. A `dhcp` write reloads
-  dnsmasq, odhcpd and unbound only while procd runs them, so it also answers
-  `no_reload`
-  when none of them runs. As for a LuCI save, procd runs such a daemon while it
-  holds a
-  config trigger for it, from the start of the service to its stop, whatever the
-  instances
-  show, so a write also starts again a daemon that crashed too often. At boot,
-  unbound holds
-  no such trigger until 3 s after the last interface event, and a write leaves
-  it as it is.
-  `unverified` means that the write kept its commit and that whether its
-  daemons take the new config is unknown: an init script was still running
-  when uapi stopped waiting for it, or the `dnsmasq --test` check after a
-  dhcp write did not finish, see below.
-- **`X-Reload-Services`**: comma-separated list of init scripts that
-  ran. Useful for audit/log correlation.
+- **`X-Reload-Status`** on curated-resource writes. `ok` means that each init
+  script ran and exited 0. It does not promise that the daemon converged.
+  `no_reload` means that no init script ran: the write changed nothing in uci,
+  or, on a `dhcp` write, procd runs none of dnsmasq, odhcpd and unbound.
+  `unverified` means that the write kept its commit, and that uapi does not know
+  whether its daemons took the new config. See below.
+- **`X-Reload-Services`**: the init scripts that ran, in order. Useful for
+  audit and log correlation.
 
-unbound and dnsmasq are the exceptions. When unbound runs, a write that
-reloads `unbound` or `unbound-uci-ext` waits 2 s for each unbound instance to
-keep running. A write to `dhcp/servers`, `dhcp/hosts`, `dhcp/dnsmasq`,
-`dhcp/odhcpd`, `system` or the raw `dhcp` and `system` packages reloads
-`unbound` while procd runs it, and waits the 2 s too when unbound ran before
-the write. While `/etc/init.d/unbound` exists, each of these writes also
-takes the lock of `unbound` before it asks procd, whether unbound runs or
-not, so a write to `unbound/server`, `unbound/srv` or `unbound/ext`, or
-another of these writes, at the same moment answers `423 locked`. A network
-or wireless write reloads no unbound and takes no such lock. If an
-instance stops, the write answers `500 reload_failed_restored`, and its
-`reload_error` reads `unbound stopped after the reload, with exit code 1`. So a
-2xx on these writes also means that procd did not report unbound as stopped in
-the 2 s after the reload. An instance that `service list` does not show,
-because something restarts it or the ubus call fails, does not count, and a
-daemon that stops later than 2 s still answers 2xx.
+`docs/errors.md` § Response headers lists every value of both headers.
+`docs/architecture.md` § Transaction recipe, steps 0 and 6, has the rules that
+decide which daemons a write reloads and how uapi checks them. What they mean
+for an operator:
 
-dnsmasq is checked by its config. A write to `dhcp/servers`, `dhcp/hosts`,
-`dhcp/dnsmasq`, `dhcp/odhcpd`, the raw `dhcp` package, or a `/uapi/batch` that
-commits `dhcp`, reloads `dnsmasq` while procd runs it, and then uapi runs the
-command of each dnsmasq instance with `--test` on the config that dnsmasq.init
-just wrote. If dnsmasq refuses it, the write answers
-`500 reload_failed_restored`, and its `reload_error` reads, for example,
-`dnsmasq refuses its config cfg01411c: bad IP address at line 33 of
-/var/etc/dnsmasq.conf.cfg01411c`.
-The check covers every instance, one that is not running included, since
-procd starts it on that config. So on a router whose dnsmasq config was
-refused before the write, a write that does not fix it answers
-`500 reload_failed_unrecovered`. A `--test` that cannot run, because fork
-fails, fails the write in the same way. A `--test` that does not finish within
-10 s is killed, and judges nothing: the write keeps its commit and answers 2xx
-with `X-Reload-Status: unverified`, and a raw write a `reload_note`. uapi cannot
-tell the time bound from another `SIGKILL`, such as the OOM killer's, so both
-read the same. A `conf-file` on a mount that hangs therefore holds the locks
-for 10 s per instance, where it held them until uhttpd killed the request with
-no answer. A parse of a `conf-dir` with 500k `address=/x/` lines took 0.6 s on
-x86. A target that takes longer than 10 s to parse its config, such as a slow
-MIPS router with large adblock lists, answers `unverified` on every dhcp write,
-and dnsmasq itself is not affected. `--test` parses the config and the files of
-`conf-file` and `conf-dir`, and exits. It does not read the files of
-`addn-hosts` and `servers-file`, which dnsmasq reads after it starts. A config
-that dnsmasq parses but cannot start with, such as `min-port` above
-`max-port`, a `dhcp-leasefile` in a missing directory or a port that another
-daemon holds, still answers 2xx. No write waits for the daemon to start. Each
-write pays one parse of the whole config per instance, which grows with its
-size, such as a `conf-dir` of adblock lists, and pays it again on a restore.
-A write to `system`, `system/timeservers` or the raw `system` package reloads
-dnsmasq too, for the hostname and NTP, but runs no check: a config that dnsmasq
-refused before, or a slow parse, must not fail or undo a hostname or NTP
-change.
-OpenWrt's reload of dnsmasq can restart the daemon, which on a slow machine can
-leave it stopped for 5 s, and uapi does not report that restart.
-
-uapi runs the reloads of a write in order and waits for them for 20 s in all,
-those of a restore included. A system write reloads up to five services, and
-the 20 s cover them all. uapi does not kill a reload that runs longer: it
-answers without it, the write keeps its commit and answers 2xx with
-`X-Reload-Status: unverified`, and a raw write a `reload_note` such as
-`firewall reload was still running when the 20 s that uapi waits for the
-reloads of a request ran out, so its result is unknown, and the reloads of
-dnsmasq, odhcpd follow it unless it fails`. A `system/cron_jobs` write answers
-the header too, and logs the note to syslog as `uapi-cron-reload-unverified`.
-The reloads after the one still running start when it ends, unless it fails,
-and uapi does not learn how they end, so check the daemon. No stay-up watch or
-`dnsmasq --test` check runs after such a reload. Before 3.3.0, uhttpd killed a
-request whose reload did not end at its 60 s script timeout and answered 502,
-and uci kept the new config with no restore. Killing the reload at a bound does
-not help: rc.common's `procd_lock` keeps the lock of the service in the
-children of the script, such as fw4, so the next reload of that service waits
-until they end. A reload that exits with a code other than 0 within the 20 s
-fails the write and restores, as before. A reload that takes longer and then
-fails answers 2xx `unverified`, and the failure shows only in the daemon. The
-restore gets what is left of the 20 s, so a reload that fails after more than
-about 10 s can leave too little time for the reloads of the restore, and the
-write then answers `500 reload_failed_unrecovered`. uapi waits for the script
-alone, so a process that the script starts and leaves running no longer holds
-the write. The lock of the write is released when uapi answers, so the next
-write can commit and reload while such a reload still runs. Its reload of the
-same service waits for the lock of `procd_lock` within its own 20 s. If the
-writes to one service answer `unverified` again and again, a reload of that
-service does not end: look for its blocked init script with `ps`.
+- **dnsmasq, odhcpd and unbound reload only while procd runs them**, as for a
+  LuCI save. A write does not start a daemon that the operator stopped, but it
+  does start again one that crashed too often. At boot, unbound starts 3 s
+  after the last interface event, and a write before that leaves it alone.
+- **unbound is watched for 2 s.** When unbound runs, a write that reloads it
+  answers `500 reload_failed_restored` when an instance stops in the 2 s after
+  the reload. Its `reload_error` reads, for example, `unbound stopped after the
+  reload, with exit code 1`. A daemon that stops later still answers 2xx. While
+  `/etc/init.d/unbound` exists, a `dhcp` or `system` write takes the lock of
+  `unbound`. So such a write answers `423 locked` while a write to unbound, or
+  another of these writes, runs.
+- **dnsmasq is checked by its config.** A write that commits `dhcp` runs
+  `dnsmasq --test` for each instance after the reload. When dnsmasq refuses the
+  config, the write answers `500 reload_failed_restored`, and its
+  `reload_error` reads, for example, `dnsmasq refuses its config cfg01411c: bad
+  IP address at line 33 of /var/etc/dnsmasq.conf.cfg01411c`. On a router whose
+  dnsmasq config was refused before the write, a write that does not fix it
+  answers `500 reload_failed_unrecovered`. A config that dnsmasq parses but
+  cannot start with, such as a port that another daemon holds, still answers
+  2xx. `--test` does not read the files of `addn-hosts` and `servers-file`. A
+  `system` write reloads dnsmasq too, and runs no check.
+- **A slow check or reload answers `unverified`.** uapi kills a `--test` after
+  10 s, and waits 20 s in all for the reloads of a request. Past either bound,
+  the write keeps its commit and answers 2xx with `X-Reload-Status:
+  unverified`, and a raw write a `reload_note`. A `system/cron_jobs` write
+  answers the header too, and logs the note to syslog as
+  `uapi-cron-reload-unverified`. Then check the daemon. A router that takes more
+  than 10 s to parse its dnsmasq config, such as a slow MIPS router with large
+  adblock lists, answers `unverified` on every dhcp write. When the writes to
+  one service answer `unverified` again and again, a reload of that service
+  does not end: look for its blocked init script with `ps`.
+- **A reload that fails late is not seen.** A reload that exits non-zero within
+  the 20 s fails the write and restores. One that fails later answers 2xx
+  `unverified`, and the failure shows only in the daemon. The restore gets what
+  is left of the 20 s, so a reload that fails after about 10 s can leave too
+  little time for the restore, and the write answers `500
+  reload_failed_unrecovered`.
+- **OpenWrt's reload of dnsmasq can restart it**, which on a slow machine can
+  leave it stopped for 5 s. uapi does not report that restart.
 
 A write to one package that fails and restores takes at most 20 s of reloads,
 2 s of the unbound watch and 10 s of `dnsmasq --test` per dnsmasq instance
@@ -148,17 +91,13 @@ uhttpd can kill such a request before its restore or its answer: the client
 gets a 502, and uci keeps whatever the write had reached. Keep it at 60 s or
 above on a router that uapi manages.
 
-A LuCI save or a `uci commit` in a shell takes no uapi lock, so it can commit
-to the package while uapi reloads its daemons. When that reload then fails,
-the file holds both writes, and the restore would undo the other one too. uapi
-leaves the package as that writer left it, reloads nothing for it, and answers
-`500 reload_failed_unrecovered`, whose `restore_error` names the package. The
-daemon keeps what the failed reload gave it, so check the package and reload
-it by hand. In a `POST /uapi/batch`, the other packages are restored, and the
-services of the packages that the restore wrote back are reloaded. A daemon
-that also reads the package that it left is reloaded through them and reads
-that package as it is: in a batch of `system` and `dhcp` whose `dhcp` it left,
-dnsmasq, odhcpd and unbound reload through `system`.
+A LuCI save or a `uci commit` in a shell takes no uapi lock. When such a
+commit lands in the package while uapi reloads it, and the reload then fails,
+uapi leaves the package as that writer left it, and answers `500
+reload_failed_unrecovered`, whose `restore_error` names the package. The daemon
+keeps what the failed reload gave it, so check the package and reload it by
+hand. In a `POST /uapi/batch`, uapi restores the other packages.
+`docs/architecture.md` § Transaction recipe, step 8, has the details.
 
 For high-stakes writes (the management interface, firewall defaults,
 uhttpd itself) verify convergence out-of-band: poll the `runtime` block
@@ -166,10 +105,8 @@ on the resource you just modified, check ubus state, or simply ping the
 box and confirm reachability. uapi cannot do this for you; the init
 script doesn't know either.
 
-A future `commit-confirmed` mode (apply, wait N seconds, auto-revert
-unless client acks) would close the gap but conflicts with the
-fork-per-request model. Tracked in `docs/roadmap.md` under "Needs more
-reflection".
+A commit-confirmed mode, which reverts a write that no client confirms, would
+close this gap. It is deferred, and `docs/commit-confirm.md` says why.
 
 ## NTP
 
@@ -222,7 +159,8 @@ uci commit system
 ```
 
 The receiving collector (rsyslog, syslog-ng, Loki, Splunk, etc.) can filter on
-the `uapi:` prefix to isolate API audit events.
+the syslog tag `uapi`, which a line shows as `uapi[<pid>]:`, to isolate API
+audit events.
 
 ## Log categories
 
@@ -238,13 +176,16 @@ out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not
 logged: the client receives the error directly and there is no
 operator-actionable signal in volume.
 
-ACCESS and DEBUG are opt-in via `/etc/config/uapi`:
+ACCESS and DEBUG are off by default. Turn them on in `/etc/config/uapi`:
 
 ```
 config logging
-    option access '0'
-    option debug '0'
+    option access '1'   # log every request (INFO)
+    option debug '1'    # per-ubus-call tracing (DEBUG)
 ```
+
+Leave these off unless you're debugging. They are noisy and will fill the
+in-memory ring quickly.
 
 ## Log line format
 
@@ -252,23 +193,22 @@ Plain text, fixed field order, syslog-native (chosen over JSON-per-line because
 `logread` is the primary consumer):
 
 ```
-uapi: <request_id> <token_name|-> <severity> <code> <method> <path> <status> [<duration_ms>ms]
+uapi[<pid>]: <request_id> <token_name|-> <category> <code|-> <method> <path> <status> [<duration_ms>ms]
 ```
 
 - `request_id`: ULID; also returned in the `X-Request-Id` response header. The
   link between server-side log and client-visible response.
-- `token_name`: never the token value. `-` for unauthenticated failures (e.g.
-  missing `Authorization`).
-- `severity`: `AUDIT` (writes), `ACCESS` (every request, if enabled), `WARN`
+- `token_name`: never the token value. `-` when the request has no valid
+  token, as on a 401. A 403 or a 5xx with a valid token logs its name.
+- `category`: `AUDIT` (writes), `ACCESS` (every request, if enabled), `WARN`
   (401/403 auth failures), `ERROR` (5xx).
 - `code`: error code on failures, `-` on successful writes.
 - `path`: uhttpd's `PATH_INFO`, so the `/api/v4` mount prefix is already
   stripped. A client's `POST /api/v4/firewall/rules` logs as `/firewall/rules`.
 
-`/healthz` is excluded from all categories so monitoring traffic does not drown
-out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not
-logged: the client receives the error directly and there is no
-operator-actionable signal in volume.
+A `POST /uapi/batch` logs one line for the whole request. The id of a
+sub-request, `<request_id>.<index>`, shows only in the `headers` of its entry
+in the 207 `results` and in `recent_errors` of `/uapi/diagnostics`.
 
 ## Sample syslog output
 
@@ -297,18 +237,6 @@ uapi[1234]: uapi-insecure-bypass 01HX67890ABCDEFGHJKMNNNNNN GET /system status=2
 # A request body that missed the read deadline
 uapi[1234]: uapi-body-deadline 01HX7890ABCDEFGHJKMNNNNNNN POST /firewall/rules status=400 remote=10.0.2.2
 ```
-
-By default only AUDIT (successful writes) and ERROR/WARN (failures) are logged.
-Optional knobs in `/etc/config/uapi`:
-
-```
-config logging
-    option access '1'   # log every request (INFO)
-    option debug '1'    # per-ubus-call tracing (DEBUG)
-```
-
-Leave these off unless you're debugging. They are noisy and will fill the
-in-memory ring quickly.
 
 ## Metrics
 
@@ -467,12 +395,13 @@ config limits
 
 `GET /api/v4/uapi/diagnostics` returns version, uptime, loaded resources,
 the uapi lock files present under `/var/lock`, whether uapi uses each
-state directory under `/var/run`, the effective request limits, and the
-last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
+state directory under `/var/run`, the effective request limits, the writes
+that a killed request left half done, and the last 20 error envelopes. Scope:
+`uapi:diagnostics:ro`.
 
 ```json
 {
-  "version": "2.0.0",
+  "version": "4.0.0",
   "uptime_seconds": 123456,
   "resources_loaded": ["firewall:rules", "firewall:zones", "..."],
   "lock_state": {
@@ -482,6 +411,7 @@ last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
   "state_dirs": {
     "/var/run/uapi-error-ring": true,
     "/var/run/uapi-idempotency": true,
+    "/var/run/uapi-interrupted-writes": true,
     "/var/run/uapi-metrics": true,
     "/var/run/uapi-ratelimit": true,
     "/var/run/uapi-token-update": true
@@ -492,6 +422,7 @@ last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
     "body_read_s": 10,
     "reload_budget_s": 20
   },
+  "interrupted_writes": [],
   "recent_errors": [
     { "ts": 1780510463, "request_id": "01HX...", "code": "validation_failed",
       "status": 422, "method": "POST", "path": "/firewall/rules",
@@ -553,13 +484,13 @@ section later.
 Three things worth knowing:
 
 - **Opt-in on purpose.** Each resource walks its own uci package, so a package
-  is
-  traversed once per resource that lives in it, six times for `firewall` and
+  is traversed once per resource that lives in it, six times for `firewall` and
   `network`. The cost therefore scales with the number of sections in the
-  configuration, not with a fixed overhead: 44 resources over a stock-sized
-  configuration measured about 90 ms, and a router with a large firewall will be
-  slower. `/uapi/diagnostics` is what a monitoring system polls on an interval,
-  so without `?validate=1` the response is unchanged and costs nothing extra.
+  configuration, not with a fixed overhead: the 42 resources that it sweeps
+  over a stock-sized configuration measured about 90 ms, and a router with a
+  large firewall will be slower. `/uapi/diagnostics` is what a monitoring
+  system polls on an interval, so without `?validate=1` the response is
+  unchanged and costs nothing extra.
 - **Scoped per resource.** The endpoint needs `uapi:diagnostics:ro`, and each
   resource is included only if the token also permits `:ro` on it, because the
   findings name sections and quote configured values. A token with only
@@ -582,8 +513,8 @@ That is deliberately a finding rather than a failed request: a resource that
 could
 not be checked must not be reported as clean.
 
-`dhcp/leases` is not swept. They are read-only views of
-daemon state with no validation to run.
+`dhcp/leases` and `network/wireguard_kernel_peers` are not swept. They are
+read-only views of daemon state with no validation to run.
 
 The `recent_errors` ring is best-effort: writes to `/var/run/uapi-error-ring/`
 must never disrupt the actual response, so a disk-full or permission
@@ -600,7 +531,7 @@ has been written at least once since the lock directory was last
 cleared.
 
 `state_dirs` reports each state directory under `/var/run`, keyed by its
-path, as uapi finds it. The read creates and changes nothing.
+path, as uapi finds it. The read of `state_dirs` creates and changes nothing.
 
 - `true`: a directory that the effective uid of the request process owns,
   with mode 0700. uapi writes there.
@@ -610,6 +541,13 @@ path, as uapi finds it. The read creates and changes nothing.
   that write.
 - `null`: the path does not exist yet. uapi creates it at its first write
   there.
+
+The request that reads it has already changed two of them. Its rate-limit
+check and its last-used stamp create `/var/run/uapi-ratelimit` and
+`/var/run/uapi-token-update` and narrow them to 0700, so these two read `true`,
+or `false` when uapi cannot own them, and never `null`. The read of
+`recent_errors` that follows creates `/var/run/uapi-error-ring`, so it reads
+`null` only until the first error or the first read of `/uapi/diagnostics`.
 
 `true` does not promise free space. On a full tmpfs the rate limiter allows
 every request, and the idempotency cache, the metrics and the error ring
@@ -622,6 +560,17 @@ keep no new entry. What `false` costs while it lasts:
 | `/var/run/uapi-metrics` | `/uapi/metrics` records no series. |
 | `/var/run/uapi-error-ring` | `recent_errors` stays empty. |
 | `/var/run/uapi-token-update` | No request stamps `last_used_at`. |
+| `/var/run/uapi-interrupted-writes` | A write records nothing, so `interrupted_writes` cannot list it. |
+
+`interrupted_writes` lists the writes that uhttpd killed after their commit,
+when the client closed the connection or `script_timeout` ran out, and the
+writes that threw after it. Such a write landed in uci with no check, no
+restore and no answer. Each entry has the `pid` of the request process, its
+`request_id`, the `packages`, `staged` (the sections that it wrote, when
+known), `started_at` and `reload_started`. uapi only reports such a write, and
+neither finishes nor restores it. Check the packages that it names, then
+reload their daemons or write them again. A record stays until reboot or the
+next package upgrade.
 
 ## Management-path warning
 
@@ -689,7 +638,7 @@ IPv4-only.
 ```sh
 curl -k https://<router>/api/v4/healthz
 # 200 with body:
-# { "status": "ok", "version": "2.0.0",
+# { "status": "ok", "version": "4.0.0",
 #   "checks": { "ubus": "ok", "uci": "ok",
 #               "lock_dir": "ok", "time_sync": "ok" } }
 # 503 with body:
