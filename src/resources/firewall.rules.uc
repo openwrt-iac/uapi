@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let fw_bool = values.fw_bool;
 let as_list = values.as_list;
 let as_list_or_null = values.as_list_or_null;
 
@@ -33,7 +33,7 @@ function fromUci(section) {
 		managed: !anonymous,
 		name: section.name ?? null,
 		target: values.fw_target(section.target) ?? null,
-		enabled: normalize_bool(section.enabled, true),
+		enabled: fw_bool(section.enabled, true),
 		set_mark: section.set_mark ?? null,
 		set_xmark: section.set_xmark ?? null,
 		set_dscp: section.set_dscp ?? null,
@@ -57,7 +57,7 @@ function toUci(json) {
 	let out = {};
 	if (json.name != null) out.name = json.name;
 	if (json.target != null) out.target = json.target;
-	if (json.enabled != null) out.enabled = json.enabled ? "1" : "0";
+	out.enabled = (json.enabled != null) ? (json.enabled ? "1" : "0") : [];
 	if (json.set_mark != null) out.set_mark = json.set_mark;
 	if (json.set_xmark != null) out.set_xmark = json.set_xmark;
 	if (json.set_dscp != null) out.set_dscp = json.set_dscp;
@@ -130,6 +130,7 @@ function check_target_coupling(json, errs) {
 
 function validate(json, conn, id, delta, partial) {
 	let errs = [];
+	values.fw_refused_bools(errs, conn, id, delta, partial, [ "enabled" ]);
 
 	// The request, not the stored section: LuCI stores a HELPER rule with its set_helper, and fw4 applies it.
 	if (!partial && (delta ?? json).target == "HELPER")
@@ -247,7 +248,7 @@ return {
 		target:  { "x-uapi-read-nullable": true, type: "string", enum: [ ...keys(VALID_TARGETS), "HELPER" ],
 		           "x-uapi-write": { enum: keys(VALID_TARGETS) },
 		           description: "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it. A target of NOTRACK requires `match.src_zone`, a named zone other than `*`" },
-		enabled: { type: "boolean", default: true },
+		enabled: { "x-uapi-read-nullable": true, type: "boolean", default: true, description: values.FW_BOOL_REFUSED },
 		set_mark: { type: ["string", "null"], pattern: values.MARK_RE,
 		            description: "Mark to set, as value or value/mask (decimal or 0x hex, 32-bit). Requires target MARK; mutually exclusive with set_xmark" },
 		set_xmark: { type: ["string", "null"], pattern: values.MARK_RE,

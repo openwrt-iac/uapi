@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let fw_bool = values.fw_bool;
 let as_list_or_null = values.as_list_or_null;
 
 const POLICIES = [ "ACCEPT", "REJECT", "DROP" ];
@@ -15,8 +15,8 @@ function fromUci(section) {
 		output_policy: values.fw_enum(section.output, POLICIES),
 		forward: values.fw_enum(section.forward, POLICIES),
 		network: as_list_or_null(section.network),
-		masq: normalize_bool(section.masq, false),
-		mtu_fix: normalize_bool(section.mtu_fix, false),
+		masq: fw_bool(section.masq, false),
+		mtu_fix: fw_bool(section.mtu_fix, false),
 		family: values.fw_family(section.family) ?? "any",
 		runtime: {},
 	};
@@ -29,16 +29,17 @@ function toUci(json) {
 	if (json.output_policy != null) out.output = json.output_policy;
 	if (json.forward != null) out.forward = json.forward;
 	if (type(json.network) == "array" && length(json.network) > 0) out.network = json.network;
-	if (json.masq != null) out.masq = json.masq ? "1" : "0";
-	if (json.mtu_fix != null) out.mtu_fix = json.mtu_fix ? "1" : "0";
+	out.masq = (json.masq != null) ? (json.masq ? "1" : "0") : [];
+	out.mtu_fix = (json.mtu_fix != null) ? (json.mtu_fix ? "1" : "0") : [];
 	if (json.family != null && json.family != "any") out.family = json.family;
 	return out;
 }
 
-function validate(json) {
+function validate(json, conn, id, delta, partial) {
 	let errs = [];
 
 	values.require_present(errs, json, "name");
+	values.fw_refused_bools(errs, conn, id, delta, partial, [ "masq", "mtu_fix" ]);
 
 	return errs;
 }
@@ -64,9 +65,9 @@ return {
 		                 description: "Unset, fw4 applies the `forward` of firewall/defaults, and DROP when that has none, as LuCI shows it. The read gives null then, so a write of the read keeps the zone on the policy of firewall/defaults. A PUT that leaves the field out, or a null, removes the option, and the zone takes the policy of firewall/defaults again." },
 		family:  { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
 		network: { type: ["array", "null"], items: { type: "string" } },
-		masq:    { type: "boolean", default: false,
-		           description: "Enable IPv4 masquerading on this zone" },
-		mtu_fix: { type: "boolean", default: false,
-		           description: "Clamp MSS to PMTU for traffic in this zone" },
+		masq:    { "x-uapi-read-nullable": true, type: "boolean", default: false,
+		           description: "Enable IPv4 masquerading on this zone. " + values.FW_BOOL_REFUSED },
+		mtu_fix: { "x-uapi-read-nullable": true, type: "boolean", default: false,
+		           description: "Clamp MSS to PMTU for traffic in this zone. " + values.FW_BOOL_REFUSED },
 	},
 };

@@ -24,7 +24,7 @@
 //      `normalize_bool`).
 //
 // Patterns detected (in fromUci's returned dict literal):
-//   - <jsonkey>: <normalize_bool|platform_bool|shell_bool>(section.<ucikey>, true|false)
+//   - <jsonkey>: <normalize_bool|platform_bool|shell_bool|fw_bool>(section.<ucikey>, true|false)
 //   - <jsonkey>: <same>(section["<ucikey>"], true|false)
 //   - <jsonkey>: strict_bool(section.<ucikey>)   -- default false
 //   - <jsonkey>: section.<ucikey> ?? "literal"   -- or || "literal", for an empty value too,
@@ -84,9 +84,9 @@ function find_fromuci_defaults(content) {
 	// meant that reclassifying 50 fields onto shell_bool silently dropped them from this
 	// gate: it went from seeing 75 fields to 25 while still reporting OK. strict_bool takes no
 	// default argument, but it reads an absent option as false all the same.
-	let bool_dot_re     = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool)\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,\\s*(true|false)\\)');
+	let bool_dot_re     = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool|fw_bool)\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,\\s*(true|false)\\)');
 	let strict_re       = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*strict_bool\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*\\)');
-	let bool_bracket_re = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool)\\(section\\["[a-zA-Z_][a-zA-Z0-9_]*"\\],\\s*(true|false)\\)');
+	let bool_bracket_re = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(normalize_bool|platform_bool|shell_bool|fw_bool)\\(section\\["[a-zA-Z_][a-zA-Z0-9_]*"\\],\\s*(true|false)\\)');
 	let str_re          = regexp('([a-zA-Z_][a-zA-Z0-9_]*):\\s*(values\\.config_get\\()?section\\.[a-zA-Z_][a-zA-Z0-9_]*\\)?\\s*(\\?\\?|\\|\\|)\\s*"([^"]+)"');
 
 	for (let line in split(content, "\n")) {

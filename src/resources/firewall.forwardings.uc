@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let fw_bool = values.fw_bool;
 
 const VALID_FAMILIES = { "any": true, "ipv4": true, "ipv6": true };
 
@@ -11,7 +11,7 @@ function fromUci(section) {
 		src: section.src ?? null,
 		dest: section.dest ?? null,
 		family: values.fw_family(section.family) ?? "any",
-		enabled: normalize_bool(section.enabled, true),
+		enabled: fw_bool(section.enabled, true),
 		runtime: {},
 	};
 }
@@ -21,7 +21,7 @@ function toUci(json) {
 	if (json.src != null) out.src = json.src;
 	if (json.dest != null) out.dest = json.dest;
 	if (json.family != null && json.family != "any") out.family = json.family;
-	if (json.enabled != null) out.enabled = json.enabled ? "1" : "0";
+	out.enabled = (json.enabled != null) ? (json.enabled ? "1" : "0") : [];
 	return out;
 }
 
@@ -29,8 +29,9 @@ function load_zones(conn) {
 	return values.section_index(conn, 'firewall', 'zone', 'name');
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta, partial) {
 	let errs = [];
+	values.fw_refused_bools(errs, conn, id, delta, partial, [ "enabled" ]);
 
 	values.require_present(errs, json, "src");
 
@@ -68,6 +69,6 @@ return {
 		src:     { "x-uapi-read-nullable": true, type: "string", description: "Source zone name" },
 		dest:    { "x-uapi-read-nullable": true, type: "string", description: "Destination zone name" },
 		family:  { type: "string", enum: keys(VALID_FAMILIES), default: "any" },
-		enabled: { type: "boolean", default: true },
+		enabled: { "x-uapi-read-nullable": true, type: "boolean", default: true, description: values.FW_BOOL_REFUSED },
 	},
 };

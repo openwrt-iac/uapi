@@ -311,6 +311,98 @@ t.describe('firewall.defaults syn_flood says what fw4 applies', () => {
 	});
 });
 
+// fw4.uc of 25.12.5 skips a zone, forwarding, rule, redirect or nat section when parse_opt refuses
+// one of its bools.
+t.describe('firewall section bools that fw4 refuses', () => {
+	let ctx = { request_id: "01hx0000000000000000000000" };
+	let response = json(require('fs').readfile("build/openapi.json")).components.schemas;
+	// [ module, schema, section, field, unset read, a PATCH of another field ]
+	const CASES = [
+		[ 'zones', 'FirewallZones', { '.type': 'zone', name: 'guest' }, 'masq', false, { family: 'ipv4' } ],
+		[ 'zones', 'FirewallZones', { '.type': 'zone', name: 'guest' }, 'mtu_fix', false, { family: 'ipv4' } ],
+		[ 'forwardings', 'FirewallForwardings', { '.type': 'forwarding', src: 'lan', dest: 'lan' }, 'enabled', true, { family: 'ipv4' } ],
+		[ 'rules', 'FirewallRules', { '.type': 'rule', target: 'ACCEPT' }, 'enabled', true, { name: 'x' } ],
+		[ 'nat', 'FirewallNat', { '.type': 'nat', target: 'MASQUERADE' }, 'enabled', true, { name: 'x' } ],
+		[ 'redirects', 'FirewallRedirects', { '.type': 'redirect', src: 'lan' }, 'enabled', true, { name: 'x' } ],
+		[ 'redirects', 'FirewallRedirects', { '.type': 'redirect', src: 'lan' }, 'reflection', null, { name: 'x' } ],
+	];
+	let each = (fn) => {
+		for (let c in CASES) {
+			let h = handler.make(loadfile(sprintf('src/resources/firewall.%s.uc', c[0]))(),
+			                     { tx: { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null } });
+			let box = (v) => {
+				let s = { ...c[2], '.anonymous': false };
+				if (v != null) s[c[3]] = v;
+				return ubus.stub({ uci: { firewall: { z: { '.type': 'zone', '.anonymous': false, name: 'lan' }, s } } });
+			};
+			fn(h, box, c[3], c[4], c[5], sprintf('%s.%s', c[0], c[3]), c[1]);
+		}
+	};
+	let swept = (h, c) => map(filter(h.sweep(c), (f) => f.id == 's')[0]?.errors ?? [], (e) => [ e.field, e.code, e.live ]);
+	let stored = (c, opt) => c._state.uci.firewall.s[opt];
+
+	t.it('a refused value reads null and is a live error of the section', () => {
+		each((h, box, opt, unset, other, label, schema) => {
+			t.assert_true(index(response[schema + 'Response'].properties[opt].type, "null") >= 0, label);
+			for (let v in [ 'YES', 'enabled', '2', [ '1' ] ]) {
+				t.assert_equal(h.get_one(box(v), ctx, 's').body[opt], null, label);
+				t.assert_deep_equal(swept(h, box(v)), [ [ opt, "invalid_format", true ] ], label);
+			}
+		});
+	});
+
+	t.it('blocks a PATCH of another field', () => {
+		each((h, box, opt, unset, other, label) => {
+			let c = box('YES');
+			let r = h.patch(c, ctx, 's', other);
+			t.assert_equal(r.status, 422, label);
+			t.assert_deep_equal(map(r.body.errors, (e) => [ e.field, e.code ]), [ [ opt, "invalid_format" ] ], label);
+			t.assert_equal(stored(c, opt), 'YES', label);
+		});
+	});
+
+	t.it('a PATCH that sends the field replaces the value, and a null removes it', () => {
+		each((h, box, opt, unset, other, label) => {
+			for (let v in [ true, false ]) {
+				let c = box('YES');
+				let r = h.patch(c, ctx, 's', { ...other, [opt]: v });
+				t.assert_equal(r.status, 200, label);
+				t.assert_equal(r.body[opt], v, label);
+				t.assert_equal(stored(c, opt), v ? '1' : '0', label);
+				t.assert_deep_equal(swept(h, c), [], label);
+			}
+			let c = box([ '1' ]);
+			t.assert_equal(h.patch(c, ctx, 's', { [opt]: null }).status, 200, label);
+			t.assert_equal(stored(c, opt), null, label);
+			t.assert_equal(h.get_one(c, ctx, 's').body[opt], unset, label);
+		});
+	});
+
+	t.it('a PUT that leaves the field out removes the value', () => {
+		each((h, box, opt, unset, other, label) => {
+			let c = box('YES');
+			let read = h.get_one(c, ctx, 's').body;
+			delete read.runtime;
+			delete read[opt];
+			t.assert_equal(h.replace(c, ctx, 's', read).status, 200, label);
+			t.assert_equal(stored(c, opt), null, label);
+		});
+	});
+
+	t.it('an unset value reads its default, and a value that fw4 takes reads as before', () => {
+		each((h, box, opt, unset, other, label) => {
+			t.assert_equal(h.get_one(box(null), ctx, 's').body[opt], unset, label);
+			for (let v in [ 'on', 'yes', 'no', 'false' ]) {
+				let c = box(v);
+				t.assert_equal(h.get_one(c, ctx, 's').body[opt], v == 'on' || v == 'yes', label);
+				t.assert_deep_equal(swept(h, c), [], label);
+				t.assert_equal(h.patch(c, ctx, 's', other).status, 200, label);
+				t.assert_equal(stored(c, opt), v, label);
+			}
+		});
+	});
+});
+
 t.describe('firewall.redirects', () => {
 	t.it('contract', () => {
 		t.assert_equal(redirects.package, "firewall");

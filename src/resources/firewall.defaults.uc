@@ -1,5 +1,6 @@
 let values = require('values');
 let normalize_bool = values.normalize_bool;
+let fw_bool = values.fw_bool;
 
 const POLICIES = [ "ACCEPT", "REJECT", "DROP" ];
 const UNIT_NSECS = { second: 1000000000, minute: 60000000000, hour: 3600000000000, day: 86400000000000 };
@@ -44,17 +45,11 @@ function fw4_refuses(opt, v) {
 	return normalize_bool(v, null) == null;
 }
 
-// fw4's parse_opt gives its default to an unset option, and stops on a list or a value that
-// parse_bool refuses, so such a value reads null and not the default.
-function fw_bool(v) {
-	return (v == null) ? false : normalize_bool(v, null);
-}
-
 // fw4 applies synflood_protect, which LuCI writes, and reads syn_flood only when uci holds no
 // synflood_protect. It parses both, so it stops on a refused syn_flood too.
 function syn_flood_of(section) {
-	if (fw_bool(section.syn_flood) == null) return null;
-	return fw_bool(section.synflood_protect ?? section.syn_flood);
+	if (fw_bool(section.syn_flood, false) == null) return null;
+	return fw_bool(section.synflood_protect ?? section.syn_flood, false);
 }
 
 // LuCI sets synflood_protect and removes syn_flood for true, as this does, and removes both for false.
@@ -75,12 +70,12 @@ function fromUci(section) {
 		output_policy: values.fw_enum(section.output, POLICIES) ?? null,
 		forward: values.fw_enum(section.forward, POLICIES) ?? null,
 		syn_flood: syn_flood_of(section),
-		drop_invalid: fw_bool(section.drop_invalid),
+		drop_invalid: fw_bool(section.drop_invalid, false),
 		synflood_burst: fw_burst(section.synflood_burst),
 		synflood_rate: (rate != null) ? sprintf("%s/%s", rate.rate, rate.unit) : null,
-		tcp_syncookies: fw_bool(section.tcp_syncookies),
-		flow_offloading: fw_bool(section.flow_offloading),
-		flow_offloading_hw: fw_bool(section.flow_offloading_hw),
+		tcp_syncookies: fw_bool(section.tcp_syncookies, false),
+		flow_offloading: fw_bool(section.flow_offloading, false),
+		flow_offloading_hw: fw_bool(section.flow_offloading_hw, false),
 		runtime: {},
 	};
 }

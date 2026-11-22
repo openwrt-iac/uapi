@@ -119,6 +119,20 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   replaces both. An unset bool reads `false` as before. Such a section gets
   another ETag at the upgrade. Migration note in `docs/migration-v3-to-v4.md`.
   (#450)
+- **BREAKING: a bool of a firewall zone, forwarding, rule, redirect or nat rule
+  that fw4 refuses reads null.** fw4 skips such a section when one of its bools
+  holds a list, or a value other than `1`, `on`, `true`, `yes`, `0`, `off`,
+  `false` or `no`, such as an `enabled` of `YES`. 3.x read the default of the
+  field, so such a rule read `enabled: true` while fw4 skipped it, and the
+  sweep did not list it. Now `masq` and `mtu_fix` of `firewall/zones`, `enabled`
+  of `firewall/forwardings`, `firewall/rules`, `firewall/redirects` and
+  `firewall/nat`, and `reflection` of `firewall/redirects` read null for such a
+  value, and their schemas admit null. The value is an error of the section
+  that the sweep lists, and a PATCH that does not send the field answers 422 on
+  it (#308). A write that sends true or false fixes the section, a null removes
+  the option, and a PUT that leaves the field out removes it too. An unset bool
+  reads as before. Such a section gets another ETag at the upgrade. Migration
+  note in `docs/migration-v3-to-v4.md`. (#458)
 - **BREAKING: three mwan3 rule and firewall zone writes that produce broken
   state answer 422.** mwan3 compares the `proto` of `mwan3/rules` with `tcp` and
   `udp` in lower case and drops the ports of another spelling, such as `TCP`, so

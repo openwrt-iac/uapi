@@ -1,6 +1,6 @@
 let values = require('values');
 let hints = require('openapi_hints');
-let normalize_bool = values.normalize_bool;
+let fw_bool = values.fw_bool;
 let as_list = values.as_list;
 let as_list_or_null = values.as_list_or_null;
 
@@ -30,7 +30,7 @@ function fromUci(section) {
 		managed: !anonymous,
 		name: section.name ?? null,
 		target: values.fw_target(section.target, TARGETS, "DNAT") ?? "DNAT",
-		enabled: normalize_bool(section.enabled, true),
+		enabled: fw_bool(section.enabled, true),
 		match: {
 			src_zone: section.src ?? null,
 			dest_zone: section.dest ?? null,
@@ -44,7 +44,7 @@ function fromUci(section) {
 			family: values.fw_family(section.family) ?? "any",
 			mark: section.mark ?? null,
 		},
-		reflection: (section.reflection != null) ? normalize_bool(section.reflection, true) : null,
+		reflection: fw_bool(section.reflection, null),
 		reflection_src: values.fw_enum(section.reflection_src, keys(VALID_REFLECTION_SRC)) ?? null,
 		reflection_zone: as_list_or_null(section.reflection_zone),
 		runtime: {},
@@ -55,7 +55,7 @@ function toUci(json) {
 	let out = {};
 	if (json.name != null) out.name = json.name;
 	if (json.target != null) out.target = json.target;
-	if (json.enabled != null) out.enabled = json.enabled ? "1" : "0";
+	out.enabled = (json.enabled != null) ? (json.enabled ? "1" : "0") : [];
 	let m = json.match ?? {};
 	if (is_set(m.src_zone)) out.src = m.src_zone;
 	if (is_set(m.dest_zone)) out.dest = m.dest_zone;
@@ -65,15 +65,16 @@ function toUci(json) {
 	if (type(m.proto) == "array" && length(m.proto) > 0) out.proto = m.proto;
 	if (m.family != null && m.family != "any") out.family = m.family;
 	if (m.mark != null) out.mark = m.mark;
-	if (json.reflection != null)     out.reflection = json.reflection ? "1" : "0";
+	out.reflection = (json.reflection != null) ? (json.reflection ? "1" : "0") : [];
 	if (json.reflection_src != null) out.reflection_src = json.reflection_src;
 	if (type(json.reflection_zone) == "array" && length(json.reflection_zone) > 0)
 		out.reflection_zone = json.reflection_zone;
 	return out;
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta, partial) {
 	let errs = [];
+	values.fw_refused_bools(errs, conn, id, delta, partial, [ "enabled", "reflection" ]);
 
 	let m = json.match ?? {};
 	if (type(m) != "object") {
@@ -226,13 +227,13 @@ return {
 			},
 		},
 		reflection: { "x-uapi-read-nullable": true, type: "boolean",
-		              description: "Enable NAT loopback / hairpinning for this redirect (fw4 default true)" },
+		              description: "Enable NAT loopback / hairpinning for this redirect. Unset, it reads null, and fw4 applies true. " + values.FW_BOOL_REFUSED },
 		reflection_src: { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_REFLECTION_SRC),
 		                  description: "Source address used for hairpinned packets: internal LAN or external WAN" },
 		reflection_zone: { type: ["array", "null"], items: { type: "string" },
 		                   description: "Zones in which NAT reflection is allowed (uci list reflection_zone)" },
 		name:    { type: ["string", "null"], "x-uapi-write": { maxLength: values.NAME_MAX },
 		           description: sprintf("Human-readable label for this redirect. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
-		enabled: { type: "boolean", default: true },
+		enabled: { "x-uapi-read-nullable": true, type: "boolean", default: true, description: values.FW_BOOL_REFUSED },
 	},
 };

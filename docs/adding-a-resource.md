@@ -472,11 +472,13 @@ consumer. The other hooks have more users: `openvpn/instances` declares
   the same for every option and not even for every section type.**
   `src/lib/values.uc` carries one helper per class: `strict_bool` for a literal
   compare against `1`, `platform_bool` for netifd's blob converter (`1` and
-  `true`), `normalize_bool` for the `on`/`yes` set, and `shell_bool` for
-  `get_bool` in `/lib/functions.sh` and for a libvalidate `:bool:`, which add
-  `enabled`/`disabled`. Picking the wide one where the reader is narrow reports
-  a section as configured when the daemon ignored the value, which is the
-  read-honesty failure principle 4 exists to prevent.
+  `true`), `normalize_bool` for the `on`/`yes` set, `fw_bool` for the same set
+  as fw4 reads it, which reads null for a value that fw4 refuses, and
+  `shell_bool` for `get_bool` in `/lib/functions.sh` and for a libvalidate
+  `:bool:`, which add `enabled`/`disabled`. A firewall section judges such a
+  stored value with `fw_refused_bools`. Picking the wide one where the reader
+  is narrow reports a section as configured when the daemon ignored the value,
+  which is the read-honesty failure principle 4 exists to prevent.
   `network/interfaces.disabled` and `network/routes.disabled` are the same
   option name on the same package needing two different helpers, with the
   measurement in the module comments. Integers and lists that netifd reads go
