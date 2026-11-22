@@ -156,18 +156,12 @@ which.
 
 ### Branch + PR workflow
 
-All code changes land via a PR, never via direct push to `main`. Cut a branch
-(`release/v<version>` for releases, `feat/<topic>` or `fix/<topic>` otherwise),
-push the branch, open the PR with `gh pr create --base main`, wait for CI to
-pass on the branch, then merge only when explicitly told. The PR is the
-reviewable diff; direct-pushing bypasses that gate even when CI passes locally.
-
-Force-with-lease is permitted on the branch (typical use: amending a release
-commit after review fixes). Force-pushing `main` remains forbidden. Tag-creation
-discipline is unchanged: signed annotated tag after merge, only when explicitly
-told to tag.
-
-Applies to every repo under the `openwrt-iac` org, not just uapi.
+Every change lands via a PR, in every repo of the `openwrt-iac` org. Never push
+to `main`, even when CI passes locally. Cut a branch (`release/v<version>` for a
+release, else `feat/<topic>` or `fix/<topic>`), push it, open the PR with `gh pr
+create --base main`, wait for CI to pass, and merge only when explicitly told.
+Force-with-lease is allowed on the branch, never on `main`. Tag only when
+explicitly told: a signed annotated tag, after the merge.
 
 **Every PR body answers three questions.** These are not a checklist to tick;
 each one has caught a real defect that CI could not, so answer them with
@@ -193,35 +187,27 @@ openwrt/packages (`AI_POLICY.md`, "Keep it short") applies to the PRs this
 project opens there, and its comment rule applies to every upstream discussion:
 comments are written by the human maintainer, never by an agent.
 
-There is no PR template file: PRs here are opened with `gh pr create --body`,
-which never reads one.
-
-**Every PR records its changelog entry.** It adds an entry under `##
-[Unreleased]` in `CHANGELOG.md` that ends with `(#<PR>)`, or it carries the
-`changelog-not-needed` label when nothing outside the repo changes. CI fails the
-PR otherwise. A released section is never edited. The rules are in
-`docs/release-process.md`, section Changelog.
+**Every PR records its changelog entry** under `## [Unreleased]`, or carries
+the `changelog-not-needed` label, and a released section is never edited.
+`docs/release-process.md`, section Changelog, has the rules.
 
 ---
 
 ## Where the details live
 
-CLAUDE.md is the every-turn meta document (principles, style, workflow).
-Topic-specific normative content lives in `docs/`:
-
 | Topic | Primary file | Read when... |
 |-------|--------------|--------------|
-| Process model, lock layout, transaction recipe, batch, ETags, idempotency, metrics, audit, state inventory | `docs/architecture.md` | Touching the request lifecycle, locks, the write path, or anywhere "where state lives" matters. |
+| Process model, lock layout, transaction recipe, batch, ETags, idempotency, metrics, request_id, state inventory | `docs/architecture.md` | Touching the request lifecycle, locks, the write path, or anywhere "where state lives" matters. |
 | Fork-per-request rules (what you can/cannot do at module level) | `docs/concurrency.md` | Considering caches, background work, or "obvious" performance optimizations. |
 | Resource catalog (curated endpoints by domain), anonymous-section adoption | `docs/resources.md` | Understanding what's exposed, or how unmanaged uci sections become managed. |
 | Adding a new curated resource (module shape, annotations, tests, OpenAPI emission, naming conventions) | `docs/adding-a-resource.md` | Adding a resource or extending one. THE go-to file for curation work. |
 | Raw passthrough stability + semantics | `docs/raw.md` | Working on `/raw/` or considering using it. |
-| Non-uci resources (apk, leases, password, authorized_keys, cron_jobs) | `docs/non-uci-state.md` | Adding or modifying a resource whose source of truth isn't `/etc/config/`. |
+| Non-uci resources (apk, leases, wireguard_kernel_peers, password, authorized_keys, cron_jobs) | `docs/non-uci-state.md` | Adding or modifying a resource whose source of truth isn't `/etc/config/`. |
 | Token CLI, HTTP token mint, scope syntax, raw-access composition, per-token rate limit overrides | `docs/tokens.md` | Anything auth-shaped from the operator angle. |
 | Commit-confirmed apply: deferral decision + standalone-arm design (built in rc1, removed before 2.3.0 stable) | `docs/commit-confirm.md` | Picking the feature back up, or understanding why the confirm surface has not shipped. |
-| Threat model, TLS posture, public endpoints, design exclusions | `docs/security.md` | Security review, threat-model questions, "why not rpcd sessions?" |
+| Threat model, scopes that grant root, TLS posture, public endpoints, design exclusions | `docs/security.md` | Security review, threat-model questions, "why not rpcd sessions?" |
 | Error envelope, top-level + field-level codes, response headers | `docs/errors.md` | Defining a new error code or auditing error shapes. |
-| Observability (log categories, format, global rate limit, metrics, diagnostics, healthz, capacity) | `docs/operations.md` | Operator-facing setup, log forwarding, debugging in the field. Cross-references `docs/architecture.md` § Rate limit / Metrics for the implementation-side mechanics. |
+| What a 2xx means for an operator, observability (log categories, format, global rate limit, metrics, diagnostics, healthz, capacity) | `docs/operations.md` | Operator-facing setup, log forwarding, debugging in the field. Cross-references `docs/architecture.md` § Rate limit / Metrics for the implementation-side mechanics. |
 | Test layers, harness, lint suite, CI shape | `docs/testing.md` | Designing tests, expanding lint coverage. |
 | APK packaging (file layout, install hook, conffile, build steps, upgrade contract) | `docs/packaging.md` | Touching the package contract, release artifacts. |
 | Operator installation (apk feed, token mint, first-token walkthrough) | `docs/installation.md` | Helping an operator install or troubleshoot a fresh install. |
@@ -233,7 +219,7 @@ Topic-specific normative content lives in `docs/`:
 | Migration v2 to v3 (removals, the `/api/v3` prefix, schema split) | `docs/migration-v2-to-v3.md` | Supporting operators upgrading across the v3 boundary. |
 | Migration v3 to v4 (the `/api/v4` prefix, `/uapi/...` endpoints, removals, reads that change) | `docs/migration-v3-to-v4.md` | Supporting operators upgrading across the v4 boundary. |
 | Field-level deprecation log | `docs/deprecations.md` | Renaming or removing a wire-surface field. |
-| Roadmap (shipped, in-flight, deferred, out of scope) | `docs/roadmap.md` | Wondering whether something is on the table; update when an item moves between sections. |
+| Roadmap (one line per shipped release, open, deferred and out-of-scope work) | `docs/roadmap.md` | Wondering whether something is on the table; update when an item moves between sections. |
 
 A handful of topics span more than one file. The pointer above names the
 **primary** home (where the canonical contract lives); incidental coverage in
