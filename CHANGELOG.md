@@ -357,15 +357,20 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stops dnsmasq, is refused on write, and a `mwan3/globals.mmx_mask` that is not
   a 32-bit number blocks the write. The migration doc lists what a read now
   gives. (#405)
-- **`wireless/interfaces` declares the lists that its read gives.** `device`,
-  `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder` read a list
-  that uci holds as an array while the response schema said string, so the
-  server broke its own schema for a reachable configuration, such as a
-  multi-radio SSID whose `device` is a list. The response now declares a string
-  or an array, and a stored list is no error. A request takes `device` and
-  `network` as a list too, since netifd reads either form, and the other four
-  only as a string. A client fails loudly where it does not take the array.
-  (#405)
+- **BREAKING: `wireless/interfaces` reads one type for each option that uci can
+  hold as a list.** 3.x read a stored list of `device`, `network`, `ssid`,
+  `nasid`, `mobility_domain` or `r1_key_holder` as an array while its response
+  schema said string, so a client with typed fields could not model them.
+  `device` and `network` now always read as an array, or null, of the words that
+  netifd splits at any whitespace, so a stored `radio0` reads `["radio0"]`. A
+  write still takes a string or a list, and stores one entry as a string, as
+  LuCI and `wifi config` write it. The other four always read as a string, or
+  null: the text that wifi-scripts gives the daemon for a stored list, which is
+  the JSON text of the list for `ssid` and the entries joined by spaces for the
+  others. A stored list is no error, and a PUT of the read passes. The request
+  schema of these four drops an `items` keyword that had no effect. A client
+  must take an array for `device` and `network`. Migration note in
+  `docs/migration-v3-to-v4.md`. (#405) (#451)
 - **`mwan3/rules.proto` takes on write what iptables takes, and
   `mwan3/rules.family` reads what mwan3 runs.** A write takes a protocol name in
   any case, since iptables lowercases it, `mobility-header`, and an octal

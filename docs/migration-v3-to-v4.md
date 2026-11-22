@@ -189,14 +189,29 @@ because uapi does not model its `set_helper` option, and a PUT removes it. On
 not list what a rule new in v4 refuses, such as a newline in a string that 3.x
 took (#276), and it lists values that v4 takes.
 
-## `wireless/interfaces` declares the lists that a read gives
+## `wireless/interfaces` gives one type for each list option
 
-`device`, `network`, `ssid`, `nasid`, `mobility_domain` and `r1_key_holder`
-read a list that uci holds as an array, which the v3 response schema did not
-declare. The response schema now declares a string or an array for each. A
-request may send `device` and `network` as a string or a list, since netifd
-takes either, and the other four only as a string. A client generated from the
-schema must take an array where the field held a string.
+`device` and `network` read as an array, or null when unset. netifd sets the
+SSID up on each radio, and attaches it to each network, that the option names
+as a list or as words split at any whitespace, and the read gives those words.
+So a stored `radio0` reads `["radio0"]`, where 3.x read `"radio0"`. A request
+may still send a string or a list. A write stores one radio or one network as a
+string, as LuCI and `wifi config` write it, so a PUT of the read keeps such an
+option as it is.
+
+`ssid`, `nasid`, `mobility_domain` and `r1_key_holder` read as a string, or
+null when unset, as the 3.x response schema declared. For a list that uci holds,
+3.x read an array that its schema did not declare. v4 reads the text that
+wifi-scripts gives the daemon: the JSON text of the list for `ssid`, such as
+`[ "home", "net" ]`, which hostapd broadcasts, and the entries joined by spaces
+for the other three. A request sends only a string, and a PUT of the read stores
+that text as one option. With 802.11r and without both key holder lists,
+wifi-scripts derives their key from the JSON text of a `mobility_domain` list,
+so such a PUT gives the access point another key. Store `mobility_domain` in the
+same form on each access point of the domain.
+
+A client generated from the v3 schema must take an array for `device` and
+`network`.
 
 ## The schemas follow what LuCI and the daemons take
 
@@ -207,9 +222,10 @@ to 2147483647, `dhcp/servers.leasetime` with `infinite` and `deprecated`,
 `mwan3/rules.proto` as any protocol name, the bounds of the `mwan3/interfaces`
 timers, an `unbound/server.ttl_min` above 86400, and a
 `wireless/interfaces.encryption` of `psk3`, `psk3-mixed` or `wpa-mixed`. Over
-3.5.0, v4 widens the response schema of the `dhcp/leases` items, of the
-`wireless/interfaces` lists and of `wireless/interfaces.mode`, which can read
-null. Their sections say more, and `build/openapi.json` lists each field. A
+3.5.0, v4 widens the response schema of the `dhcp/leases` items and of
+`wireless/interfaces.mode`, which can read null, and declares an array for
+`wireless/interfaces.device` and `network`. Their sections say more, and
+`build/openapi.json` lists each field. A
 request can stay narrower, through the `*Request` schema. As in 3.5.0, the
 server checks it against the fields that a request names, other than a value
 that the section holds. In v4, a `dhcp/servers.leasetime` with a year suffix,
@@ -586,6 +602,9 @@ stored option, to follow what the daemon does:
 | `dropbear/instances` | `gateway_ports` | `enabled` |
 | `sqm/queues` | `enabled` | absent, or a value other than `0`, `off`, `false` or `no` that the shell test `-eq 1` does not read as 1 |
 | `wireless/interfaces` | `mode` | absent |
+| `wireless/interfaces` | `device`, `network` | not a list, which reads as an array of its words, such as `["radio0"]` for `radio0` |
+| `wireless/interfaces` | `ssid` | a list, which reads as its JSON text, such as `[ "home", "net" ]` |
+| `wireless/interfaces` | `nasid`, `mobility_domain`, `r1_key_holder` | a list, which reads as its entries joined by spaces |
 | `mwan3/interfaces` | `family` | absent, empty, or a list |
 | `mwan3/rules` | `family` | empty, which reads null, or a list, which reads as the string that `config_get` joins, such as `ipv4 ipv6` |
 | `firewall/defaults`, `firewall/zones` | `input`, `output_policy`, `forward` | a policy in another case or a prefix of one, such as `accept` |

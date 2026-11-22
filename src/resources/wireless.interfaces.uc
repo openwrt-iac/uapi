@@ -92,6 +92,19 @@ function base_encryption(e) {
 	return SAME_AS[base] ?? base;
 }
 
+// netifd reads device and network for wifi-scripts with parse_array, which keeps a list and splits
+// an option at any whitespace, a newline too. An empty word names no radio and no network.
+function words(v) {
+	if (type(v) != "string") return v;
+	let out = filter(split(v, /\s+/), (w) => w != "");
+	return length(out) > 0 ? out : null;
+}
+
+// ap.uc writes a list that uci holds for a text option as its entries joined by spaces.
+function joined(v) {
+	return (type(v) == "array") ? join(" ", v) : v;
+}
+
 // iface_roaming() in wifi-scripts runs in mode ap from WPA2 up, and writes the key holder lists
 // only when ft_psk_generate_local is off, which is its default for every mode but psk, psk2 and
 // psk-mixed. owe gets no fast transition key management, so hostapd does not cap its nasid.
@@ -156,13 +169,15 @@ function fromUci(section, conn) {
 	return {
 		id: section['.name'],
 		managed: !anonymous,
-		device: section.device ?? null,
-		network: section.network ?? null,
+		device: words(section.device),
+		network: words(section.network),
 		// wifi-scripts sets up nothing for a section without a mode (mac80211.sh skips an
 		// absent mode as it skips an unknown one), so the read reports null, not an ap that
 		// does not exist.
 		mode: section.mode ?? null,
-		ssid: section.ssid ?? null,
+		// wifi-scripts quotes the SSID with a template string, which gives a list as its JSON text,
+		// and the daemon takes that text as the SSID.
+		ssid: (section.ssid == null) ? null : `${section.ssid}`,
 		encryption: section.encryption ?? "none",
 		disabled: platform_bool(section.disabled, false),
 		hidden: platform_bool(section.hidden, false),
@@ -172,11 +187,11 @@ function fromUci(section, conn) {
 		// netifd's parse_bool reads a spelling such as `yes` as null, and validate.uc turns that into
 		// false, so ap.uc does not pick the default from encryption.
 		ft_psk_generate_local: (section.ft_psk_generate_local == null) ? null : platform_bool(section.ft_psk_generate_local, false),
-		mobility_domain: section.mobility_domain ?? null,
-		nasid: section.nasid ?? null,
+		mobility_domain: joined(section.mobility_domain),
+		nasid: joined(section.nasid),
 		reassociation_deadline: ucode_int(section.reassociation_deadline),
 		r0_key_lifetime: ucode_int(section.r0_key_lifetime),
-		r1_key_holder: section.r1_key_holder ?? null,
+		r1_key_holder: joined(section.r1_key_holder),
 		pmk_r1_push: platform_bool(section.pmk_r1_push, false),
 		// Each r0kh and r1kh entry ends with the key that the key holders share, so the
 		// lists are write-only like `key`, and a PUT of the read keeps them.
@@ -193,8 +208,11 @@ function fromUci(section, conn) {
 
 function toUci(json) {
 	let out = {};
-	if (json.device != null) out.device = json.device;
-	if (json.network != null) out.network = json.network;
+	// LuCI and `wifi config` store one radio and one network as an option, and LuCI leaves out an
+	// SSID whose device is a list, so a PUT of the read keeps a single entry as an option.
+	let one = (v) => (type(v) == "array" && length(v) == 1) ? v[0] : v;
+	if (json.device != null) out.device = one(json.device);
+	if (json.network != null) out.network = one(json.network);
 	// Storing ap for a missing mode would turn a station into an access point that broadcasts
 	// the station's SSID and key.
 	if (json.mode != null) out.mode = json.mode;
@@ -269,14 +287,11 @@ function rules(json, radio_on, conn) {
 	let base = base_encryption(json.encryption);
 	let r = roaming(json);
 	let err = (field, code, message, live) => push(errs, { field, code, message, live: !!live });
-	// wifi-scripts writes a list that uci holds for a text option as its entries joined by spaces.
-	// A list key gets there only on an access point with 8 to 64 entries: ap.uc counts entries as
-	// bytes, and supplicant.uc writes a list as JSON, which escapes a newline.
-	let text = (v) => (type(v) == "array") ? join(" ", v) : v;
+	// A list key gets to the daemon's config only on an access point with 8 to 64 entries: ap.uc
+	// counts entries as bytes, and supplicant.uc writes a list as JSON, which escapes a newline.
 	let n = length(json.key);
-	let key = (type(json.key) != "array") ? json.key : (mode == "ap" && n >= 8 && n <= 64) ? text(json.key) : null;
-	let nasid = text(json.nasid);
-	let md = text(json.mobility_domain), r1 = text(json.r1_key_holder);
+	let key = (type(json.key) != "array") ? json.key : (mode == "ap" && n >= 8 && n <= 64) ? joined(json.key) : null;
+	let nasid = json.nasid, md = json.mobility_domain, r1 = json.r1_key_holder;
 	let line = function(field, v, live) {
 		if (length(v) > LINE_MAX) err(field, "out_of_range", TOO_LONG, live);
 		if (index(v, "\n") >= 0) err(field, "invalid_format", ONE_LINE, live);
@@ -288,9 +303,8 @@ function rules(json, radio_on, conn) {
 			? sprintf("must not be WEP in mode %s: this router sets WEP up only with the shell wifi-scripts and a %s built with WEP, and would run the SSID without encryption", mode, daemon)
 			: "must not be WEP in mode mesh, which takes none: wifi-scripts would set the SSID up without encryption", on);
 
-	// A single quote is valid in an SSID of the other modes. Another writer can store the SSID as a
-	// list.
-	let ssid = text(json.ssid);
+	// A single quote is valid in an SSID of the other modes.
+	let ssid = json.ssid;
 	if (SHELL_SSID_MODES[mode] && type(ssid) == "string" && index(ssid, "'") >= 0)
 		err("ssid", "invalid_format", "must not hold a single quote in mode monitor, adhoc or mesh", on);
 	if (type(ssid) == "string" && length(ssid) > SSID_MAX)
@@ -303,7 +317,7 @@ function rules(json, radio_on, conn) {
 	// ap.uc gives hostapd a key of 64 bytes as a PSK and one of 8 to 63 as a passphrase, and no key for
 	// another length, which it counts in entries for a list. hostapd refuses a PSK that is not hex, and
 	// SAE takes only the passphrase.
-	let ap_key = (type(json.key) != "array") ? json.key : (n >= 8 && n <= 63) ? text(json.key) : "";
+	let ap_key = (type(json.key) != "array") ? json.key : (n >= 8 && n <= 63) ? joined(json.key) : "";
 	if (mode == "ap" && KEY_LINE_MODES[base] && type(ap_key) == "string") {
 		let hex = match(ap_key, /^[0-9A-Fa-f]{64}$/) != null;
 		if (length(ap_key) < 8 || length(ap_key) > 64)
@@ -379,10 +393,10 @@ function rules(json, radio_on, conn) {
 	return errs;
 }
 
-// netifd sets up an SSID on each radio that its device option names, as a list or as words, and
-// skips a radio that is disabled, that has no type, or that uci does not hold.
+// netifd sets up an SSID on each radio that its device option names, and skips a radio that is
+// disabled, that has no type, or that uci does not hold.
 function radios(device) {
-	return (type(device) == "array") ? device : split(device ?? "", /\s+/);
+	return words(device) ?? [];
 }
 
 function validate_new(json, conn) {
@@ -439,13 +453,15 @@ return {
 	},
 	schema_properties: {
 		device:     { "x-uapi-read-nullable": true, type: [ "string", "array" ], items: { type: "string" },
-		              description: "Parent radio (wireless/devices id). netifd sets the SSID up on each radio that the option names, as a list or as words, so a read gives a stored list as an array, and a write takes a list too" },
+		              "x-uapi-read": { type: [ "array", "null" ] },
+		              description: "Radios (wireless/devices ids) of this SSID. netifd sets the SSID up on each radio that the option names, as a list or as words split at any whitespace, and a read gives these radios as an array. A write takes a string of words or a list, and stores one radio as a string, as LuCI and `wifi config` write it" },
 		network:    { type: [ "string", "array", "null" ], items: { type: "string" },
-		              description: "Network interface this SSID bridges into. netifd attaches the SSID to each network that the option names, as a list or as words, and LuCI keeps the form that it finds, so a read gives a stored list as an array, and a write takes a list too" },
+		              "x-uapi-read": { type: [ "array", "null" ] },
+		              description: "Network interfaces this SSID bridges into. netifd attaches the SSID to each network that the option names, as a list or as words split at any whitespace, and a read gives these networks as an array. A write takes a string of words or a list, and stores one network as a string, as LuCI writes it" },
 		mode:       { type: ["string", "null"], enum: [ ...keys(VALID_MODES), null ], "x-uapi-write": { enum: [ ...WRITE_MODES, null ] },
 		              description: "A section without a mode reads null: wifi-scripts sets up nothing for it. A null on write removes the option. A write refuses mode wds, for which wifi-scripts sets up no interface; LuCI writes a WDS access point or station as mode ap or sta with option wds. A read reports a stored wds or ahdemo, which wifi-scripts skips as it skips a section without a mode, and which is no error." },
-		ssid:       { type: [ "string", "array", "null" ], items: { type: "string" }, "x-uapi-write": { type: [ "string", "null" ], maxLength: SSID_MAX },
-		              description: sprintf("SSID broadcast (or joined in sta mode). A write refuses more than %d bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. A read gives a list that uci holds as an array, and a write takes only a string", SSID_MAX) },
+		ssid:       { type: [ "string", "null" ], "x-uapi-write": { maxLength: SSID_MAX },
+		              description: sprintf("SSID broadcast (or joined in sta mode). A write refuses more than %d bytes, which hostapd and wpa_supplicant refuse in mode ap, sta and adhoc. uapi counts bytes, so a non-ASCII character counts for more than one. In mode monitor, adhoc or mesh, it must not hold a single quote. wifi-scripts gives the daemon a list that uci holds as the JSON text of the list, such as `[ \"home\", \"net\" ]`, and a read gives that text", SSID_MAX) },
 		encryption: { type: "string", enum: keys(VALID_ENCRYPTION), default: "none",
 		              description: "Security of the SSID. wifi-scripts sets up psk3 and psk3-mixed as sae and sae-mixed, and wpa-mixed as WPA and WPA2 with EAP. A forced cipher follows a `+`, as LuCI writes it. A write refuses wep with `conflict` unless the router sets WEP up. That needs the shell wifi-scripts, which OpenWrt builds only without `CONFIG_WIFI_SCRIPTS_UCODE`, and the daemon of the mode built with WEP: hostapd in mode ap, and wpa_supplicant in mode sta or adhoc. uapi asks `hostapd -vwep` or `wpa_supplicant -vwep`, as LuCI does. It refuses wep in mode mesh, which takes none. The ucode wifi-scripts, which OpenWrt builds by default, give the daemon no WEP key, and the SSID runs without encryption. The rule covers the wep-open and wep-shared that LuCI writes, and any stored value that starts with wep. A stored WEP value blocks every write of the SSID" },
 		key:        { type: "string", writeOnly: true,
@@ -464,16 +480,16 @@ return {
 		              description: "802.11r over the distribution system instead of over the air" },
 		ft_psk_generate_local: { "x-uapi-read-nullable": true, type: "boolean",
 		              description: "Generate the 802.11r keys locally instead of using the R0/R1 key holders. Unset means true when `encryption` is psk2 or psk-mixed, with or without a forced cipher, and false otherwise. A stored value other than 1, true, 0 or false reads as false, as wifi-scripts takes it. 802.11r needs WPA2 or later, so plain psk gets no fast transition at all" },
-		mobility_domain: { type: [ "string", "array", "null" ], items: { type: "string" }, "x-uapi-write": { type: [ "string", "null" ], pattern: MD_PATTERN },
-		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, which a write refuses also without 802.11r. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text" },
-		nasid:      { type: [ "string", "array", "null" ], items: { type: "string" }, "x-uapi-write": { type: [ "string", "null" ], maxLength: LINE_MAX },
-		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than %d on an EAP access point, the limit of the RADIUS attribute. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text", LINE_MAX, NASID_MAX, RADIUS_NASID_MAX) },
+		mobility_domain: { type: [ "string", "null" ], "x-uapi-write": { pattern: MD_PATTERN },
+		              description: "802.11r mobility domain, 4 hex digits. Unset, wifi-scripts derives it from the SSID. With 802.11r, hostapd refuses its whole config for another form, which a write refuses also without 802.11r. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text" },
+		nasid:      { type: [ "string", "null" ], "x-uapi-write": { maxLength: LINE_MAX },
+		              description: sprintf("NAS identifier of this access point, which wifi-scripts passes to hostapd as nas_identifier in mode ap: the 802.11r R0KH-ID, and the RADIUS NAS-Identifier. Unset, hostapd uses the BSSID without colons. A write refuses a newline and more than %d bytes, more than %d with fast transition, which needs mode ap, ieee80211r and WPA2 or later other than owe, and more than %d on an EAP access point, the limit of the RADIUS attribute. uapi counts bytes, so a non-ASCII character counts for more than one. Another access point can list it in r0kh only with at most 47 bytes and no space or comma. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text", LINE_MAX, NASID_MAX, RADIUS_NASID_MAX) },
 		reassociation_deadline: { type: ["integer", "null"], "x-uapi-write": { minimum: 1000, maximum: 65535 },
 		              description: "802.11r reassociation deadline in time units of 1.024 ms, from 1000 to 65535. Unset, wifi-scripts uses 20000. A read gives the number that wifi-scripts reads from the stored text: ` 500` is 500, `0x10` is 16, a fraction is cut, and other text is 0, as hostapd reads it. wifi-scripts stops the setup of the radio, with all its SSIDs, for a value outside the range on an enabled SSID in mode ap, sta, adhoc or mesh. A write refuses such a value also on a disabled SSID or in another mode" },
 		r0_key_lifetime: { type: ["integer", "null"], "x-uapi-write": { minimum: 0 },
 		              description: "802.11r lifetime of the PMK-R0 in minutes, 0 or more. Unset, hostapd uses 14 days (20160 minutes). 0 turns the timeout off. A read gives the number that wifi-scripts reads from the stored text, as for reassociation_deadline" },
-		r1_key_holder: { type: [ "string", "array", "null" ], items: { type: "string" }, "x-uapi-write": { type: [ "string", "null" ], pattern: R1KH_ID_PATTERN },
-		              description: "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, which a write refuses also where hostapd does not read it. wifi-scripts writes a list that uci holds as its entries joined by spaces, so a read gives a stored list as an array, and a write takes only a string, the joined text" },
+		r1_key_holder: { type: [ "string", "null" ], "x-uapi-write": { pattern: R1KH_ID_PATTERN },
+		              description: "802.11r R1 key holder id, 12 hex digits. Unset, hostapd derives it from the BSSID. hostapd refuses its whole config for another form, which a write refuses also where hostapd does not read it. wifi-scripts writes a list that uci holds as its entries joined by spaces, and a read gives that text" },
 		pmk_r1_push: { type: "boolean", default: false,
 		              description: "Push the PMK-R1 to the other key holders instead of waiting for them to pull it" },
 		r0kh:       { type: "array", items: { type: "string", "x-uapi-write": { maxLength: LINE_MAX } }, writeOnly: true,
