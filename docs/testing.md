@@ -410,8 +410,9 @@ dead export is now reported, and all 135 real exports still pass.
   on two arrays yields NaN rather than concatenating, which is how an `enum` of
   `"NaN"` reached the published spec. It also checks that emitted response
   headers are declared on the responses that can carry them and nowhere else:
-  the four transaction headers (`X-Reload-Status`, `X-Reload-Services`,
-  `X-Kernel-Status`, `X-Kernel-Applied`) appear as a complete set on every
+  the five transaction headers (`X-Reload-Status`, `X-Reload-Services`,
+  `X-Reload-Stopped`, `X-Kernel-Status`, `X-Kernel-Applied`) appear as a
+  complete set on every
   curated-resource write and on the `POST /uapi/batch` 207, which commits and
   reloads once for the whole set and reports them aggregated, and on nothing
   else, `ETag` appears on

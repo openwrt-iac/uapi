@@ -103,12 +103,14 @@ that says so. A `dhcp` write whose `dnsmasq --test` check did not finish within
 10 s answers `reloaded: true` and a `reload_note` that says so, and keeps its
 commit. So does a write whose reload was still running when uapi stopped waiting
 for it, 20 s after the first reload of the request started: the `reload_note`
-names that reload and the ones that follow it. Since 3.3.0 a `PUT` or `PATCH`
-skips each option that uci already holds as sent, a boolean as `1` or `0` and a
-number as its text, so a `PUT` of the read commits nothing and answers the same
-way. Such a write still answers `409 conflict` when another writer deleted the
-section during the request. A list sent for an option that uci holds as a single
-value, or the reverse, is a change.
+names that reload and the ones that follow it. A write after which procd still
+does not start dnsmasq, once uapi stopped and started it, keeps its commit and
+answers a `reload_note` that names what stays down, see `docs/operations.md`.
+Since 3.3.0 a `PUT` or `PATCH` skips each option that uci already holds as sent,
+a boolean as `1` or `0` and a number as its text, so a `PUT` of the read commits
+nothing and answers the same way. Such a write still answers `409 conflict` when
+another writer deleted the section during the request. A list sent for an option
+that uci holds as a single value, or the reverse, is a change.
 
 A package needs its file under `/etc/config/` before a write, as with `uci`
 itself. Without one, a `POST` answers `503 config_missing` and creates nothing,

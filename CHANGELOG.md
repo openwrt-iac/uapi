@@ -457,6 +457,34 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on `system/timeservers` requires `server`, and proto wireguard requires
   `addresses`. They also say how a write removes each write-only secret, which
   a null keeps. The server takes the same requests as before. (#449)
+- **A write after which procd gives up on dnsmasq starts it again, or says that
+  it is down.** The SIGHUP that the reload of dnsmasq.init sends right after
+  procd restarts an instance can kill the new dnsmasq on a slow router. procd
+  starts it again 5 s later and counts each such stop, and a reload does not
+  reset the count. At the sixth stop in a row, procd gives up on the instance
+  until the next reload, so DHCP and DNS stay down. The write that caused it
+  answered 200 with `X-Reload-Status: ok`. A write that reloads dnsmasq, a
+  `system` or `system/timeservers` write included, now waits 1 s after the
+  reload and reads the instances from procd. When procd has given up on one,
+  uapi runs `/etc/init.d/dnsmasq stop`, waits up to 2 s until procd lists no
+  dnsmasq instance, and runs `/etc/init.d/dnsmasq start`, once per request. A
+  start sends no SIGHUP, and the new instance counts from zero. The write keeps
+  its commit. It answers `X-Reload-Status: ok` when dnsmasq runs
+  again, and syslog holds `uapi-dnsmasq-recovery` with the request id. When
+  dnsmasq stays down, it answers the new value `X-Reload-Status: stopped`, with
+  the new header `X-Reload-Stopped`, which names each instance as
+  `dnsmasq/<instance>`. When the start of dnsmasq has not ended within its 5 s,
+  `unverified` wins, and `X-Reload-Stopped` comes beside it. The recovery is
+  `service dnsmasq restart` on the router, or a write that changes the dhcp
+  config. This holds for a POST, a PUT, a PATCH and a DELETE, which already
+  carried the reload headers, and for the `POST /uapi/batch` 207. A raw write
+  says it in `reload_note`. The stop and the start take their time from what is
+  left of `reload_budget_s`, and uapi skips them and answers `stopped` when less
+  than 10 s are left, so they add nothing to the time bound of a write. `GET
+  /uapi/diagnostics` has a new field `stopped_instances`, which lists each procd
+  instance, of any service, that procd will not start again on its own, as
+  `{"service": "dnsmasq", "instance": "cfg01411c"}`. A stop that procd starts
+  again 5 s later still answers `ok`. Additive. (#457)
 
 ## [3.5.0] - 2026-11-21
 

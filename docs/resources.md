@@ -235,7 +235,11 @@ slow router with large adblock lists, answers `unverified` on every dhcp write.
 as one whose port another daemon holds, still answers 2xx. No write waits for
 the daemon to start, and each pays one parse of the whole config per instance,
 which grows with its size, and again on a restore. A write that does not reload
-dnsmasq, because procd does not run it, runs no check.
+dnsmasq, because procd does not run it, runs no check. After every reload of
+dnsmasq, by a `system` or `system/timeservers` write too, uapi waits 1 s, and
+when procd gave up on a dnsmasq instance, it stops and starts dnsmasq once. The
+write keeps its commit, and answers `X-Reload-Status: stopped` when dnsmasq
+stays down, see `docs/operations.md`.
 
 ## System
 
@@ -365,5 +369,5 @@ composition rules, and stability caveat.
 | `GET /uapi/whoami` | any token | Token introspection: token_id, scopes, source_ip, expires_at, allowed_cidrs, last_used_at, last_used_ip. |
 | `GET /uapi/tokens`, `GET /uapi/tokens/<id>`, `POST /uapi/tokens`, `DELETE /uapi/tokens/<id>` | `uapi:tokens:ro` for a GET, `uapi:tokens:rw` for a write (or `*`) | HTTP token rotation. POST refuses a scope outside the scope tree with 422, and requires the caller's scopes to cover the requested scopes, equal or narrower. |
 | `GET /uapi/metrics` | `uapi:metrics:ro` (or `*:ro`) | Prometheus 0.0.4 text. |
-| `GET /uapi/diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, the lock files present, `state_dirs`, `limits`, `interrupted_writes`, `recent_errors` and `management_path`. `?validate=1` adds the validation sweep. `docs/operations.md` § Diagnostics has the fields. |
+| `GET /uapi/diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, the lock files present, `state_dirs`, `limits`, `interrupted_writes`, `stopped_instances`, `recent_errors` and `management_path`. `?validate=1` adds the validation sweep. `docs/operations.md` § Diagnostics has the fields. |
 | `POST /uapi/batch` | each sub-request scope-checked | Multi-package all-or-nothing transaction (max 50 ops). |

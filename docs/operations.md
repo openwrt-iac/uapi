@@ -21,7 +21,9 @@ Two signals worth wiring into your automation:
   `no_reload` means that no init script ran: the write changed nothing in uci,
   or, on a `dhcp` write, procd runs none of dnsmasq, odhcpd and unbound.
   `unverified` means that the write kept its commit, and that uapi does not know
-  whether its daemons took the new config. See below.
+  whether its daemons took the new config. `stopped` means that the write kept
+  its commit, and that a daemon that it reloaded is down and procd will not
+  start it again: `X-Reload-Stopped` names it. See below.
 - **`X-Reload-Services`**: the init scripts that ran, in order. Useful for
   audit and log correlation.
 
@@ -50,7 +52,7 @@ for an operator:
   answers `500 reload_failed_unrecovered`. A config that dnsmasq parses but
   cannot start with, such as a port that another daemon holds, still answers
   2xx. `--test` does not read the files of `addn-hosts` and `servers-file`. A
-  `system` write reloads dnsmasq too, and runs no check.
+  `system` write reloads dnsmasq too, and runs no `--test`.
 - **A slow check or reload answers `unverified`.** uapi kills a `--test` after
   10 s, and waits 20 s in all for the reloads of a request. Past either bound,
   the write keeps its commit and answers 2xx with `X-Reload-Status:
@@ -68,17 +70,48 @@ for an operator:
   little time for the restore, and the write answers `500
   reload_failed_unrecovered`.
 - **OpenWrt's reload of dnsmasq can restart it**, which on a slow machine can
-  leave it stopped for 5 s. uapi does not report that restart.
+  leave it stopped for 5 s. uapi does not report that stop. procd counts each
+  stop that comes less than an hour after a start, and a reload does not reset
+  the count. At the sixth in a row, procd gives up on the instance until the
+  next reload, which can stop it again in the same way. A write that reloads
+  dnsmasq, a `system` write included, waits 1 s after the reload and then reads
+  the instances from procd. When procd has given up on one, uapi runs
+  `/etc/init.d/dnsmasq stop`, waits until procd lists no dnsmasq instance, and
+  runs `/etc/init.d/dnsmasq start`. A start sends no SIGHUP, and the new
+  instance counts from zero. uapi does this once per request, and logs it to
+  syslog as `uapi-dnsmasq-recovery` with the request id and the outcome. The
+  write keeps its commit. When dnsmasq runs again, it answers as usual. When
+  dnsmasq stays down, it answers `X-Reload-Status: stopped`, and
+  `X-Reload-Stopped` names each instance as `dnsmasq/<instance>`. Run `service
+  dnsmasq restart` on the router, or send a write that changes the dhcp config,
+  to start it. The stop and the start take their time from what is left of
+  `reload_budget_s`: up to 3 s for the stop, 2 s for the wait and 5 s for the
+  start. With less than 10 s left, uapi skips them and answers `stopped`, so a
+  `reload_budget_s` below 10 turns them off. A stop still running after 3 s gets
+  no start, because a start before the end of the stop can leave dnsmasq out of
+  procd. A start still running after 5 s answers `unverified`, with
+  `X-Reload-Stopped` beside it: `unverified` wins over `stopped` in
+  `X-Reload-Status`, also when another check did not finish. On a restore, a
+  dnsmasq that stays down answers `500 reload_failed_unrecovered`.
 
 A write to one package that fails and restores takes at most 20 s of reloads,
-2 s of the unbound watch and 10 s of `dnsmasq --test` per dnsmasq instance
-after the reloads of the write and again after those of the restore, and up to
-5 s of the restore waiting for libuci's flock: 49 s with one dnsmasq instance,
+2 s of the unbound watch, 10 s of `dnsmasq --test` per dnsmasq instance and the
+1 s of the dnsmasq respawn check after the reloads of the write and again after
+those of the restore, and up to 5 s of the restore waiting for libuci's flock:
+51 s with one dnsmasq instance,
 inside uhttpd's default `script_timeout` of 60 s. On OpenWrt main, the kernel
 apply and the reconcile of the restore also wait for netifd
 to restart a wireguard interface, 8 s each: a write of the network package
 stays inside 60 s, and a batch that also writes dhcp, with every reload at its
-bound, can pass it. A `POST /uapi/batch` restore adds
+bound, can pass it. The stop and the start of dnsmasq add nothing to these
+bounds. They run only when 10 s of the 20 s are left, each step ends within the
+20 s, and a check that ran before them ran inside the 20 s too. A write of one
+package that runs them answers within 20 s of its first reload, since nothing
+after them can fail and restore. With the default `config limits`, the worst
+write that runs them is a batch that also writes network on OpenWrt main: 20 s
+of reloads, checks and recovery, 8 s of the kernel apply, and when that fails,
+13 s of the checks after the restore and 8 s of the reconcile, 49 s. A `POST
+/uapi/batch` restore adds
 up to 5 s of flock wait for each further package that it writes back, and the
 `wg set` of a kernel apply or reconcile has no time bound: on 25.12 it retries
 an endpoint name whose lookup fails for a time. busybox's `nslookup` runs under
@@ -427,6 +460,7 @@ that a killed request left half done, and the last 20 error envelopes. Scope:
     "reload_budget_s": 20
   },
   "interrupted_writes": [],
+  "stopped_instances": [],
   "recent_errors": [
     { "ts": 1780510463, "request_id": "01HX...", "code": "validation_failed",
       "status": 422, "method": "POST", "path": "/firewall/rules",
@@ -575,6 +609,16 @@ known), `started_at` and `reload_started`. uapi only reports such a write, and
 neither finishes nor restores it. Check the packages that it names, then
 reload their daemons or write them again. A record stays until reboot or the
 next package upgrade.
+
+`stopped_instances` lists each procd instance, of any service, that is not
+running and that procd will not start again on its own, as `{"service":
+"dnsmasq", "instance": "cfg01411c"}`, the names of `X-Reload-Stopped`. procd
+lists such an instance without its `respawn` table: it gave up on it after too
+many deaths soon after a start, or the instance has no respawn and ended. A
+write that leaves dnsmasq so answers `X-Reload-Status: stopped`. A start or a
+reload of the service starts the instance again. The list is empty when there is
+none, and also when procd does not answer. Watch it, as the header of a write
+says it only once.
 
 ## Management-path warning
 
