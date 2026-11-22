@@ -27,9 +27,24 @@ dnsmasq_running() {
 	n=0
 	until $SSH "ubus call service list '{\"name\":\"dnsmasq\"}'" | grep -q '"running": true'; do
 		n=$((n + 1))
-		[ $n -lt 10 ] || return 1
+		[ $n -lt 10 ] || { $SSH 'logread -e "dnsmasq.*crash loop"' | tail -1; return 1; }
 		sleep 1
 	done
+}
+
+# procd respawns an instance after five deaths that each come less than an hour after a start, but
+# not after the sixth, and a reload keeps that count. The SIGHUP deaths of earlier writes in the
+# suite and the refused config below used up the five, and dnsmasq then stayed down after a valid
+# write. A stop frees the instance, so the start counts from zero, and no part of this test after
+# one has six deaths. procd sends SIGKILL 5 s after the SIGTERM of a stop.
+fresh_dnsmasq() {
+	$SSH '/etc/init.d/dnsmasq stop
+	      n=0
+	      while ubus call service list "{\"name\":\"dnsmasq\"}" | grep -q "\"instances\""; do
+	              n=$((n + 1)); [ $n -lt 10 ] || exit 1; sleep 1
+	      done
+	      /etc/init.d/dnsmasq start' || fail "procd still lists a dnsmasq instance 10 s after a stop"
+	dnsmasq_running || fail "dnsmasq is not running after a start"
 }
 
 stored_options() {
@@ -54,6 +69,7 @@ until $SSH 'ubus call network.interface.tdhcp status' 2>/dev/null | grep -q '"up
 	[ $n -lt 15 ] || fail "tdhcp did not come up"
 	sleep 1
 done
+fresh_dnsmasq
 
 echo "--- POST /dhcp/servers on tdhcp, then two options ---"
 r=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/servers" \
@@ -94,6 +110,7 @@ assert_dnsmasq_omits "dhcp-option=tdhcp,3,10.99.0.1 6,10.99.0.1"
 dnsmasq_running || fail "dnsmasq is not running after the refused write"
 
 echo "--- a value that the pattern takes and dnsmasq refuses answers 500 reload_failed_restored ---"
+fresh_dnsmasq
 $SSH 'printf "dhcp-option=tdhcp,3,not-an-address\n" > /tmp/uapi_dhcp_option.conf
       dnsmasq --test -C /tmp/uapi_dhcp_option.conf 2>&1; rm -f /tmp/uapi_dhcp_option.conf' \
 	| grep -q 'bad IP address' || fail "dnsmasq took 3,not-an-address, so the case below proves nothing"
