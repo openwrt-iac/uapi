@@ -319,7 +319,17 @@ returns false. The rename keeps the replacement atomic.
 
 `wg.uc` shells out to `wg set` after the commit, inside the locked region, to
 push peer changes to the kernel (see `docs/architecture.md` § Transaction recipe
-step 7). Two things about it are load-bearing here.
+step 7). Three things about it are load-bearing here.
+
+Before it waits for an interface, the apply looks for a stored peer that keeps
+the interface down, still under the lock of `network`. It compiles the peer
+resource, reads the peers that the write committed, and looks up the
+interface of each link-local %zone with `fs.access()` in `/sys/class/net`, so
+it holds no fd of its own. On OpenWrt main it then skips such an interface
+with no wait, so the write holds the lock for less time than the 8 s that the
+wait could take. A write whose restart does not end within the 8 s and that
+only removes peers keeps its commit and runs no restore, so it releases the
+lock without the reloads and the reconcile of a restore.
 
 The preshared key is staged at a fixed path, `/var/run/uapi.wg.psk`, rather than
 a unique one. That is safe only because every uci transaction holds the

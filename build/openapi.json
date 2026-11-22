@@ -528,6 +528,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -728,6 +731,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -844,6 +850,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -936,6 +945,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -1021,6 +1033,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -1236,6 +1251,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -1436,6 +1454,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -1552,6 +1573,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -1644,6 +1668,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -1729,6 +1756,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -1944,6 +1974,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -2144,6 +2177,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -2260,6 +2296,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -2352,6 +2391,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -2437,6 +2479,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -2652,6 +2697,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -2852,6 +2900,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -2968,6 +3019,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -3060,6 +3114,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -3145,6 +3202,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -3360,6 +3420,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -3560,6 +3623,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -3676,6 +3742,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -3768,6 +3837,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -3853,6 +3925,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -4063,6 +4138,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -4258,6 +4336,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -4462,6 +4543,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							},
@@ -4581,6 +4665,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							},
@@ -4677,6 +4764,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"X-Mgmt-Path-Warning": {
 								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
@@ -4764,6 +4854,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -4979,6 +5072,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -5182,6 +5278,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							},
@@ -5301,6 +5400,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							},
@@ -5397,6 +5499,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"X-Mgmt-Path-Warning": {
 								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
@@ -5484,6 +5589,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -5699,6 +5807,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -5899,6 +6010,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -6015,6 +6129,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -6107,6 +6224,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -6192,6 +6312,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -6407,6 +6530,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -6607,6 +6733,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -6723,6 +6852,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -6815,6 +6947,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -6900,6 +7035,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -7115,6 +7253,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -7318,6 +7459,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							},
@@ -7437,6 +7581,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							},
@@ -7533,6 +7680,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"X-Mgmt-Path-Warning": {
 								"$ref": "#/components/headers/XMgmtPathWarning"
 							}
@@ -7620,6 +7770,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -7835,6 +7988,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -8035,6 +8191,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -8151,6 +8310,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -8243,6 +8405,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -8328,6 +8493,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -8691,6 +8859,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -8891,6 +9062,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -9007,6 +9181,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -9099,6 +9276,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -9184,6 +9364,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -9399,6 +9582,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -9599,6 +9785,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -9715,6 +9904,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -9807,6 +9999,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -9892,6 +10087,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -10107,6 +10305,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -10307,6 +10508,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -10423,6 +10627,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -10515,6 +10722,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -10600,6 +10810,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -10983,6 +11196,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -11183,6 +11399,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -11299,6 +11518,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -11391,6 +11613,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -11476,6 +11701,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -11686,6 +11914,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -11877,6 +12108,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -12067,6 +12301,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -12263,6 +12500,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -12464,6 +12704,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -12580,6 +12823,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -12672,6 +12918,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -12757,6 +13006,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -12972,6 +13224,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -13172,6 +13427,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -13288,6 +13546,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -13380,6 +13641,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -13465,6 +13729,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -13680,6 +13947,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -13880,6 +14150,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -13996,6 +14269,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -14088,6 +14364,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -14173,6 +14452,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -14388,6 +14670,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -14588,6 +14873,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -14704,6 +14992,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -14796,6 +15087,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -14881,6 +15175,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -15091,6 +15388,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -15282,6 +15582,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -15472,6 +15775,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -15668,6 +15974,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -15869,6 +16178,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -15985,6 +16297,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -16077,6 +16392,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -16162,6 +16480,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -16377,6 +16698,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -16577,6 +16901,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -16693,6 +17020,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -16785,6 +17115,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -16870,6 +17203,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -17085,6 +17421,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -17285,6 +17624,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -17401,6 +17743,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -17493,6 +17838,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -17578,6 +17926,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -17793,6 +18144,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -17993,6 +18347,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -18109,6 +18466,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -18201,6 +18561,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -18286,6 +18649,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -18501,6 +18867,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -18701,6 +19070,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -18817,6 +19189,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -18909,6 +19284,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -18994,6 +19372,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -19204,6 +19585,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -19394,6 +19778,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -19586,6 +19973,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -19777,6 +20167,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -19967,6 +20360,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
@@ -20163,6 +20559,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -20364,6 +20763,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -20480,6 +20882,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -20572,6 +20977,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -20657,6 +21065,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -20872,6 +21283,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -21072,6 +21486,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -21188,6 +21605,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -21280,6 +21700,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -21365,6 +21788,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -21580,6 +22006,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -21780,6 +22209,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -21896,6 +22328,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -21988,6 +22423,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -22073,6 +22511,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -22288,6 +22729,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
 							},
@@ -22488,6 +22932,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -22604,6 +23051,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -22696,6 +23146,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -22781,6 +23234,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -22991,6 +23447,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -23186,6 +23645,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -23387,6 +23849,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -23503,6 +23968,9 @@
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
 							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
 							"ETag": {
 								"$ref": "#/components/headers/ETag"
 							}
@@ -23595,6 +24063,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							}
 						}
 					},
@@ -23680,6 +24151,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"Idempotent-Replayed": {
 								"$ref": "#/components/headers/IdempotentReplayed"
@@ -26121,6 +26595,9 @@
 							},
 							"X-Kernel-Applied": {
 								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
 							},
 							"X-Request-Id": {
 								"$ref": "#/components/headers/XRequestId"
@@ -29795,7 +30272,7 @@
 					"proto": {
 						"type": "string",
 						"default": "none",
-						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface."
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer."
 					},
 					"dns": {
 						"type": [
@@ -29865,7 +30342,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its enabled peers holds a value that makes wg refuse the whole interface."
+						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface while one of its enabled peers holds a value that makes wg refuse the whole interface keeps its commit, and answers `X-Kernel-Status: blocked`."
 					},
 					"ip4table": {
 						"type": [
@@ -30440,7 +30917,7 @@
 					"proto": {
 						"type": "string",
 						"default": "none",
-						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface.",
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer.",
 						"enum": [
 							"static",
 							"dhcp",
@@ -30520,7 +30997,7 @@
 					"disabled": {
 						"type": "boolean",
 						"default": false,
-						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its enabled peers holds a value that makes wg refuse the whole interface."
+						"description": "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface while one of its enabled peers holds a value that makes wg refuse the whole interface keeps its commit, and answers `X-Kernel-Status: blocked`."
 					},
 					"ip4table": {
 						"type": [
@@ -42469,23 +42946,31 @@
 				}
 			},
 			"XKernelStatus": {
-				"description": "Whether the write reached the kernel as well as uci. `ok` = every targeted interface was applied. `partial` = some were skipped. `skipped` = none was, because the interface is down or netifd does not know it, and uci is still committed and the change takes effect on the next ifup. `omitted` = the apply set a peer without the endpoint that uci holds for it, as the proto handler does: on OpenWrt main, the ucode proto handler leaves out the endpoint of a host that does not resolve, or of a port that it cannot read. A read shows the endpoint that the kernel holds in `runtime.endpoint`, null after the restart of the handler. It takes the place of `ok`, and of `partial` when the write also skipped an interface: X-Kernel-Applied then names only the interfaces that were applied, so a skipped one is an interface that the write targets and the header does not name. OpenWrt 25.12, which runs wireguard.sh, never answers it. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path, which is the value on most writes, or the write changed nothing in uci. Absent on raw and non-uci writes, which do not run the kernel apply.",
+				"description": "Whether the write reached the kernel as well as uci. `ok` = every targeted interface was applied. `partial` = some were applied, and others were skipped or blocked. `skipped` = none was, because the interface is down or netifd does not know it, and uci is still committed and the change takes effect on the next ifup. On OpenWrt main, netifd restarts the interface on each peer change, and uapi waits up to 8 s for that restart. A restart that does not end in time fails a write that sets a peer, with a restore. When the write only removes peers of the interface, by a DELETE or a write that disables them, the interface is skipped instead and the write keeps its commit: the next setup reads uci, which no longer holds them. `blocked` = an enabled `network/wireguard_peers` of a targeted interface holds a value for which wg refuses the config of the whole interface, so the interface does not come up, and the write applied no other interface. X-Kernel-Blocked names each such peer. The write keeps its commit, with no restore. On OpenWrt main, uapi neither waits for the restart of such an interface nor applies the write to it, and netifd sets the peers from uci at the next setup once the peer is fixed, disabled or deleted. On OpenWrt 25.12, wireguard.sh restarts nothing on a peer change, so an interface that is still up takes the write, X-Kernel-Applied names it, and it does not come up at its next start. A write of `network/interfaces` that leaves a wireguard interface enabled answers `blocked` too, because netifd restarts the interface, and `no_kernel` otherwise. `omitted` = the apply set a peer without the endpoint that uci holds for it, as the proto handler does: on OpenWrt main, the ucode proto handler leaves out the endpoint of a host that does not resolve, or of a port that it cannot read. A read shows the endpoint that the kernel holds in `runtime.endpoint`, null after the restart of the handler. It takes the place of `ok`, and of `partial` when the write also skipped or blocked an interface: X-Kernel-Applied then names only the interfaces that were applied, so a skipped one is an interface that the write targets and the header does not name. OpenWrt 25.12, which runs wireguard.sh, never answers it. `no_kernel` = the write had nothing for the kernel, because the resource has no kernel path, which is the value on most writes, or the write changed nothing in uci. Absent on raw and non-uci writes, which do not run the kernel apply.",
 				"schema": {
 					"type": "string",
 					"enum": [
 						"ok",
 						"partial",
 						"omitted",
+						"blocked",
 						"skipped",
 						"no_kernel"
 					]
 				}
 			},
 			"XKernelApplied": {
-				"description": "Comma-separated list of the interfaces whose kernel state was actually changed. Absent when nothing was applied, so also absent whenever X-Kernel-Status is `skipped` or `no_kernel`.",
+				"description": "Comma-separated list of the interfaces whose kernel state was actually changed. Absent when nothing was applied, so also absent whenever X-Kernel-Status is `skipped` or `no_kernel`, and with `blocked` except on OpenWrt 25.12.",
 				"schema": {
 					"type": "string",
 					"example": "wg0"
+				}
+			},
+			"XKernelBlocked": {
+				"description": "Comma-separated list of the `network/wireguard_peers` that keep an interface of the write down, each as `<interface>/<id>`, where `id` is the one that `GET /network/wireguard_peers/{id}` takes, an unmanaged section included. Each is enabled and holds a value for which wg refuses the config of the whole interface, such as an allowed IP that wg cannot parse, or an IPv6 link-local host whose %zone names no interface of the router. A write refuses each such value that it sends. Only another writer, such as LuCI, stores one, or the interface of a zone goes away. `GET /uapi/diagnostics?validate=1` lists each such peer. Present with X-Kernel-Status `blocked`, and beside `partial` or `omitted` when the write also applied another interface. Absent otherwise.",
+				"schema": {
+					"type": "string",
+					"example": "wg0/cfg0a3b7c"
 				}
 			},
 			"XMgmtPathWarning": {

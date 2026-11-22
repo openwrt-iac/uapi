@@ -125,21 +125,35 @@ function validate(json, conn, id, delta) {
 	return errs;
 }
 
+// wireguard.sh writes no [Peer] block for a peer without a key, and still adds its routes. The ucode
+// handler skips a peer whose key does not match its pattern, with its routes.
+function gives_wg(json) {
+	let key = config_get(json.public_key);
+	return json.disabled !== true && type(key) == "string" && key != "" && !wg.handler_drops_key(json.public_key);
+}
+
+// wireguard.sh gives wg the endpoint of every host. The ucode handler leaves it out for a port that
+// it cannot read, which reads 0, and for the empty port that only a hand edit stores, which reads null
+// as no port does, so that one comes from uci.
+function endpoint_given(json, conn) {
+	if (!wg.ucode_handler()) return true;
+	if (json.endpoint_port === 0) return false;
+	return json.endpoint_port != null || json.id == null || conn?.uci_get('network', json.id)?.endpoint_port !== "";
+}
+
 // The rules on what wireguard.sh hands to wg through printf %b, and on values that wg or the routes
 // of route_allowed_ips read in another way than the read, or cannot use. Another writer, such as
 // LuCI, can enable the peer later, so an error is reported whether the peer is enabled or not, and
-// marked `live: false` while the proto handler does not hand the value to wg. network/interfaces
-// runs these rules over the peers that a write of the interface makes live. The keys are checked
-// here as well as by their schema pattern, because that run has no schema check, and the schema
-// never sees a stored preshared key, which the read masks.
-function validate_new(json) {
+// marked `live: false` while the proto handler does not hand the value to wg. blocking_fields() takes
+// the live ones as values that keep the interface down. The keys are checked here as well as by their
+// schema pattern, because that run has no schema check, and the schema never sees a stored preshared
+// key, which the read masks.
+function validate_new(json, conn) {
 	let errs = [];
 	let enabled = json.disabled !== true;
 	let handled = wg.ucode_handler();
-	// wireguard.sh writes no [Peer] block for a peer without a key, and still adds its routes. The
-	// ucode handler skips a peer whose key does not match its pattern, with its routes.
-	let key = config_get(json.public_key);
-	let live = enabled && type(key) == "string" && key != "" && !wg.handler_drops_key(json.public_key);
+	let live = gives_wg(json);
+	let given = live && endpoint_given(json, conn);
 
 	// wg reads a key without its whitespace and comment, and a newline adds a line to the config.
 	// wireguard.sh expands a backslash, which only the kernel apply follows, for a stored key. A key
@@ -167,15 +181,14 @@ function validate_new(json) {
 	let host = config_get(json.endpoint_host);
 	if (type(host) == "string")
 		for (let message in endpoint_host_problems(host))
-			push(errs, { field: "endpoint_host", code: "invalid_format", message, live });
+			push(errs, { field: "endpoint_host", code: "invalid_format", message, live: given });
 
 	// The ucode handler asks no resolver for a host of digits and dots, and gives it to wg as it
 	// stands. getaddrinfo looks up one that inet_aton does not read, such as `10.0.0.256`, as a name
-	// that no DNS holds, and wg then refuses the config of the whole interface. The handler gives wg
-	// no endpoint without a port that it reads.
+	// that no DNS holds, and wg then refuses the config of the whole interface.
 	if (handled && type(host) == "string" && match(host, /^[0-9.]+$/) && wg.inet_aton(host) == null)
 		push(errs, { field: "endpoint_host", code: "invalid_format",
-		             live: live && json.endpoint_port !== 0,
+		             live: given,
 		             message: "must be an IPv4 address when it holds only digits and dots: the ucode handler gives such a host to wg as an address, and wg refuses the config of the whole interface for one that it cannot read" });
 
 	// The schema allows 0 and -1 because a read reports a port that /etc/services does not resolve
@@ -189,6 +202,45 @@ function validate_new(json) {
 		             message: "must be from 0 to 65535: -1 is how a stored value that wg cannot read reads" });
 
 	return errs;
+}
+
+// The fields of a stored peer for which wg refuses the config of its whole interface, so that netifd
+// does not bring the interface up. Some live errors are no such field: wg takes a prefix length with
+// a leading zero, and only the route differs, and a key that wireguard.sh expands from its escapes
+// into one that kernel_key() reads. wg reads an allowed IP without its whitespace, and a `+` before
+// it as a marker that it takes, so a write refuses such an entry and the interface still comes up. A
+// zone that names no interface of the router keeps it down too, and is no error of the section,
+// because an interface can exist at one time and not at another.
+function blocking_fields(s, conn) {
+	let view = { ...fromUci(s), preshared_key: s.preshared_key };
+	if (!gives_wg(view)) return [];
+	let refused = (e) => e.live && !match(e.field, /^allowed_ips\[/)
+		&& (index([ "public_key", "preshared_key" ], e.field) < 0 || type(wg.kernel_key(view[e.field])) != "string");
+	let fields = map(filter(validate_new(view, conn), refused), (e) => e.field);
+	let aips = view.allowed_ips ?? [];
+	for (let i = 0; i < length(aips); i++) {
+		let ip = replace(replace(aips[i], /[[:space:]]/g, ""), /^\+/, "");
+		if (!is_valid_cidr_any(ip) && !is_valid_ip(ip))
+			push(fields, sprintf("allowed_ips[%d]", i));
+	}
+	if (endpoint_given(view, conn) && wg.missing_zone(replace(config_get(view.endpoint_host) ?? "", /[[:space:]]/g, "")))
+		push(fields, "endpoint_host");
+	return uniq(fields);
+}
+
+function runs_wireguard(conn, iface) {
+	let s = conn.uci_get('network', iface);
+	return s?.['.type'] == "interface" && s.proto == "wireguard" && !values.strict_bool(s.disabled);
+}
+
+// The ids of the peers that keep an enabled wireguard interface down, for the kernel apply.
+function blockers(conn, iface) {
+	let out = [];
+	if (runs_wireguard(conn, iface))
+		conn.uci_foreach('network', "wireguard_" + iface, function(s) {
+			if (length(blocking_fields(s, conn)) > 0) push(out, s['.name']);
+		});
+	return out;
 }
 
 function merge_for_patch(existing_json, body) {
@@ -283,6 +335,17 @@ return {
 	toUci: toUci,
 	validate: validate,
 	validate_new: validate_new,
+	blockers: blockers,
+	// Only the sweep lists it. A write of the peer is refused for each of these fields that a write
+	// refuses, and a zone that names no interface of the router is none of them.
+	sweep_errors: function(s, conn) {
+		let iface = parent_from_type(s['.type']);
+		let fields = runs_wireguard(conn, iface) ? blocking_fields(s, conn) : [];
+		if (length(fields) == 0) return [];
+		return [ { field: "", code: "conflict",
+		           message: sprintf("keeps the interface %s down: wg refuses the config of the whole interface for %s of this peer, so the interface does not come up at its next start. Fix or disable this peer",
+		                            iface, join(", ", fields)) } ];
+	},
 	openapi_singular: "wireguard peer",
 	merge_for_patch: merge_for_patch,
 	openapi_required: ["interface", "public_key"],

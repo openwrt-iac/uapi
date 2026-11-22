@@ -42,7 +42,9 @@ The section of each release in `CHANGELOG.md` is the full record.
   come up. An allowed IP that wg refuses still takes the tunnel down, and so
   does an endpoint host of digits and dots that inet_aton does not read, such
   as `10.0.0.256`, which the handler gives wg as an address with no lookup. A
-  write refuses such a host.
+  write refuses such a host. A write to an interface that a peer from another
+  writer keeps down keeps its commit and answers `X-Kernel-Status: blocked`,
+  with the peer in `X-Kernel-Blocked`.
 
   25.12 keeps `wireguard.sh`, where the half that matters to us remains: the
   `wg set` apply protects the *write*, not the *boot*. A peer whose endpoint

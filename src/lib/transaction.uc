@@ -543,12 +543,16 @@ function recover_service(conn, svc, params) {
 // interface whose kernel did not get an endpoint that the write stored, which an
 // `ok` would hide. It wins over `partial` too, because a skip still shows: the
 // skipped interface is a target of the write that X-Kernel-Applied does not name.
-function _kernel_status(ops, applied, omitted) {
-	let targets = wg.interfaces_of(ops);
+// An interface that a stored peer keeps down is `blocked` even where 25.12 applied
+// the write to it, since it does not come up at its next start.
+function _kernel_status(ops, kernel) {
+	let held = uniq(map(kernel.blocked, (b) => split(b, "/")[0]));
+	let targets = uniq([ ...wg.interfaces_of(ops), ...held ]);
+	let landed = filter(kernel.applied, (i) => index(held, i) < 0);
 	if (length(targets) == 0) return "no_kernel";
-	if (length(applied) == 0) return "skipped";
-	if (length(omitted) > 0) return "omitted";
-	return (length(applied) == length(targets)) ? "ok" : "partial";
+	if (length(landed) == 0) return (length(held) > 0) ? "blocked" : "skipped";
+	if (length(kernel.omitted) > 0) return "omitted";
+	return (length(landed) == length(targets)) ? "ok" : "partial";
 }
 
 function _finalize_after_reload(reload_err, restore_fn, body, services, ops, kernel) {
@@ -557,7 +561,8 @@ function _finalize_after_reload(reload_err, restore_fn, body, services, ops, ker
 		         reload_services: services,
 		         reload_status: (length(services) > 0) ? "ok" : "no_reload",
 		         kernel_applied: kernel.applied,
-		         kernel_status: _kernel_status(ops ?? [], kernel.applied, kernel.omitted) };
+		         kernel_blocked: kernel.blocked,
+		         kernel_status: _kernel_status(ops ?? [], kernel) };
 	}
 
 	// restore_fn pushes to `left` why it left a package as it is, see put_back().
@@ -656,7 +661,7 @@ function _make_apply(conn, reload, services, wg_apply, ops, kernel, watch) {
 		// wireguard restart, and on that clock the restore of a failed apply had no time left for
 		// its own reloads.
 		let start = now_ms();
-		err = wg_apply(conn, ops, kernel.applied, kernel.omitted);
+		err = wg_apply(conn, ops, kernel.applied, kernel.omitted, kernel.blocked);
 		if (watch.budget.until != null) watch.budget.until += now_ms() - start;
 		return err;
 	};
@@ -685,7 +690,7 @@ function transaction(conn, params) {
 	let wg_apply = params.wg_apply ?? wg.apply;
 	let wg_reconcile = params.wg_reconcile ?? wg.reconcile;
 	let wg_ops = params.wg_ops ?? [];
-	let wg_kernel = { applied: [], omitted: [] };
+	let wg_kernel = { applied: [], omitted: [], blocked: [] };
 	let check_services = params.check_services ?? default_check_services;
 	let watch = { start: params.watch ?? check_daemons, packages: [ pkg ], request_id: params.request_id,
 	              budget: { ms: limits.reload_budget_ms(conn) } };
@@ -768,7 +773,7 @@ function multi_transaction(conn, params) {
 	let path = params.lock_path ?? LOCK_PATH;
 	let reload = params.reload ?? default_reload;
 	let wg_ops = params.wg_ops ?? [];
-	let wg_kernel = { applied: [], omitted: [] };
+	let wg_kernel = { applied: [], omitted: [], blocked: [] };
 	let watch = { start: params.watch ?? check_daemons, request_id: params.request_id,
 	              budget: { ms: limits.reload_budget_ms(conn) } };
 

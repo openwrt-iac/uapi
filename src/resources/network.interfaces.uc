@@ -122,30 +122,6 @@ function fetch_runtime(conn, name) {
 	};
 }
 
-// The peer module is compiled only when a write makes peers live, from the directory of this file:
-// src/resources in the unit tests, and /usr/share/uapi/resources on the device.
-function peers_that_wg_refuses(conn, name) {
-	let peers = loadfile(sourcepath(0, true) + "/network.wireguard_peers.uc", { raw_mode: true })();
-	let wg = require('wg');
-	let out = [];
-	conn.uci_foreach(PKG, "wireguard_" + name, function(s) {
-		let view = peers.fromUci(s);
-		for (let k, spec in peers.schema_properties)
-			if (spec.writeOnly && view[k] == null && s[k] != null) view[k] = s[k];
-		let errs = filter(peers.validate_new(view), (e) => e.live !== false);
-		// wg refuses the whole config for an allowed IP that it cannot parse. A peer write refuses
-		// such a value, and a few other forms, in validate(), and wg reads the allowed IPs of a peer
-		// only with its key, which the ucode handler gives wg only when it matches its pattern.
-		let key = values.config_get(view.public_key);
-		if (view.disabled !== true && type(key) == "string" && key != "" && !wg.handler_drops_key(view.public_key))
-			for (let e in peers.validate(view, null))
-				if (match(e.field, /^allowed_ips\[/)) push(errs, e);
-		let fields = uniq(map(errs, (e) => e.field));
-		if (length(fields) > 0) push(out, sprintf("%s (%s)", s['.name'], join(", ", fields)));
-	});
-	return out;
-}
-
 function fromUci(section, conn) {
 	let anonymous = !!section['.anonymous'];
 	let proto = section.proto ?? "none";
@@ -427,12 +403,9 @@ function validate(json, conn, id, delta, partial) {
 			             message: "must be eui64, random, or an interface id whose network half is zero, such as ::1" });
 	}
 	// conn still holds the section as it was, because validation runs before the write is staged.
-	// A name that the server generates has no stored options and no peers.
+	// A name that the server generates has no stored options.
 	let name = id ?? json.id;
 	let old = (json.proto == "wireguard" && conn != null && name != null) ? conn.uci_get(PKG, name) : null;
-	let enabling = old?.proto == "wireguard";
-	let goes_live = json.proto == "wireguard" && json.disabled !== true && conn != null && name != null
-	                && (!enabling || strict_bool(old.disabled));
 	// The schema allows -1 because a read reports a port name that /etc/services does not resolve
 	// as -1.
 	if (ok("listen_port") && json.listen_port === -1)
@@ -470,20 +443,6 @@ function validate(json, conn, id, delta, partial) {
 				push(errs, { field: sprintf("ip6class[%d]", i), code: "invalid_format",
 				             message: "must be local or an interface name" });
 
-	// wireguard.sh gives every enabled peer to one `wg syncconf`, and wg refuses the whole config
-	// for one peer that it cannot read. A peer write checks only its own peer, so the write that
-	// makes the stored peers live runs over them the rules that a peer write checks when it enables
-	// a peer.
-	if (goes_live) {
-		let bad = peers_that_wg_refuses(conn, name);
-		// A peer write needs a parent on proto wireguard, so a switch has to land disabled first.
-		if (length(bad) > 0)
-			push(errs, { field: enabling ? "disabled" : "proto", code: "conflict",
-			             message: sprintf("must not make live a stored peer that network/wireguard_peers refuses to enable: %s. %s",
-			                              join(", ", bad), enabling ? "Fix or disable each of them first"
-			                                                        : "Switch with disabled true, then fix or disable each of them before enabling the interface") });
-	}
-
 	return errs;
 }
 
@@ -497,6 +456,10 @@ return {
 	fromUci: fromUci,
 	toUci: toUci,
 	validate: validate,
+	// netifd restarts a wireguard interface that a write changes or creates, and wg refuses the
+	// config of the whole interface for one stored peer, so the kernel apply names such a peer.
+	kernel_ops: (kind, opts, sec_type, existing, staged) =>
+		(staged?.proto == "wireguard") ? [ { iface: staged['.name'], action: "check" } ] : [],
 	// A static interface takes `option ipaddr` and `list ipaddr` alike, so a PATCH that sends its
 	// address back writes nothing there.
 	rewrite_when_named: (view) => VALID_PROTOS[view.proto] ? {} : LIST_OPTIONS,
@@ -551,7 +514,7 @@ return {
 	},
 	schema_properties: {
 		proto: { type: "string", default: "none", "x-uapi-write": { enum: keys(VALID_PROTOS) },
-		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that switches an enabled interface to wireguard answers 422 while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface." },
+		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer." },
 		id:        { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,31}$",
 		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write." },
 		device:    { type: ["string", "null"],
@@ -589,7 +552,7 @@ return {
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,
-		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface answers 422 while one of its enabled peers holds a value that makes wg refuse the whole interface." },
+		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface while one of its enabled peers holds a value that makes wg refuse the whole interface keeps its commit, and answers `X-Kernel-Status: blocked`." },
 		addresses: { type: ["array", "null"], items: { type: "string" },
 		             description: "Proto wireguard requires at least one address, as an IPv4 or IPv6 CIDR." },
 		private_key: { type: "string", writeOnly: true,

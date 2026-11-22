@@ -481,6 +481,8 @@ function attach_reload_headers(resp, result) {
 		resp.headers["X-Kernel-Status"] = result.kernel_status;
 	if (type(result.kernel_applied) == "array" && length(result.kernel_applied) > 0)
 		resp.headers["X-Kernel-Applied"] = join(",", result.kernel_applied);
+	if (type(result.kernel_blocked) == "array" && length(result.kernel_blocked) > 0)
+		resp.headers["X-Kernel-Blocked"] = join(",", result.kernel_blocked);
 	return resp;
 }
 
@@ -1189,6 +1191,8 @@ function make(resource, opts) {
 				view = resource.fromUci(s, conn);
 				errs = _validate_with_schema(resource, view, carry_write_only(resource, view, s),
 				                             conn, id, {});
+				if (resource.sweep_errors != null)
+					errs = [ ...errs, ...resource.sweep_errors(s, conn) ];
 			} catch (e) {
 				// A resource that throws on a section it cannot read is itself a
 				// finding, and must not take the whole sweep down with it.

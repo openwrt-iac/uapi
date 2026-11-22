@@ -45,9 +45,10 @@ function run(argv) {
 // and route_allowed_ips as on only when they hold "1". Since openwrt ecd9120f04 it also checks a
 // value against wg's grammar as uci holds it, and leaves out what wg would refuse: the peer for a
 // public key, and the line for a preshared key, an endpoint or a keepalive. wg refused the whole
-// config before, so one such value kept the interface down. It still does for an allowed IP, and
-// for a host of digits and dots that inet_aton does not read, which the handler gives wg as an
-// address. uapi reads, sets and routes a peer as the handler that netifd runs.
+// config before, so one such value kept the interface down. It still does for an allowed IP, for a
+// host of digits and dots that inet_aton does not read, which the handler gives wg as an address,
+// and for an IPv6 host that musl refuses. uapi reads, sets and routes a peer as the handler that
+// netifd runs, and apply() names such a peer instead of waiting for an interface that it keeps down.
 const UCODE_HANDLER = "/lib/netifd/proto/wireguard.uc";
 const SETTLE_S = 8;
 
@@ -831,9 +832,17 @@ function reconcile(conn, interfaces, ops) {
 	return missing;
 }
 
-// ops are {iface, action: "set"|"remove", ...peer fields}, in the order the
+// The rules of a peer live in its resource, which requires this module, so an apply loads it only
+// when it runs, from the directory beside this one: src/resources in the unit tests, and
+// /usr/share/uapi/resources on the device.
+function peer_rules() {
+	return loadfile(sourcepath(0, true) + "/../resources/network.wireguard_peers.uc", { raw_mode: true })();
+}
+
+// ops are {iface, action: "set"|"remove"|"check", ...peer fields}, in the order the
 // request produced them, so a batch that touches one peer twice ends on its last
-// state.
+// state. A write of network/interfaces gives a "check", which changes no peer: netifd
+// restarts the interface for it.
 // `applied` collects the interfaces this call found live and therefore applied
 // to, so the response can say which ones a write reached. Recorded on the
 // up/down decision rather than per operation: the two only differ when an
@@ -842,21 +851,42 @@ function reconcile(conn, interfaces, ops) {
 // normal rather than a failure, and without this the caller cannot tell a write
 // that landed in the kernel from one that only landed in uci. `omitted` collects the interfaces
 // where the kernel did not get the endpoint of a peer that uci holds.
-function apply(conn, ops, applied, omitted) {
-	let up = {}, until = time() + SETTLE_S;
+//
+// `blocked` collects `<interface>/<peer id>` for each peer that the write committed and that keeps
+// its interface down, because wg refuses the config of the whole interface for one of its values.
+// The ucode handler sets every peer or none, so the restart of such an interface never ends, and a
+// wait for it cannot tell a restart that the write broke from one that was broken before it. On
+// main the apply skips such an interface with no wait: its next setup reads uci. wireguard.sh
+// restarts nothing on a peer change, so on 25.12 an interface that is still up takes the write.
+// A restart that does not end in time fails a write that sets a peer, and the restore takes the
+// peer back out. It does not fail one whose ops on the interface only remove peers: the next setup
+// reads uci, which no longer gives them access.
+function apply(conn, ops, applied, omitted, blocked) {
+	let up = {}, until = time() + SETTLE_S, rules = null, removes_only = {};
+	for (let op in ops)
+		if (op.action != "check")
+			removes_only[op.iface] = (removes_only[op.iface] ?? true) && op.action == "remove";
 	for (let op in ops) {
 		let iface = op.iface;
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE))
 			return sprintf("refusing to apply to interface %J", iface);
 		if (up[iface] == null) {
-			let settled = settled_up(conn, iface, until);
-			if (settled === null)
-				return sprintf("interface %s holds a setup pending that never ended after the reload, so its peers cannot be applied", iface);
-			up[iface] = settled;
+			rules ??= peer_rules();
+			let held = rules.blockers(conn, iface);
+			if (type(blocked) == "array")
+				for (let id in held) push(blocked, iface + "/" + id);
+			if (!exists(removes_only, iface) || (length(held) > 0 && ucode_handler()))
+				up[iface] = false;
+			else {
+				let settled = settled_up(conn, iface, until);
+				if (settled === null && !removes_only[iface])
+					return sprintf("interface %s holds a setup pending that never ended after the reload, so its peers cannot be applied", iface);
+				up[iface] = settled === true;
+			}
 			if (up[iface] && type(applied) == "array")
 				push(applied, iface);
 		}
-		if (!up[iface]) continue;
+		if (!up[iface] || op.action == "check") continue;
 
 		let previous = routes_from(op.prev_allowed_ips, op.prev_route_allowed_ips);
 
@@ -898,10 +928,12 @@ function apply(conn, ops, applied, omitted) {
 	return null;
 }
 
+// The interfaces whose peers the ops change. A "check" changes none, so a failed write of
+// network/interfaces reconciles no peer.
 function interfaces_of(ops) {
 	let seen = {}, out = [];
 	for (let op in ops) {
-		if (type(op.iface) != "string" || seen[op.iface]) continue;
+		if (type(op.iface) != "string" || seen[op.iface] || op.action == "check") continue;
 		seen[op.iface] = true;
 		push(out, op.iface);
 	}

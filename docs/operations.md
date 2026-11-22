@@ -522,6 +522,16 @@ when the daemon does not read the value yet. A write of the section is refused
 for the error either way, because another writer, such as LuCI, can enable the
 section later.
 
+The sweep also lists a `network/wireguard_peers` peer that keeps its interface
+down, because wg refuses the config of the whole interface for one of its
+values, with code `conflict` on the field `""` and a message that names the
+interface and the fields. A write of another peer of that interface names it
+in `X-Kernel-Blocked`. A write of the peer is refused for each such value that
+a write refuses, so the write that fixes them clears the finding. An IPv6
+link-local host whose %zone names no interface of the router keeps the
+interface down too, and is not refused, because an interface can exist at one
+time and not at another, so the peer still takes a write while it holds one.
+
 Three things worth knowing:
 
 - **Opt-in on purpose.** Each resource walks its own uci package, so a package

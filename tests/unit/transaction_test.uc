@@ -748,6 +748,20 @@ t.describe('multi_transaction, the reload of a batch', () => {
 		t.assert_deep_equal([ r.kernel_status, r.kernel_applied ], [ "omitted", [ "wg0" ] ]);
 	});
 
+	t.it('reports partial when a stored peer keeps one interface of the batch down, and names it', () => {
+		let r = tx.multi_transaction(ubus.stub({ uci: { fw: {}, net: {} } }), {
+			packages: [ "net" ], reload_services: { net: [ "network" ] },
+			lock_path: "/tmp/uapi-test-reload-global.lock", pkg_lock_prefix: "/tmp/uapi-test-reload-pkg.",
+			wg_ops: [ { iface: "wg0", action: "set" }, { iface: "wg1", action: "remove" } ],
+			wg_apply: function(c, o, applied, omitted, blocked) { push(applied, "wg1"); push(blocked, "wg0/a"); return null; },
+			fn: (c) => ({ ok: true, body: {} }), reload: noop_reload, check_services: noop_check,
+		});
+		for (let f in [ "global.lock", "pkg.net.lock" ])
+			require('fs').unlink("/tmp/uapi-test-reload-" + f);
+		let h = require('handler').attach_reload_headers({ status: 207, headers: {} }, r).headers;
+		t.assert_deep_equal([ h["X-Kernel-Status"], h["X-Kernel-Applied"], h["X-Kernel-Blocked"] ], [ "partial", "wg1", "wg0/a" ]);
+	});
+
 	t.it('checks the init scripts of every package before it takes a lock', () => {
 		let seen = null;
 		let r = tx.multi_transaction(ubus.stub({ uci: { fw: {}, net: {} } }), {
@@ -1041,6 +1055,35 @@ t.describe('transaction kernel_status', () => {
 		let r = run([{ iface: "wg0", action: "set" }, { iface: "wg0", action: "remove", public_key: "k" }],
 		            applier(["wg0"]));
 		t.assert_equal(r.kernel_status, "ok");
+	});
+
+	// A stored peer that wg refuses keeps its interface down. On 25.12 an interface that is still up
+	// takes the write, and it does not come up at its next start.
+	function blocking(applied, blocked, omitted) {
+		return function(c, o, a, om, b) {
+			push(a, ...applied);
+			push(b, ...blocked);
+			push(om, ...(omitted ?? []));
+			return null;
+		};
+	}
+	t.it('reports blocked and names the peer when a stored peer keeps every target down', () => {
+		let r = run([{ iface: "wg0", action: "set" }], blocking([], [ "wg0/a" ]));
+		t.assert_deep_equal([ r.ok, r.kernel_status, r.kernel_applied, r.kernel_blocked ], [ true, "blocked", [], [ "wg0/a" ] ]);
+		r = run([{ iface: "wg0", action: "set" }], blocking([ "wg0" ], [ "wg0/a", "wg0/b" ]));
+		t.assert_deep_equal([ r.kernel_status, r.kernel_applied, r.kernel_blocked ], [ "blocked", [ "wg0" ], [ "wg0/a", "wg0/b" ] ]);
+	});
+	t.it('reports partial when one interface is blocked and another applied, and omitted over it', () => {
+		let ops = [{ iface: "wg0", action: "set" }, { iface: "wg1", action: "set" }];
+		t.assert_deep_equal(map([ run(ops, blocking([ "wg1" ], [ "wg0/a" ])), run(ops, blocking([ "wg0", "wg1" ], [ "wg0/a" ])),
+		                          run(ops, blocking([ "wg1" ], [ "wg0/a" ], [ "wg1" ])) ], (r) => r.kernel_status),
+		                    [ "partial", "partial", "omitted" ]);
+	});
+	// A write of network/interfaces restarts the interface and sets no peer.
+	t.it('reports a check only when a stored peer keeps its interface down', () => {
+		t.assert_equal(run([{ iface: "wg0", action: "check" }], applier([])).kernel_status, "no_kernel");
+		t.assert_equal(run([{ iface: "wg0", action: "check" }], blocking([], [ "wg0/a" ])).kernel_status, "blocked");
+		t.assert_equal(run([{ iface: "wg0", action: "check" }, { iface: "wg1", action: "set" }], blocking([ "wg1" ], [])).kernel_status, "ok");
 	});
 });
 
