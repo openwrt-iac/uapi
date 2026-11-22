@@ -245,7 +245,7 @@ dnsmasq, because procd does not run it, runs no check.
 | Path | Wraps | Notes |
 |---|---|---|
 | `dropbear/instances` | `config dropbear` | Per-instance SSH config (port, password_auth, root_login, etc.). |
-| `uhttpd/instances` | `config uhttpd` | Per-instance HTTP server. Validate refuses to strip uapi's own `ucode_prefix` from `main` (self-lockout protection). |
+| `uhttpd/instances` | `config uhttpd` | Per-instance HTTP server. A PUT or PATCH of `main` that strips uapi's own `ucode_prefix` entry, and a DELETE of `main` while it holds that entry, answer 422 `conflict` (self-lockout protection). `/raw/uhttpd` runs no such check. |
 | `uhttpd/certs` | `config cert` | px5g cert generation params. |
 | `unbound/server` (singleton) | `config unbound` | Recursive DNS tuning. |
 | `unbound/srv` (singleton) | `config unbound_srv 'main'` | Server-clause directives (`interface_bind`, `interface_outgoing`, `ip_transparent`, plus a raw `srv_line` passthrough). Requires `apk add unbound-uci-ext` from the openwrt-iac feed; otherwise the first write returns `503 init_script_missing`. |

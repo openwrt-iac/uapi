@@ -211,3 +211,13 @@ If a curated endpoint exists for the section type, prefer it. The curated layer:
 - Generates ULID IDs that survive `/etc/config` rewrites.
 
 `/raw/` skips all of that. It is the escape hatch, not the front door.
+
+This includes the self-lockout check of `uhttpd/instances`. A `/raw/uhttpd`
+write that deletes `main`, or that removes uapi's entry from its
+`ucode_prefix`, commits. The next request then gets a 404 from uhttpd. raw
+runs no rule of a curated resource, and this one rule would not make it safe: a
+raw write can also change the listen addresses or the certificate of `main`,
+and cut the path of every client that way. The scopes are the guard here. Such
+a write needs a write scope on both trees, such as `raw:uhttpd:rw` and
+`uhttpd:instances:rw`, and `docs/security.md` lists `uhttpd:instances:rw` with
+the scopes that grant root.

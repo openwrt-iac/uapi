@@ -738,6 +738,44 @@ t.describe('uhttpd.instances self-lockout protection', () => {
 			if (e.code == 'invalid_format') { found = true; break; }
 		t.assert_true(found);
 	});
+
+	function with_instances() {
+		return ubus.stub({ uci: { uhttpd: {
+			main:  { '.type': 'uhttpd', '.anonymous': false, listen_http: ['0.0.0.0:80'],
+			         ucode_prefix: ['/api/v4=/usr/share/uapi/main.uc'] },
+			extra: { '.type': 'uhttpd', '.anonymous': false, listen_http: ['0.0.0.0:8081'],
+			         ucode_prefix: ['/api/v4=/usr/share/uapi/main.uc'] },
+		} } });
+	}
+	let uh = handler.make(uhttpd_inst, { tx: { acquire: () => ({}), release: () => null,
+	                                           reload: () => null, check_services: () => null } });
+	let uctx = { request_id: "01hx0000000000000000000000" };
+
+	t.it("a DELETE of main while it holds uapi's entry answers 422 conflict on ucode_prefix and keeps the section", () => {
+		let c = with_instances();
+		let r = uh.remove(c, uctx, 'main');
+		t.assert_equal(r.status, 422);
+		t.assert_equal(r.body.code, 'validation_failed');
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field + ':' + e.code), [ 'ucode_prefix:conflict' ]);
+		t.assert_deep_equal(c._state.uci.uhttpd.main.ucode_prefix, ['/api/v4=/usr/share/uapi/main.uc']);
+	});
+
+	t.it("a DELETE of another instance, or of a main without uapi's entry, still removes it", () => {
+		let c = with_instances();
+		t.assert_equal(uh.remove(c, uctx, 'extra').status, 204);
+		t.assert_equal(c._state.uci.uhttpd.extra, null);
+		c._state.uci.uhttpd.main.ucode_prefix = ['/api/v3=/usr/share/uapi/main.uc'];
+		t.assert_equal(uh.remove(c, uctx, 'main').status, 204);
+		t.assert_equal(c._state.uci.uhttpd.main, null);
+	});
+
+	t.it("the bare handler of /uapi/batch refuses the DELETE of main too", () => {
+		let c = with_instances();
+		let r = handler.make(uhttpd_inst, { tx: { bare: true } }).remove(c, uctx, 'main');
+		t.assert_equal(r.status, 422);
+		t.assert_deep_equal(map(r.body.errors, (e) => e.field + ':' + e.code), [ 'ucode_prefix:conflict' ]);
+		t.assert_true(c._state.uci.uhttpd.main != null);
+	});
 });
 
 t.describe('network.interfaces proto=dhcp client fields', () => {

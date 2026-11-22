@@ -25,6 +25,28 @@ status=$(echo "$patch_response" | tail -1)
 echo "$patch_response" | head -1 | grep -q '"code": "conflict"' \
 	|| fail "expected field-level conflict on ucode_prefix"
 
+echo "--- uhttpd/instances: DELETE main is rejected with 422 conflict ---"
+del_response=$(call -X DELETE "$URL/uhttpd/instances/main")
+echo "$del_response"
+status=$(echo "$del_response" | tail -1)
+[ "$status" = "422" ] || fail "expected 422 (self-lockout block) on DELETE, got $status"
+echo "$del_response" | head -1 | grep -q '"field": "ucode_prefix",[[:space:]]*"code": "conflict"' \
+	|| fail "expected field-level conflict on ucode_prefix for DELETE"
+
+echo "--- uhttpd/instances: DELETE main in /uapi/batch is rejected the same way ---"
+batch_response=$(call -X POST -H 'Content-Type: application/json' "$URL/uapi/batch" \
+	-d '{"operations": [{"method": "DELETE", "path": "/uhttpd/instances/main"}]}')
+echo "$batch_response"
+status=$(echo "$batch_response" | tail -1)
+[ "$status" = "422" ] || fail "expected 422 from /uapi/batch, got $status"
+echo "$batch_response" | head -1 | grep -q '"field": "ucode_prefix",[[:space:]]*"code": "conflict"' \
+	|| fail "expected field-level conflict on ucode_prefix from /uapi/batch"
+
+got=$(call "$URL/uhttpd/instances/main")
+[ "$(echo "$got" | tail -1)" = "200" ] || fail "main is gone after the refused DELETE"
+echo "$got" | head -1 | grep -q "$UAPI_PREFIX" \
+	|| fail "main lost uapi's entry after the refused DELETE"
+
 echo "--- uhttpd/instances: PATCH main with bogus listen_http is rejected with 422 invalid_format ---"
 bad_listen=$(call -X PATCH -H 'Content-Type: application/json' \
 	"$URL/uhttpd/instances/main" -d '{ "listen_http": ["not-a-host:port"] }')

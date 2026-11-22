@@ -14,7 +14,8 @@ req "$UAPI_BASE/uhttpd/instances/main"; echo
 
 echo
 echo "# DANGER: writes to the 'main' instance that strip /api/v4=/usr/share/uapi/main.uc"
-echo "# from ucode_prefix are rejected with 422 conflict (self-lockout protection)."
+echo "# from ucode_prefix, and a DELETE of 'main', are rejected with 422 conflict"
+echo "# (self-lockout protection)."
 echo
 # Writing this instance restarts the server that is answering the request, so curl usually
 # reports "Empty reply from server" (exit 52) even though the write committed. That is uhttpd

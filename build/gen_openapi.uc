@@ -723,7 +723,7 @@ const TAGS = [
 	{ name: "System / SSH authorized keys", group: "System",  description: "Manage `/etc/dropbear/authorized_keys` entries by stable id.", path_prefix: "/system/authorized_keys" },
 	{ name: "System / Cron jobs",           group: "System",   description: "Manage `/etc/crontabs/root` entries by stable id, one per line. Lines from packages, comments and environment lines stay as they are.", path_prefix: "/system/cron_jobs" },
 	{ name: "Dropbear / Instances",        group: "Other daemons", description: "Per-instance SSH config (`config dropbear`)." },
-	{ name: "Uhttpd / Instances",          group: "Other daemons", description: "Per-instance HTTP server config (`config uhttpd`). Self-lockout protection on `main`." },
+	{ name: "Uhttpd / Instances",          group: "Other daemons", description: "Per-instance HTTP server config (`config uhttpd`). The `main` instance keeps uapi's own `ucode_prefix` entry." },
 	{ name: "Uhttpd / Certs",              group: "Other daemons", description: "px5g certificate generation params (`config cert`)." },
 	{ name: "Unbound / Server",            group: "Other daemons", description: "Recursive DNS server singleton (`config unbound`)." },
 	{ name: "Unbound / Srv",               group: "Other daemons", description: "Directives rendered into unbound's `server:` clause (`config unbound_srv`). Requires the separate `unbound-uci-ext` package, which owns the uci-to-conf renderer and the init script this resource reloads; without it the first write returns `503 init_script_missing`." },
