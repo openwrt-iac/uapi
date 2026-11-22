@@ -89,27 +89,35 @@ packages are deliberately not pulled in.
 | `network/wireguard_kernel_peers` (read-only collection) | `wg show <iface> dump` | The WireGuard peers the kernel holds that no uci section of their interface claims, on up interfaces with proto=wireguard: what a hand `wg set` added or a failed apply left, which no other read reports. Keyed as wg reads the stored key, the later `PublicKey=` lines of one included, and disabled sections included, because the `runtime` of a disabled section already reports a peer the kernel holds under its key. One dump per interface per request, the same one the `runtime` reads. A down interface or a failing `wg` lists nothing, as `runtime` answers `{}`. The stable `id` is the first 12 hex of the sha256 of the interface name and the public key. No write, no lock, no ETag. |
 
 **`option disabled` is modelled on `network/interfaces`, `network/routes` and
-`network/rules`.** netifd drops a disabled section outright on all three: a
-disabled
-interface is never registered, so it has no ubus object and its addresses and
-routes
-are absent, and a disabled route or rule is never installed. Each resource reads
-the
-option with the helper matching its own parser, because netifd does not parse it
-the
-same way for all three: `strict_bool` on the interface, where netifd compares
-the
-value literally against `1`, and `platform_bool` on routes and rules, where it
-goes
-through the boolean blob converter that also accepts `true`.
-`network/wireguard_peers`
-models `disabled` as well.
+`network/rules`.** netifd drops a disabled section outright on all three. A
+disabled interface is never registered, so it has no ubus object and its
+addresses and routes are absent. A disabled route or rule is never installed.
+`network/wireguard_peers` models `disabled` as well.
 
-[#64](https://github.com/openwrt-iac/uapi/issues/64) tracked the gap while it
-was
-open; `docs/roadmap.md` carries the reasoning and the alternatives that were
-turned
-down.
+Each resource reads the option with the helper that matches its own parser,
+because netifd does not parse it the same way for all three. On the interface,
+netifd compares the value literally against `1`, and uapi reads it with
+`strict_bool`. On routes and rules, the value goes through the boolean blob
+converter, which also takes `true`, and uapi reads it with `platform_bool`.
+Neither parser takes `on` or `yes`. So `option disabled 'true'` disables a route
+or a rule and leaves an interface running. One shared reader would report such
+an interface as disabled while it is up. A unit test pins the difference in both
+directions. netifd `e97e36f` (2026-07-16) takes `true` on the interface too.
+When the OpenWrt branch that uapi supports carries it, the interface reader can
+widen ([#311](https://github.com/openwrt-iac/uapi/issues/311)), and that test
+shows when.
+
+[#64](https://github.com/openwrt-iac/uapi/issues/64) tracked the gap. Two
+alternatives were turned down:
+
+- Ship `disabled` on routes and rules first, and wait for upstream on the
+  interface. The interface is where disabling matters most, because it takes
+  the addresses, routes and peers with it. `disabled` on two of three sibling
+  resources is also an asymmetry that no operator can explain from outside.
+- Read the flag one way on all three, and let `runtime` show the disagreement,
+  as `effective_proto` does for the proto. But `disabled: true` with
+  `runtime.up: false` cannot tell a disabled interface from an enabled one that
+  failed, and that is the case an operator most needs to tell apart.
 
 Reload: `network` (netifd), then `odhcpd` while procd holds a `config.change`
 trigger for it, under the rule of a `dhcp` write below. odhcpd reads the network
