@@ -24,6 +24,7 @@ const STATUS_BY_CODE = {
 	internal_error: 500,
 	reload_failed_restored: 500,
 	reload_failed_unrecovered: 500,
+	recover_failed: 500,
 	service_unavailable: 503,
 	init_script_missing: 503,
 	config_missing: 503,
@@ -51,7 +52,7 @@ const ALL_CODES = [
 	"conflict", "unmanaged_resource", "idempotency_key_conflict",
 	"precondition_failed", "payload_too_large",
 	"validation_failed", "locked", "too_many_requests",
-	"internal_error", "reload_failed_restored", "reload_failed_unrecovered",
+	"internal_error", "reload_failed_restored", "reload_failed_unrecovered", "recover_failed",
 	"service_unavailable", "init_script_missing", "config_missing",
 	"batch_partial_failure",
 ];

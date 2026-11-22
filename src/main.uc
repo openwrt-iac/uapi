@@ -87,6 +87,8 @@ const SINGLETONS = {
 	"usteer:config":      handler.make_singleton(load_resource("usteer:config")),
 };
 
+const RECOVER_TARGETS = transaction.recover_targets(RESOURCE_SOURCES);
+
 // BARE variants run inside /uapi/batch's outer multi_transaction (skip own lock,
 // snapshot, commit, reload). Read-only collections have no toUci and are
 // excluded.
@@ -477,7 +479,8 @@ const METRIC_ROUTES = {
 	raw_package: (p) => match(p, /^[A-Za-z0-9_-]+$/) && fs.stat("/etc/config/" + p)?.type == "file",
 };
 for (let l in [ "/openapi.json", "/healthz", "/uapi/metrics", "/uapi/batch", "/uapi/diagnostics",
-                "/schema", "/uapi/tokens", "/uapi/tokens/:id", "/uapi/whoami", "/system/password" ])
+                "/schema", "/uapi/tokens", "/uapi/tokens/:id", "/uapi/whoami", "/uapi/services/:id/recover",
+                "/system/password" ])
 	METRIC_ROUTES.labels[l] = true;
 for (let l in [ "/packages/installed", "/packages/feeds",
                 "/system/authorized_keys", "/system/cron_jobs" ]) {
@@ -907,6 +910,27 @@ function uapi_route(conn, ctx, token, parts, method, body, query, env) {
 					method, id != null ? "/<id>" : ""));
 		}
 		return resp;
+	}
+	if (sub == "services") {
+		if (length(parts) != 4 || parts[3] != "recover")
+			return errors.error(ctx, "not_found", "Unknown services sub-path");
+		if (method != "POST")
+			return errors.error(ctx, "method_not_allowed", "recover only supports POST");
+		let svc = parts[2];
+		let target = RECOVER_TARGETS[svc];
+		if (target == null)
+			return errors.error(ctx, "not_found", sprintf("uapi does not recover the service %J", svc));
+		let paths = [ [ "uapi", "services" ], ...map(target.domains, (d) => [ d ]) ];
+		if (length(filter(paths, (p) => scope.permits(token.scopes, p, "rw"))) == 0)
+			return errors.error(ctx, "insufficient_scope", sprintf("Token does not permit recovering %s, which needs %s",
+				svc, join(" or ", map(paths, (p) => join(":", p) + ":rw"))));
+		let r = transaction.recover_service(conn, svc, { packages: target.packages });
+		if (r.ok) return errors.ok(ctx, { service: svc, recovered: r.recovered });
+		if (r.kind == "locked") return errors.locked_from(ctx, 1, r);
+		if (r.kind == "lock_unavailable") return errors.lock_unavailable(ctx, r.error);
+		return errors.error(ctx, "recover_failed",
+			sprintf("procd does not run %s: %s", join(", ", map(r.stopped, (n) => svc + "/" + n)), r.why),
+			{ service: svc, stopped: r.stopped });
 	}
 	return errors.error(ctx, "not_found",
 		sprintf("Unknown uapi sub-path %J", sub));

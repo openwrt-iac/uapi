@@ -83,6 +83,7 @@ Two flock files, used in three patterns:
 | uci write (any one pkg) | SH | EX on that one pkg                     |
 | uci write that restarts unbound (`unbound_srv`, `unbound_ext`), or that can reload it (`dhcp`, and `system` but not `system/timeservers`, while `/etc/init.d/unbound` exists) | SH | EX on that pkg and on `unbound` |
 | uci write (multi pkg, /uapi/batch) | SH | EX on each, sorted lexicographic order |
+| `POST /uapi/services/{name}/recover` | SH | EX on each package whose writes reload the service, sorted |
 | Non-uci write (apk, system/password, system/authorized_keys, system/cron_jobs) | EX | none |
 
 The interactions:
@@ -119,7 +120,8 @@ in all for the reloads of a request, the stay-up
 watch of an unbound reload polls for up to 2 s under the transaction's locks,
 the `dnsmasq --test` check of each instance runs for up to 10 s, and the
 respawn check of a dnsmasq reload waits 1 s, then can stop and start dnsmasq
-within what is left of the 20 s.
+within what is left of the 20 s. `POST /uapi/services/{name}/recover` holds its
+locks across one such stop and start, 10 s at most.
 The restore after a failed reload also waits, for up to 5 s, for libuci's flock
 on the package file. A load holds that flock while it parses the file, and a
 `uci commit` while it reads the file again, writes its temp file and syncs it.
@@ -320,8 +322,9 @@ without uci state change.
    beside `unverified`. syslog gets `uapi-dnsmasq-recovery` with the request
    id and the outcome. On a restore, a dnsmasq that stays down after the one
    stop and start of the request fails the restore. `GET /uapi/diagnostics`
-   lists every instance without its `respawn` table, of any service, as
-   `stopped_instances`.
+   lists every instance without its `respawn` table, of the services that
+   `POST /uapi/services/{name}/recover` takes, as `stopped_instances`. See
+   [Service recovery](#service-recovery-uapiservicesnamerecover).
 7. **Kernel apply.** For each peer operation the write collected (see below),
    skip it unless `network.interface.<name>` reports `up`, then run the
    matching `wg set`. The ucode handler of OpenWrt main restarts a wireguard
@@ -615,6 +618,50 @@ what keeps a peer orphaned by deleting its parent interface deletable.
    touching the same peer twice ends on its last state, and the restore
    reconciles rather than replaying, since a batch can apply several peers
    before failing on a later one.
+
+## Service recovery (`/uapi/services/{name}/recover`)
+
+The write path stops and starts dnsmasq once when procd gave up on it after the
+reload (step 6). A client that only speaks HTTP has no other way to do it after
+`X-Reload-Status: stopped`, and a write that changes nothing runs no init script
+by design, so that a plan with no change has no side effect. `POST
+/uapi/services/{name}/recover` runs the same steps on request, through the same
+`recover()` of `src/lib/transaction.uc`:
+
+1. Look up `{name}` in `RECOVERABLE`: the services that uapi reloads and whose
+   init script sets `procd_set_param respawn` on every instance that it starts,
+   on OpenWrt 25.12 and main. `network`, `uhttpd` and `dropbear` qualify, and
+   are left out, because the stop acts on the whole service. A stop of
+   `network` or `uhttpd` cuts off the request, and a stop of `dropbear` stops
+   the instance that serves the management SSH session, which a start that
+   fails leaves down. Another name answers 404.
+2. Check the scope: `uapi:services:rw`, or `rw` on a domain of a resource whose
+   `reload` or `reload_if_running` lists the service. `recover_targets()`
+   derives the domains and the packages from the resource modules, so a new
+   resource that reloads a service extends both.
+3. Take SH on the global and EX on each of those packages, in sorted order, as
+   a write of them does. A write that reloads the service between the stop and
+   the start would start it while procd still holds the instances of the stop.
+   Contention answers 423.
+4. Read `service list` for the service. An instance that is not running and
+   has no `respawn` table is one that procd gave up on. With none, stop and
+   start nothing and answer 200 with an empty `recovered`, so a retry, a
+   service that runs and one that the operator stopped stay as they are.
+5. Otherwise run `stop`, wait until procd lists no instance, and run `start`,
+   with the bounds of step 6, taken from `reload_budget_s`. The stop and the
+   start act on the whole service, so its other instances restart too.
+6. Read `service list` again. 200 when every instance of step 4 runs, with
+   `recovered` naming them. Otherwise 500 `recover_failed`, with `service`,
+   `stopped` and the reason. After a start that ran past its 5 s, the instances
+   are read again rather than judged unknown.
+
+`service list` cannot tell an instance that procd gave up on from one that has
+no respawn and ended: `instance_exit()` clears `respawn` when it gives up and
+sets `halt`, and `instance_dump()` writes the `respawn` table only while
+`respawn` is set, and never writes `halt` (`service/instance.c` of procd
+58eb263). So `stopped_instances` lists only the services of `RECOVERABLE`, whose
+instances all have respawn, and a one-shot instance of another service that
+ended is not reported.
 
 ## Schema layer
 
