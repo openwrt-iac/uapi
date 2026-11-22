@@ -216,7 +216,7 @@ the `changelog-not-needed` label, and a released section is never edited.
 | Semver mapping, non-breaking vs breaking changes, OpenAPI spec versioning, schema annotations | `docs/versioning.md` | Cutting a release, naming a deprecation, considering whether a change is patch / minor / major. |
 | ucode quirks that have cost CI iterations | `docs/ucode-quirks.md` | Designing a new module; before assuming standard language behavior. |
 | Release process (signed tags, multi-arch build, feed publication), changelog rules | `docs/release-process.md` | Cutting a tag, writing a changelog entry, or troubleshooting a release workflow. |
-| Lock-state audit (covers all 60 sites, checked by `make lint-lock-audit`) | `docs/lock-state-audit.md` | Adding a new code path that acquires a lock or opens a long-held fd. |
+| Lock-state audit (covers all 61 sites, checked by `make lint-lock-audit`) | `docs/lock-state-audit.md` | Adding a new code path that acquires a lock or opens a long-held fd. |
 | Migration v1 to v2 (rename map, breaking changes) | `docs/migration-v1-to-v2.md` | Supporting operators upgrading across the v2 boundary. |
 | Migration v2 to v3 (removals, the `/api/v3` prefix, schema split) | `docs/migration-v2-to-v3.md` | Supporting operators upgrading across the v3 boundary. |
 | Migration v3 to v4 (the `/api/v4` prefix, `/uapi/...` endpoints, removals, reads that change) | `docs/migration-v3-to-v4.md` | Supporting operators upgrading across the v4 boundary. |

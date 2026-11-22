@@ -199,7 +199,7 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `usteer` | `config` |
 | `openvpn` | `instances` |
 | `packages` | `installed`, `feeds` |
-| `uapi` | `tokens`, `metrics`, `diagnostics` |
+| `uapi` | `tokens`, `metrics`, `diagnostics`, `services` |
 | `raw` | `<any-package>` (composes with the curated domain tree) |
 
 The tree also holds the paths that `/raw/` checks for a package outside it. A
@@ -207,6 +207,13 @@ scope on all of such a package, such as `ddns:rw`, is in the tree while the
 package exists in `/etc/config`. `*:<package>` is in the tree because it
 matches `raw:<package>`. A path below such a package, such as `ddns:service`,
 is not: `/raw/` checks each of its sections against the package alone.
+
+`POST /uapi/services/<name>/recover` passes with `uapi:services:rw`, or with
+`rw` on a domain whose writes reload the service, as such a write would reload
+it: `dhcp:rw` for `dnsmasq`, `odhcpd` and `unbound`, `system:rw` for `sysntpd`.
+uapi derives them from the services that the writes of each resource reload,
+and the spec lists them on the operation. A scope below the domain,
+such as `dhcp:hosts:rw`, does not pass.
 
 ## Deepest-match-wins
 
@@ -280,6 +287,7 @@ supported and takes effect on the next request.
 | Terraform per-domain                     | `firewall:rw`                                                 | `--expires-in 90d`               |
 | Read-only dashboard                      | `*:ro`                                                        | `--allowed-cidr <office>`        |
 | Monitoring (Prometheus scrape)           | `uapi:metrics:ro`, `uapi:diagnostics:ro`                      | `--allowed-cidr <prom-host>/32`  |
+| Agent that starts again a stopped daemon | `uapi:diagnostics:ro`, `uapi:services:rw`                     | `--expires-in 30d`               |
 | Short-lived CI job                       | `firewall:rules:rw`, `network:routes:rw`                      | `--expires-in 1h --allowed-cidr <ci>` |
 | Operator that mints other tokens         | `uapi:tokens:rw`, plus the scopes it needs to delegate        | `--expires-in 30d`               |
 | Long-tail via `/raw/`                    | `*:rw` (or `raw:rw` + the specific domain scopes)             | -                                |

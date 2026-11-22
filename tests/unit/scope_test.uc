@@ -311,7 +311,8 @@ t.describe('scope.known_paths', () => {
 
 	t.it('contains the known sentinels and a sample of resource scopes', () => {
 		let paths = scope.known_paths();
-		let want = { "*": true, "raw": true, "system": true, "firewall:zones": true, "network:interfaces": true };
+		let want = { "*": true, "raw": true, "system": true, "firewall:zones": true, "network:interfaces": true,
+		             "uapi:services": true };
 		for (let p in paths) delete want[p];
 		t.assert_deep_equal(want, {});
 	});

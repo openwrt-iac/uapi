@@ -281,15 +281,25 @@ function given_up(i) {
 	return !i.running && i.respawn == null;
 }
 
-// For /uapi/diagnostics, over every service: what procd lists and will not start again on its own,
-// an instance that procd gave up on, or one without respawn that ended.
+// The services that POST /uapi/services/{name}/recover takes: the ones that uapi reloads and whose
+// init script sets respawn on every instance that it starts, on OpenWrt 25.12 and main. network,
+// uhttpd and dropbear qualify too, but the stop acts on the whole service: it cuts off the request
+// that asked for it, or stops the dropbear that serves the management SSH session, which a start
+// that fails leaves down. `service list` shows an instance that procd gave up on as it shows one
+// without respawn that ended, since instance_dump() writes no `halt`, so only these services tell
+// the two apart.
+const RECOVERABLE = [ "dnsmasq", "lldpd", "mwan3", "odhcpd", "prometheus-node-exporter-lua", "snmpd", "sysntpd",
+                      "unbound", "vnstat" ];
+
+// For /uapi/diagnostics: the instances of RECOVERABLE that procd gave up on.
 function stopped_instances(conn) {
 	let r = null;
 	try { r = conn.call("service", "list", {}); } catch (e) {}
 	let out = [];
 	for (let svc, s in (type(r) == "object") ? r : {})
-		for (let name, i in s?.instances ?? {})
-			if (given_up(i)) push(out, { service: svc, instance: name });
+		if (index(RECOVERABLE, svc) >= 0)
+			for (let name, i in s?.instances ?? {})
+				if (given_up(i)) push(out, { service: svc, instance: name });
 	return out;
 }
 
@@ -297,7 +307,8 @@ function stopped_instances(conn) {
 // reap the process that it killed.
 const DNSMASQ_REAP_MS = 1000;
 
-// The config of dnsmasq is not at fault, so the write finishes its own reload by another path, once.
+// The config of dnsmasq is not at fault, so a write after which procd gave up on it finishes its own
+// reload by another path, once, and POST /uapi/services/{name}/recover runs the same steps.
 // The stop frees an instance that procd gave up on at once, and the start sends no SIGHUP, so the
 // new instance counts from zero. The wait for procd to list no instance lets the others end on
 // their SIGTERM, so that they count from zero too. The recovery takes its time from what is left
@@ -305,28 +316,28 @@ const DNSMASQ_REAP_MS = 1000;
 // because a start while the stop still runs can come before the delete of the stop.
 const RECOVERY_MS = { stop: 3000, gone: 2000, start: 5000 };
 
-function recover_dnsmasq(conn, recovery, lost, all) {
+function recover(conn, svc, recovery, lost, all) {
 	let budget = recovery.budget;
 	budget.until ??= now_ms() + budget.ms;
 	let spare = budget.until - now_ms();
 	if (spare < RECOVERY_MS.stop + RECOVERY_MS.gone + RECOVERY_MS.start)
 		return { left: lost, why: sprintf("only %.1f s of the reload budget of the request were left, and a stop and "
-		                                  + "a start of dnsmasq can take 10 s", spare / 1000.0) };
-	let step = (action) => recovery.init("dnsmasq", action, { ms: RECOVERY_MS[action],
-	                                                          until: min(now_ms() + RECOVERY_MS[action], budget.until) });
+		                                  + "a start of %s can take 10 s", spare / 1000.0, svc) };
+	let step = (action) => recovery.init(svc, action, { ms: RECOVERY_MS[action],
+	                                                    until: min(now_ms() + RECOVERY_MS[action], budget.until) });
 	let stop = step("stop");
 	if (type(stop) == "object")
 		return { left: all, why: "its stop was still running after 3 s, so uapi did not start it" };
-	for (let gone = now_ms() + RECOVERY_MS.gone; length(instances(conn, [ "dnsmasq" ])) > 0 && now_ms() < gone; )
+	for (let gone = now_ms() + RECOVERY_MS.gone; length(instances(conn, [ svc ])) > 0 && now_ms() < gone; )
 		sleep(100);
 	let start = step("start");
 	if (type(start) == "object")
-		return { unverified: "procd gave up on dnsmasq after the reload, and the start of dnsmasq that followed its "
-		                     + "stop was still running after 5 s, so whether dnsmasq runs is unknown" };
-	let now = instances(conn, [ "dnsmasq" ]);
+		return { unverified: sprintf("the start of %s that followed its stop was still running after 5 s, so whether %s "
+		                             + "runs is unknown", svc, svc) };
+	let now = instances(conn, [ svc ]);
 	let left = filter(lost, (k) => now[k] == null || given_up(now[k]));
-	return { left, why: join(", ", filter([ sprintf("a stop and a start of dnsmasq %s", (length(left) > 0) ? "did not bring it back"
-	                                                                                                  : "brought it back"),
+	return { left, why: join(", ", filter([ sprintf("a stop and a start of %s %s", svc, (length(left) > 0) ? "did not bring it back"
+	                                                                                                    : "brought it back"),
 	                                        stop, start ], (m) => m != null)) };
 }
 
@@ -341,7 +352,8 @@ function dnsmasq_respawn_check(conn, services, wait_ms, recovery) {
 		let lost = filter(keys(was), (k) => given_up(was[k]));
 		if (length(lost) == 0) return null;
 		let r = tried ? { left: lost, why: "uapi stops and starts dnsmasq once per request" }
-		              : recover_dnsmasq(conn, recovery, lost, keys(was));
+		              : recover(conn, "dnsmasq", recovery, lost, keys(was));
+		if (r.unverified != null) r.unverified = "procd gave up on dnsmasq after the reload, and " + r.unverified;
 		tried = true;
 		let outcome = (r.unverified != null) ? "unfinished" : (length(r.left) > 0) ? "stopped" : "recovered";
 		log.syslog((outcome == "recovered") ? log.LOG_NOTICE : log.LOG_WARNING,
@@ -475,6 +487,54 @@ function acquire_pkg_waiting(package, wait_ms, global_path, prefix) {
 		if (lock._g != null || lock.unavailable != null || waited >= wait_ms) return lock;
 		sleep(100);
 	}
+}
+
+// For each service of RECOVERABLE, the scope domains and the packages of the resources whose
+// writes reload it. A token that may write one of those domains may recover the service, as such
+// a write would reload it, and the recovery takes the locks of those packages, so that no such
+// write reloads the service between its stop and its start.
+function recover_targets(resources) {
+	let out = {};
+	for (let svc in RECOVERABLE) out[svc] = { domains: [], packages: [] };
+	for (let key, src in resources)
+		for (let svc in [ ...(src.reload ?? []), ...(src.reload_if_running ?? []) ]) {
+			let t = out[svc];
+			if (t == null) continue;
+			t.domains = sort(uniq([ ...t.domains, split(key, ":")[0] ]));
+			t.packages = sort(uniq([ ...t.packages, src.package ]));
+		}
+	return out;
+}
+
+// POST /uapi/services/{name}/recover. Only an instance that procd gave up on counts, so a retry, a
+// service that runs and one that the operator stopped get no stop and no start. An unfinished start
+// says nothing of the instances, so they are read again.
+function recover_service(conn, svc, params) {
+	let pkgs = params.packages;
+	let lock = default_acquire_pkg(params.lock_path, pkgs[0], slice(pkgs, 1), params.pkg_lock_prefix);
+	if (lock.unavailable != null) return { ok: false, kind: "lock_unavailable", error: lock.unavailable };
+	if (lock.contention != null) return { ok: false, kind: "locked", lock_kind: lock.contention, package: lock.package };
+	let result = null, caught = null;
+	try {
+		let was = instances(conn, [ svc ]);
+		let lost = filter(keys(was), (k) => given_up(was[k]));
+		let reload = params.reload ?? default_reload;
+		let r = (length(lost) == 0) ? { left: [] }
+			: recover(conn, svc, { budget: { ms: limits.reload_budget_ms(conn) },
+			                       init: (s, action, budget) => reload([ s ], budget, null, action) }, lost, keys(was));
+		if (r.unverified != null) {
+			let now = instances(conn, [ svc ]);
+			r.left = filter(lost, (k) => now[k] == null || given_up(now[k]));
+		}
+		let names = (ks) => map(ks, (k) => substr(k, length(svc) + 1));
+		result = (length(r.left) == 0) ? { ok: true, recovered: names(lost) }
+		                               : { ok: false, kind: "recover_failed", stopped: names(r.left), why: r.unverified ?? r.why };
+	} catch (e) {
+		caught = e;
+	}
+	default_release_pkg(lock);
+	if (caught != null) die(caught);
+	return result;
 }
 
 // A write with no kernel path at all is distinct from one whose every target was
@@ -880,4 +940,4 @@ return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
          default_acquire_pkg, default_release_pkg, acquire_pkg_waiting,
          default_check_services, default_reload, default_watch, dnsmasq_check, dnsmasq_respawn_check, run_bounded,
-         check_daemons, stopped_instances };
+         check_daemons, stopped_instances, recover_targets, recover_service };

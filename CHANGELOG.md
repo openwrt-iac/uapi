@@ -17,6 +17,27 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   3.x, and a PATCH that leaves it out keeps it. A client that reads the flag
   removes a stored policy that its configuration does not set. Migration note
   in `docs/migration-v3-to-v4.md`. (#448)
+- **`POST /uapi/services/{name}/recover` starts again a service that procd gave
+  up on.** After a write that answers `X-Reload-Status: stopped`, a client that
+  only speaks HTTP had no way to start the daemon again, and a write that
+  changes nothing runs no init script. The new action stops and starts the
+  service once, as a write does for dnsmasq, when procd gave up on one of its
+  instances. It answers 200 with `{"service": "dnsmasq", "recovered":
+  ["cfg01411c"]}`. When procd gave up on none, it stops and starts nothing and
+  answers 200 with an empty `recovered`. When an instance is still down, it
+  answers 500 with the new code `recover_failed`, and the envelope names the
+  service and each such instance in `service` and `stopped`. The stop and the
+  start act on the whole service, so its other instances restart too. It takes
+  `dnsmasq`, `lldpd`, `mwan3`, `odhcpd`, `prometheus-node-exporter-lua`,
+  `snmpd`, `sysntpd`, `unbound` and `vnstat`, and answers 404 for another name,
+  `network`, `uhttpd` and `dropbear` included: a stop of one of them cuts off
+  the request or the management SSH session. It needs
+  the new scope `uapi:services:rw`, or `rw` on a domain whose writes reload the
+  service, such as `dhcp:rw` for dnsmasq. It holds the locks of the packages
+  whose writes reload the service, so it answers 423 while such a write runs.
+  `stopped_instances` of `GET /uapi/diagnostics` now lists only the instances
+  of these services, since procd shows a one-shot instance that ended as it
+  shows one that it gave up on. (#461)
 
 ### Changed
 
@@ -474,17 +495,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dnsmasq stays down, it answers the new value `X-Reload-Status: stopped`, with
   the new header `X-Reload-Stopped`, which names each instance as
   `dnsmasq/<instance>`. When the start of dnsmasq has not ended within its 5 s,
-  `unverified` wins, and `X-Reload-Stopped` comes beside it. The recovery is
-  `service dnsmasq restart` on the router, or a write that changes the dhcp
-  config. This holds for a POST, a PUT, a PATCH and a DELETE, which already
-  carried the reload headers, and for the `POST /uapi/batch` 207. A raw write
-  says it in `reload_note`. The stop and the start take their time from what is
-  left of `reload_budget_s`, and uapi skips them and answers `stopped` when less
-  than 10 s are left, so they add nothing to the time bound of a write. `GET
-  /uapi/diagnostics` has a new field `stopped_instances`, which lists each procd
-  instance, of any service, that procd will not start again on its own, as
-  `{"service": "dnsmasq", "instance": "cfg01411c"}`. A stop that procd starts
-  again 5 s later still answers `ok`. Additive. (#457)
+  `unverified` wins, and `X-Reload-Stopped` comes beside it. `POST
+  /uapi/services/dnsmasq/recover` starts it again. This holds for a POST, a PUT,
+  a PATCH and a DELETE, which already carried the reload headers, and for the
+  `POST /uapi/batch` 207. A raw write says it in `reload_note`. The stop and the
+  start take their time from what is left of `reload_budget_s`, and uapi skips
+  them and answers `stopped` when less than 10 s are left, so they add nothing
+  to the time bound of a write. `GET /uapi/diagnostics` has a new field
+  `stopped_instances`, which lists each instance that procd gave up on and will
+  not start again on its own, as `{"service": "dnsmasq", "instance":
+  "cfg01411c"}`. A stop that procd starts again 5 s later still answers `ok`.
+  Additive. (#457)
 
 ## [3.5.0] - 2026-11-21
 

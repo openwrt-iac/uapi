@@ -1796,18 +1796,202 @@ t.describe('transaction, a dnsmasq that procd gave up on after the reload', () =
 		                      "X-Kernel-Status": "no_kernel" });
 	});
 
-	t.it('diagnostics lists every instance that procd will not start again, of any service', () => {
+	// procd shows a one-shot instance that ended as it shows one that it gave up on.
+	t.it('diagnostics lists the instances that procd gave up on, of the services that uapi recovers only', () => {
 		let conn = ubus.stub();
 		conn.set_ubus_response("service", "list", (a) => ({
 			dnsmasq: { instances: { main: UP, guest: HALTED, lab: WAITING } },
-			odhcpd: { instances: { odhcpd: UP } },
+			odhcpd: { instances: { odhcpd: HALTED } },
 			oneshot: { instances: { job: { running: false, exit_code: 0 } } },
+			uhttpd: { instances: { instance1: HALTED } },
 			empty: {},
 		}));
 		t.assert_deep_equal(tx.stopped_instances(conn), [ { service: "dnsmasq", instance: "guest" },
-		                                                  { service: "oneshot", instance: "job" } ]);
+		                                                  { service: "odhcpd", instance: "odhcpd" } ]);
 		conn.set_ubus_response("service", "list", { _error: "ubus call service.list: Request timed out" });
 		t.assert_deep_equal(tx.stopped_instances(conn), []);
+	});
+});
+
+t.describe('transaction.recover_service', () => {
+	const RESPAWN = { threshold: 3600, timeout: 5, retry: 5 };
+	const UP = { running: true, pid: 10, respawn: RESPAWN };
+	const WAITING = { running: false, exit_code: 129, respawn: RESPAWN };
+	const HALTED = { running: false, exit_code: 129 };
+	const GLOBAL = "/tmp/uapi-test-recover-global.lock";
+	const PREFIX = "/tmp/uapi-test-recover-pkg.";
+
+	function clean() {
+		for (let f in [ GLOBAL, ...fs.glob(PREFIX + "*") ]) fs.unlink(f);
+	}
+	// Which of the locks of a write to dhcp or to network another request could take.
+	function free() {
+		return map([ "dhcp", "network" ], function(pkg) {
+			let lock = tx.default_acquire_pkg(GLOBAL, pkg, null, PREFIX);
+			tx.default_release_pkg(lock._g ? lock : null);
+			return lock._g != null;
+		});
+	}
+
+	// procd as the init scripts leave it: a stop lists no instance once `lingers` more calls of
+	// service list have shown the old ones, and a start leaves `started`. `stop` and `start` are what
+	// those runs answer.
+	function router(instances, opts) {
+		let svc = opts?.svc ?? "dnsmasq";
+		let procd = { instances, runs: [], gone_after: null, listed_at_start: null };
+		let conn = ubus.stub({ uci: opts?.uci ?? {} });
+		conn.set_ubus_response("service", "list", function(a) {
+			if (procd.gone_after != null && procd.gone_after-- <= 0) procd.instances = {};
+			return (a.name == svc) ? { [svc]: { instances: procd.instances } } : {};
+		});
+		procd.reload = function(services, budget, init_dir, action) {
+			push(procd.runs, [ ...services, action, free() ]);
+			if (opts?.throws) die("fork failed");
+			if (action == "stop") {
+				procd.gone_after = opts?.lingers ?? 0;
+				return opts?.stop;
+			}
+			procd.listed_at_start = length(procd.instances);
+			procd.gone_after = null;
+			procd.instances = opts?.started ?? {};
+			return opts?.start;
+		};
+		return { conn, procd };
+	}
+	function recover(instances, opts) {
+		clean();
+		let w = router(instances, opts);
+		let r = tx.recover_service(w.conn, "dnsmasq", { packages: [ "dhcp", "network" ], reload: w.procd.reload,
+		                                                lock_path: opts?.lock_path ?? GLOBAL, pkg_lock_prefix: PREFIX });
+		let after = free();
+		clean();
+		return [ r, map(w.procd.runs, (run) => run[1]), after ];
+	}
+	const RAN = [ "stop", "start" ];
+	const FREE = [ true, true ];
+
+	t.it('stops and starts nothing when procd gave up on no instance, or lists none', () => {
+		for (let i in [ { main: UP, guest: WAITING }, {} ])
+			t.assert_deep_equal(recover(i), [ { ok: true, recovered: [] }, [], FREE ]);
+	});
+
+	t.it('stops and starts the whole service once, and names the instances that procd had given up on', () => {
+		t.assert_deep_equal(recover({ main: HALTED, guest: UP }, { started: { main: UP, guest: UP } }),
+		                    [ { ok: true, recovered: [ "main" ] }, RAN, FREE ]);
+	});
+
+	t.it('names each instance that is still down after the start, and why', () => {
+		t.assert_deep_equal(recover({ main: HALTED, guest: HALTED }, { started: { main: UP, guest: HALTED } }),
+		                    [ { ok: false, kind: "recover_failed", stopped: [ "guest" ],
+		                        why: "a stop and a start of dnsmasq did not bring it back" }, RAN, FREE ]);
+		t.assert_deep_equal(recover({ main: HALTED }, { start: "dnsmasq exited with code 1: bad" }),
+		                    [ { ok: false, kind: "recover_failed", stopped: [ "main" ],
+		                        why: "a stop and a start of dnsmasq did not bring it back, dnsmasq exited with code 1: bad" }, RAN, FREE ]);
+	});
+
+	t.it('does not start a service whose stop runs on, and names every instance', () => {
+		t.assert_deep_equal(recover({ main: HALTED, guest: UP }, { stop: { unverified: "x" } }),
+		                    [ { ok: false, kind: "recover_failed", stopped: [ "main", "guest" ],
+		                        why: "its stop was still running after 3 s, so uapi did not start it" }, [ "stop" ], FREE ]);
+	});
+
+	t.it('reads the instances again after a start that runs on', () => {
+		t.assert_deep_equal(recover({ main: HALTED }, { start: { unverified: "x" }, started: { main: UP } }),
+		                    [ { ok: true, recovered: [ "main" ] }, RAN, FREE ]);
+		t.assert_deep_equal(recover({ main: HALTED }, { start: { unverified: "x" } }),
+		                    [ { ok: false, kind: "recover_failed", stopped: [ "main" ],
+		                        why: "the start of dnsmasq that followed its stop was still running after 5 s, so whether "
+		                             + "dnsmasq runs is unknown" }, RAN, FREE ]);
+	});
+
+	t.it('stops, waits for and starts the service that it is given', () => {
+		clean();
+		let w = router({ odhcpd: HALTED }, { svc: "odhcpd", lingers: 2, started: { odhcpd: HALTED } });
+		let r = tx.recover_service(w.conn, "odhcpd", { packages: [ "dhcp" ], reload: w.procd.reload,
+		                                               lock_path: GLOBAL, pkg_lock_prefix: PREFIX });
+		clean();
+		t.assert_deep_equal([ r, map(w.procd.runs, (run) => slice(run, 0, 2)), w.procd.listed_at_start ],
+		                    [ { ok: false, kind: "recover_failed", stopped: [ "odhcpd" ],
+		                        why: "a stop and a start of odhcpd did not bring it back" },
+		                      [ [ "odhcpd", "stop" ], [ "odhcpd", "start" ] ], 0 ]);
+	});
+
+	t.it('takes its time from reload_budget_s, and stops and starts nothing below 10 s', () => {
+		let limits = (s) => ({ uapi: { limits: { '.type': 'limits', reload_budget_s: s } } });
+		t.assert_deep_equal(recover({ main: HALTED }, { uci: limits("9") }),
+		                    [ { ok: false, kind: "recover_failed", stopped: [ "main" ],
+		                        why: "only 9.0 s of the reload budget of the request were left, and a stop and a start of "
+		                             + "dnsmasq can take 10 s" }, [], FREE ]);
+		t.assert_deep_equal(recover({ main: HALTED }, { uci: limits("11"), started: { main: UP } })[1], RAN);
+	});
+
+	// A write to dhcp or network reloads dnsmasq or odhcpd, and its reload between the stop and the
+	// start would start the service while procd still holds the instances of the stop.
+	t.it('holds the locks of the packages whose writes reload the service during the stop and the start', () => {
+		clean();
+		let w = router({ main: HALTED }, { started: { main: UP } });
+		tx.recover_service(w.conn, "dnsmasq", { packages: [ "dhcp", "network" ], reload: w.procd.reload,
+		                                        lock_path: GLOBAL, pkg_lock_prefix: PREFIX });
+		clean();
+		t.assert_deep_equal(w.procd.runs, [ [ "dnsmasq", "stop", [ false, false ] ], [ "dnsmasq", "start", [ false, false ] ] ]);
+	});
+
+	t.it('answers locked while a write holds one of them, before it reads procd', () => {
+		for (let held in [ [ PREFIX + "network.lock", "x", { lock_kind: "package", package: "network" } ],
+		                   [ GLOBAL, "x", { lock_kind: "global" } ] ]) {
+			clean();
+			let f = fs.open(held[0], "w+");
+			f.lock(held[1] + "n");
+			let w = router({ main: HALTED });
+			let r = tx.recover_service(w.conn, "dnsmasq", { packages: [ "dhcp", "network" ], reload: w.procd.reload,
+			                                                lock_path: GLOBAL, pkg_lock_prefix: PREFIX });
+			f.close();
+			clean();
+			t.assert_deep_equal([ r, w.procd.runs, length(w.conn._state.ubus_calls) ],
+			                    [ { ok: false, kind: "locked", package: null, ...held[2] }, [], 0 ]);
+		}
+	});
+
+	t.it('answers lock_unavailable when a lock file cannot be opened', () => {
+		let r = recover({ main: HALTED }, { lock_path: "/nonexistent-uapi-dir/global.lock" });
+		t.assert_deep_equal([ r[0].ok, r[0].kind, r[1] ], [ false, "lock_unavailable", [] ]);
+	});
+
+	t.it('releases the locks when the recovery throws', () => {
+		clean();
+		let w = router({ main: HALTED }, { throws: true });
+		let threw = false;
+		try {
+			tx.recover_service(w.conn, "dnsmasq", { packages: [ "dhcp", "network" ], reload: w.procd.reload,
+			                                        lock_path: GLOBAL, pkg_lock_prefix: PREFIX });
+		} catch (e) {
+			threw = true;
+		}
+		t.assert_deep_equal([ threw, free() ], [ true, FREE ]);
+		clean();
+	});
+});
+
+t.describe('transaction.recover_targets', () => {
+	let sources = {};
+	for (let f in fs.lsdir("src/resources"))
+		sources[replace(replace(f, /\.uc$/, ""), ".", ":")] = loadfile("src/resources/" + f, { raw_mode: true })();
+	let targets = tx.recover_targets(sources);
+
+	t.it('maps each service to the domains and packages of the resources whose writes reload it', () => {
+		t.assert_deep_equal(targets.dnsmasq, { domains: [ "dhcp", "system" ], packages: [ "dhcp", "system" ] });
+		t.assert_deep_equal(targets.odhcpd, { domains: [ "dhcp", "network", "system" ], packages: [ "dhcp", "network", "system" ] });
+		t.assert_deep_equal(targets.unbound, { domains: [ "dhcp", "system", "unbound" ], packages: [ "dhcp", "system", "unbound" ] });
+		t.assert_deep_equal(targets.sysntpd, { domains: [ "system" ], packages: [ "system" ] });
+		t.assert_deep_equal(targets.snmpd, { domains: [ "snmpd" ], packages: [ "snmpd" ] });
+		t.assert_deep_equal(targets["prometheus-node-exporter-lua"],
+		                    { domains: [ "prometheus_node_exporter_lua" ], packages: [ "prometheus-node-exporter-lua" ] });
+	});
+
+	t.it('takes no service whose stop cuts off the request, and a package for each that it takes', () => {
+		t.assert_deep_equal(sort(keys(targets)), [ "dnsmasq", "lldpd", "mwan3", "odhcpd",
+		                                           "prometheus-node-exporter-lua", "snmpd", "sysntpd", "unbound", "vnstat" ]);
+		t.assert_deep_equal(filter(keys(targets), (s) => length(targets[s].packages) == 0), []);
 	});
 });
 

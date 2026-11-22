@@ -23,7 +23,8 @@ Two signals worth wiring into your automation:
   `unverified` means that the write kept its commit, and that uapi does not know
   whether its daemons took the new config. `stopped` means that the write kept
   its commit, and that a daemon that it reloaded is down and procd will not
-  start it again: `X-Reload-Stopped` names it. See below.
+  start it again: `X-Reload-Stopped` names it, and `POST
+  /uapi/services/{name}/recover` starts it again. See below.
 - **`X-Reload-Services`**: the init scripts that ran, in order. Useful for
   audit and log correlation.
 
@@ -82,17 +83,19 @@ for an operator:
   syslog as `uapi-dnsmasq-recovery` with the request id and the outcome. The
   write keeps its commit. When dnsmasq runs again, it answers as usual. When
   dnsmasq stays down, it answers `X-Reload-Status: stopped`, and
-  `X-Reload-Stopped` names each instance as `dnsmasq/<instance>`. Run `service
-  dnsmasq restart` on the router, or send a write that changes the dhcp config,
-  to start it. The stop and the start take their time from what is left of
-  `reload_budget_s`: up to 3 s for the stop, 2 s for the wait and 5 s for the
-  start. With less than 10 s left, uapi skips them and answers `stopped`, so a
-  `reload_budget_s` below 10 turns them off. A stop still running after 3 s gets
-  no start, because a start before the end of the stop can leave dnsmasq out of
-  procd. A start still running after 5 s answers `unverified`, with
-  `X-Reload-Stopped` beside it: `unverified` wins over `stopped` in
-  `X-Reload-Status`, also when another check did not finish. On a restore, a
-  dnsmasq that stays down answers `500 reload_failed_unrecovered`.
+  `X-Reload-Stopped` names each instance as `dnsmasq/<instance>`. Send `POST
+  /uapi/services/dnsmasq/recover` to start it, see [Starting again a service
+  that procd gave up on](#starting-again-a-service-that-procd-gave-up-on).
+  `service dnsmasq restart` on the router, or a write that changes the dhcp
+  config, starts it too. The stop and the start take their time from what is
+  left of `reload_budget_s`: up to 3 s for the stop, 2 s for the wait and 5 s
+  for the start. With less than 10 s left, uapi skips them and answers
+  `stopped`, so a `reload_budget_s` below 10 turns them off. A stop still
+  running after 3 s gets no start, because a start before the end of the stop
+  can leave dnsmasq out of procd. A start still running after 5 s answers
+  `unverified`, with `X-Reload-Stopped` beside it: `unverified` wins over
+  `stopped` in `X-Reload-Status`, also when another check did not finish. On a
+  restore, a dnsmasq that stays down answers `500 reload_failed_unrecovered`.
 
 A write to one package that fails and restores takes at most 20 s of reloads,
 2 s of the unbound watch, 10 s of `dnsmasq --test` per dnsmasq instance and the
@@ -610,15 +613,69 @@ neither finishes nor restores it. Check the packages that it names, then
 reload their daemons or write them again. A record stays until reboot or the
 next package upgrade.
 
-`stopped_instances` lists each procd instance, of any service, that is not
-running and that procd will not start again on its own, as `{"service":
-"dnsmasq", "instance": "cfg01411c"}`, the names of `X-Reload-Stopped`. procd
-lists such an instance without its `respawn` table: it gave up on it after too
-many deaths soon after a start, or the instance has no respawn and ended. A
-write that leaves dnsmasq so answers `X-Reload-Status: stopped`. A start or a
-reload of the service starts the instance again. The list is empty when there is
-none, and also when procd does not answer. Watch it, as the header of a write
-says it only once.
+`stopped_instances` lists each instance that procd gave up on after too many
+deaths soon after a start, and will not start again on its own, as
+`{"service": "dnsmasq", "instance": "cfg01411c"}`, the names of
+`X-Reload-Stopped`. It covers the services that `POST
+/uapi/services/{name}/recover` takes. procd lists such an instance not running
+and without its `respawn` table. An instance without respawn that ended, such as
+a one-shot job, looks the same in `service list`, so the instances of other
+services are not listed. A write that leaves dnsmasq so answers
+`X-Reload-Status: stopped`. The action below, or a start or a reload of the
+service, starts the instance again. The list is empty when there is none, and
+also when procd does not answer. Watch it, as the header of a write says it only
+once.
+
+## Starting again a service that procd gave up on
+
+`POST /uapi/services/{name}/recover` starts again the instances that procd gave
+up on, for a client that only speaks HTTP. Use it after a write that answers
+`X-Reload-Status: stopped`, or when `stopped_instances` lists an instance. A
+write that changes nothing does not do it, because it runs no init script.
+
+```sh
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+     https://router/api/v4/uapi/services/dnsmasq/recover
+# 200 with body:
+# { "service": "dnsmasq", "recovered": [ "cfg01411c" ] }
+```
+
+`{name}` takes the services that uapi reloads and whose init script sets
+`respawn` on every instance that it starts: `dnsmasq`, `lldpd`, `mwan3`,
+`odhcpd`, `prometheus-node-exporter-lua`, `snmpd`, `sysntpd`, `unbound` and
+`vnstat`. Another name answers `404 not_found`. `network`, `uhttpd` and
+`dropbear` are not in the list, because the stop acts on the whole service. A
+stop of `network` or `uhttpd` cuts off the request. A stop of `dropbear` stops
+the instance that serves the management SSH session, so a start that fails
+leaves the router without SSH.
+
+The token needs `uapi:services:rw`, or `rw` on a domain whose writes reload the
+service, such as `dhcp:rw` for `dnsmasq`, `odhcpd` and `unbound`. The spec lists
+the domains of each service.
+
+When procd gave up on no instance of the service, uapi stops and starts nothing
+and answers 200 with an empty `recovered`. So a retry is safe, and a service
+that runs, that the operator stopped or that the router lacks stays as it is.
+Otherwise uapi runs `/etc/init.d/<name> stop`, waits until procd lists no
+instance of the service, and runs `/etc/init.d/<name> start`, as a write does
+for dnsmasq. **The stop and the start act on the whole service.** Every
+instance of it stops and starts again, the ones that ran included, such as the
+other dnsmasq instances, so their clients see a short break. A start sends no
+SIGHUP, and procd counts the deaths of each new instance from zero. The steps
+have the bounds of the write: 3 s for the stop, 2 s for the wait and 5 s for the
+start, taken from `reload_budget_s`. With a `reload_budget_s` below 10, uapi
+skips them and answers 500. A stop still running after 3 s gets no start.
+
+The request takes the global lock shared and the lock of each package whose
+writes reload the service, as such a write does. It answers `423 locked` while
+such a write runs. Such a write, and a non-uci write such as a package install,
+answers 423 while the action runs, which takes 10 s at most.
+
+It answers 200 when every instance that procd had given up on runs after the
+start: `recovered` names them. It answers `500 recover_failed` when one is still
+down: `stopped` names each one, `service` names the service, and `message` says
+why, so a client needs no second call. Look at `logread` for the daemon then. A
+200 that carried an `Idempotency-Key` replays for 24 h.
 
 ## Management-path warning
 
