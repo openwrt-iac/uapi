@@ -198,7 +198,9 @@ module declares them:
   68, a route `table` of 0). The handler checks them against the fields that a
   request names, other than a value that the request sends back as the read
   gives it, and `tests/unit/write_overlay_test.uc` ties each keyword to a
-  refusal of a request past it.
+  refusal of a request past it. An `enum` there is the whole request bound,
+  since each of its values meets the `pattern` of the property, so the request
+  half leaves that pattern out.
 - **`x-uapi-read`**: keywords the response half declares instead of the
   request half, for a form that a write takes and a read never gives (a route
   `table` name, which a write stores as its id). The type gate judges a request

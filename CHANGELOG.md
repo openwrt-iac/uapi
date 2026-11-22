@@ -77,11 +77,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   integer 25 in 3.x and now reads as the string `25/second`. Every rate reads
   as a string so that a Terraform client can type the field, because Terraform
   has no type that is an integer or a string.
-  A write takes such a string, or an integer that is a rate per second. A rate
-  that overflows 64 bits in the kernel with the burst, such as `1/minute` with a
-  burst of 4294967295, answers 422 `out_of_range`, and a stored one is an error
-  of the section. 3.x took such a write, and fw4 then applied no ruleset while
-  `syn_flood` was on. Migration note in `docs/migration-v3-to-v4.md`. (#423)
+  A write takes a string with the whole unit, such as `25/minute`, and refuses
+  `25/m` and the string `"25"`. It also takes an integer, a rate per second. A
+  rate that overflows 64 bits in the kernel with the burst, such as `1/minute`
+  with a burst of 4294967295, answers 422 `out_of_range`, and a stored one is an
+  error of the section. 3.x took such a write, and fw4 then applied no ruleset
+  while `syn_flood` was on. Migration note in `docs/migration-v3-to-v4.md`.
+  (#423)
 - **BREAKING: `firewall/defaults.syn_flood` reads what fw4 applies.** LuCI's
   zones form writes `synflood_protect` and removes `syn_flood`, and fw4 reads
   `synflood_protect` first. 3.x read only `syn_flood`, so after a LuCI save it
@@ -417,6 +419,16 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the same `--timeout` but are not killed, because a kill can leave a package
   half installed. An install whose refresh was killed does not try the add
   again. (#447)
+- **The spec says more exactly what a write takes.** The request schemas of
+  `snmpd/accesses` `level` and `version`, `snmpd/groups` `version` and
+  `unbound/server` `rebind_protection` no longer carry the pattern of the read
+  beside their enum. That pattern admits values that the enum refuses, such as
+  `any`, so it read as a wider bound. The descriptions now state three rules
+  that only an `allOf` held, which a client that drops `allOf` could not see:
+  NOTRACK on `firewall/rules` requires `match.src_zone`, a `use_dhcp` of false
+  on `system/timeservers` requires `server`, and proto wireguard requires
+  `addresses`. They also say how a write removes each write-only secret, which
+  a null keeps. The server takes the same requests as before. (#449)
 
 ## [3.5.0] - 2026-11-21
 
