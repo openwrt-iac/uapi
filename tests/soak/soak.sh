@@ -13,13 +13,13 @@ PARALLEL="${PARALLEL:-4}"
 ROUTER_SSH="${ROUTER_SSH:-}"
 
 endpoints="
-/api/v3/healthz
-/api/v3/system
-/api/v3/network/interfaces
-/api/v3/firewall/zones
-/api/v3/firewall/rules
-/api/v3/dhcp/hosts
-/api/v3/dhcp/leases
+/api/v4/healthz
+/api/v4/system
+/api/v4/network/interfaces
+/api/v4/firewall/zones
+/api/v4/firewall/rules
+/api/v4/dhcp/hosts
+/api/v4/dhcp/leases
 "
 
 trap 'kill $(jobs -p) 2>/dev/null; exit' INT TERM

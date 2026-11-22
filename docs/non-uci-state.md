@@ -160,7 +160,7 @@ read-only collection, and a writable one puts it in its item view.
 - **Audit.** Successful sets emit `uapi-passwd-set <request_id> user="..."`.
   Failures emit `uapi-passwd-failure <request_id> user="..." exit=<n>`. The
   password VALUE is never logged.
-- **HTTP shape.** `POST /api/v3/system/password` returns `204`. There is no
+- **HTTP shape.** `POST /api/v4/system/password` returns `204`. There is no
   `GET` (password hashes don't leak through the API at all).
 - **Why not uci.** OpenWrt has no uci wrapper for local user credentials.
   Cloud-init / image-bake (uci-defaults dropping a `passwd -d root` line, etc.)

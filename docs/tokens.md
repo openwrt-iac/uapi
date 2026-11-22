@@ -63,7 +63,7 @@ wire:
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
-     -X POST https://router/api/v3/uapi/tokens \
+     -X POST https://router/api/v4/uapi/tokens \
      -d '{
        "name": "ci_bot",
        "scopes": ["firewall:rules:rw"],
@@ -120,9 +120,9 @@ no bearer
 either.
 
 ```sh
-curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/uapi/tokens
-curl -H "Authorization: Bearer $ADMIN" https://router/api/v3/uapi/tokens/ci_bot
-curl -H "Authorization: Bearer $ADMIN" -X DELETE https://router/api/v3/uapi/tokens/ci_bot
+curl -H "Authorization: Bearer $ADMIN" https://router/api/v4/uapi/tokens
+curl -H "Authorization: Bearer $ADMIN" https://router/api/v4/uapi/tokens/ci_bot
+curl -H "Authorization: Bearer $ADMIN" -X DELETE https://router/api/v4/uapi/tokens/ci_bot
 ```
 
 GET responses never include `salt` or `hash`.
@@ -130,7 +130,7 @@ GET responses never include `salt` or `hash`.
 ## Inspecting the current token
 
 ```sh
-curl -H "Authorization: Bearer $TOKEN" https://router/api/v3/uapi/whoami
+curl -H "Authorization: Bearer $TOKEN" https://router/api/v4/uapi/whoami
 ```
 
 Returns `{token_id, scopes, source_ip, expires_at, allowed_cidrs,
@@ -254,7 +254,7 @@ Or via HTTP:
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
-     -X POST https://router/api/v3/uapi/tokens \
+     -X POST https://router/api/v4/uapi/tokens \
      -d '{
        "name": "ci_bot",
        "scopes": ["firewall:rules:rw"],

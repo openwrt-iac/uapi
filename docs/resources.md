@@ -1,8 +1,8 @@
 # Curated resources
 
-This document indexes the 45 curated resources shipped in v3.x. For the full
+This document indexes the 44 curated resources shipped in v4.x. For the full
 schema (every field, its type, enum values, ranges, patterns), read
-`build/openapi.json` (also served at `/api/v3/openapi.json` on a live
+`build/openapi.json` (also served at `/api/v4/openapi.json` on a live
 router) or open it in Swagger UI. Per-resource sample curls live in
 `examples/curl/`.
 
@@ -70,7 +70,7 @@ read answers an empty list. The same applies to any package whose file
 was removed. An empty file is enough.
 
 Install the daemon either out of band (`apk add unbound`, etc.) or
-through uapi itself via `POST /api/v3/packages/installed`. The latter
+through uapi itself via `POST /api/v4/packages/installed`. The latter
 is what a Terraform configuration would chain via `depends_on` on a
 `uapi_package` resource. The base uapi package's `Depends:` only
 covers what uapi *itself* needs to run (uhttpd, ucode mods); per-daemon
@@ -336,7 +336,7 @@ is `c_<id>`, and a change before it does not refuse it.
 
 ## Generic raw passthrough
 
-`/api/v3/raw/<package>/<id>` is the escape hatch for any uci config type
+`/api/v4/raw/<package>/<id>` is the escape hatch for any uci config type
 uapi doesn't curate. See `docs/raw.md` for full semantics, scope
 composition rules, and stability caveat.
 

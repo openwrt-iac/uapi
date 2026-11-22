@@ -25,7 +25,7 @@ is client-agnostic.
   + `If-Match`, JSON Patch (RFC 6902), Prometheus `/uapi/metrics`,
   `/uapi/diagnostics`.
 - OpenAPI 3.1 spec shipped at `/usr/share/uapi/openapi.json` and served at
-  `/api/v3/openapi.json`.
+  `/api/v4/openapi.json`.
 
 ## Why this approach
 
@@ -91,9 +91,9 @@ tracking. See
 `docs/installation.md` for how to tell which state a box is in.
 
 The package's `uci-defaults` hook adds `list ucode_prefix
-'/api/v3=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main`
+'/api/v4=/usr/share/uapi/main.uc'` to `/etc/config/uhttpd` (the `main`
 instance), and the install then restarts uhttpd if it is enabled. After that,
-`/api/v3/healthz` is reachable on the same ports as LuCI.
+`/api/v4/healthz` is reachable on the same ports as LuCI.
 
 ## First token
 
@@ -111,7 +111,7 @@ wire:
 
 ```sh
 curl -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
-     -X POST https://<router>/api/v3/uapi/tokens \
+     -X POST https://<router>/api/v4/uapi/tokens \
      -d '{ "name": "ci_bot", "scopes": ["firewall:rw"], "expires_in_seconds": 3600 }'
 ```
 
@@ -122,8 +122,8 @@ returns `403 scope_escalation_blocked`).
 
 ```sh
 TOKEN=<value-from-above>
-curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v3/system
-curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v3/uapi/whoami
+curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v4/system
+curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v4/uapi/whoami
 ```
 
 ## Quick demo: add a firewall rule
@@ -131,7 +131,7 @@ curl -H "Authorization: Bearer $TOKEN" https://<router>/api/v3/uapi/whoami
 ```sh
 curl -H "Authorization: Bearer $TOKEN" \
      -H 'Content-Type: application/json' \
-     -X POST https://<router>/api/v3/firewall/rules \
+     -X POST https://<router>/api/v4/firewall/rules \
      -d '{
        "target": "ACCEPT",
        "match": { "src_zone": "wan", "dest_port": ["22"], "proto": ["tcp"] }
@@ -162,7 +162,7 @@ Operator-facing:
   endpoints, new errors.
 - `examples/curl/`: runnable walkthroughs for a subset of resources, one per
   distinct shape, including the adopt flow for pre-existing config.
-- `build/openapi.json` (also `/api/v3/openapi.json` on a live router): the API
+- `build/openapi.json` (also `/api/v4/openapi.json` on a live router): the API
   contract.
 
 Contributor-facing:

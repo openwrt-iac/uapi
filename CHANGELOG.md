@@ -8,6 +8,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: the mount moves from `/api/v3` to `/api/v4`.** One installation
+  serves one API major. The upgrade removes the `/api/v3`, `/api/v2` and
+  `/api/v1` entries from `ucode_prefix` of `uhttpd.main` and adds the `/api/v4`
+  one, and the spec's `servers` URL ends in `/api/v4`. Every client must change
+  its base URL. `GET /uhttpd/instances/main` reads the new entry and gets a new
+  ETag, and a write to `main` that keeps only the 3.x entry answers 422
+  `conflict`. The `docs/deprecations.md` of 3.5.0 has no notice of the move.
+  `docs/versioning.md` has said since 3.0.0 that v4 mounts at `/api/v4`.
+  Migration note in `docs/migration-v3-to-v4.md`. (#437)
 - **BREAKING: a list cursor that ends on an anonymous section holds a hash.**
   The id of an anonymous section is its libuci name, which holds the position
   of the section in its package. After a delete of an earlier section, 3.x

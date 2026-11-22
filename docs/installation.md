@@ -43,7 +43,7 @@ The post-install hook will:
 1. Run `/etc/uci-defaults/99-uapi`, which creates the token store
    `/etc/config/uapi` with mode 0600 when it does not exist, or sets mode 0600
    on an existing one, and adds `list ucode_prefix
-   '/api/v3=/usr/share/uapi/main.uc'` to `uhttpd.main`, then restart uhttpd so
+   '/api/v4=/usr/share/uapi/main.uc'` to `uhttpd.main`, then restart uhttpd so
    that it loads the new code. Both the hook's reload and this restart run only
    when uhttpd is enabled, because on OpenWrt either one starts a stopped
    uhttpd, and an operator disables it when another web server owns the ports.
@@ -54,7 +54,7 @@ The post-install hook will:
 Verify:
 
 ```sh
-curl -k https://localhost/api/v3/healthz
+curl -k https://localhost/api/v4/healthz
 # { "status": "ok", "version": "<version>",
 #   "checks": { "ubus": "ok", "uci": "ok",
 #               "lock_dir": "ok", "time_sync": "ok" } }
@@ -200,7 +200,7 @@ The package wires only the `uhttpd.main` instance. If you run additional
 instances (e.g. a separate admin port), add the prefix manually:
 
 ```sh
-uci add_list uhttpd.<instance>.ucode_prefix='/api/v3=/usr/share/uapi/main.uc'
+uci add_list uhttpd.<instance>.ucode_prefix='/api/v4=/usr/share/uapi/main.uc'
 uci commit uhttpd
 /etc/init.d/uhttpd reload
 ```

@@ -262,8 +262,8 @@ uapi: <request_id> <token_name|-> <severity> <code> <method> <path> <status> [<d
 - `severity`: `AUDIT` (writes), `ACCESS` (every request, if enabled), `WARN`
   (401/403 auth failures), `ERROR` (5xx).
 - `code`: error code on failures, `-` on successful writes.
-- `path`: uhttpd's `PATH_INFO`, so the `/api/v3` mount prefix is already
-  stripped. A client's `POST /api/v3/firewall/rules` logs as `/firewall/rules`.
+- `path`: uhttpd's `PATH_INFO`, so the `/api/v4` mount prefix is already
+  stripped. A client's `POST /api/v4/firewall/rules` logs as `/firewall/rules`.
 
 `/healthz` is excluded from all categories so monitoring traffic does not drown
 out the audit trail. Non-auth 4xx responses (404, 405, 409, 422, 423) are not
@@ -312,7 +312,7 @@ in-memory ring quickly.
 
 ## Metrics
 
-`GET /api/v3/uapi/metrics` returns Prometheus 0.0.4 text. Scope:
+`GET /api/v4/uapi/metrics` returns Prometheus 0.0.4 text. Scope:
 `uapi:metrics:ro` (covered by `*:ro`). Counters and histograms are file-backed
 under `/var/run/uapi-metrics/` (tmpfs - resets on reboot, which is fine for
 operational counters; aggregate longer-term retention server-side).
@@ -393,7 +393,7 @@ Sample Prometheus scrape config:
 scrape_configs:
   - job_name: uapi
     scrape_interval: 30s
-    metrics_path: /api/v3/uapi/metrics
+    metrics_path: /api/v4/uapi/metrics
     scheme: https
     authorization:
       type: Bearer
@@ -465,7 +465,7 @@ config limits
 
 ## Diagnostics
 
-`GET /api/v3/uapi/diagnostics` returns version, uptime, loaded resources,
+`GET /api/v4/uapi/diagnostics` returns version, uptime, loaded resources,
 the uapi lock files present under `/var/lock`, whether uapi uses each
 state directory under `/var/run`, the effective request limits, and the
 last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
@@ -503,7 +503,7 @@ last 20 error envelopes. Scope: `uapi:diagnostics:ro`.
 
 ### Finding sections a write would reject (`?validate=1`)
 
-`GET /api/v3/uapi/diagnostics?validate=1` adds a validation sweep: every section
+`GET /api/v4/uapi/diagnostics?validate=1` adds a validation sweep: every section
 of every resource the token may read is run through the same checks as a write,
 and each section that holds an error is reported with the reason. Each write of
 such a section answers `422` until it fixes each error, or the change goes
@@ -687,7 +687,7 @@ IPv4-only.
 ## Healthz
 
 ```sh
-curl -k https://<router>/api/v3/healthz
+curl -k https://<router>/api/v4/healthz
 # 200 with body:
 # { "status": "ok", "version": "2.0.0",
 #   "checks": { "ubus": "ok", "uci": "ok",

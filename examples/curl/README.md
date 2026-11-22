@@ -8,7 +8,7 @@ self-signed uhttpd cert does not get in the way; remove that flag in production
 once you have proper TLS.
 
 ```sh
-export UAPI_BASE=https://192.168.1.1/api/v3
+export UAPI_BASE=https://192.168.1.1/api/v4
 export UAPI_TOKEN=<bearer printed by 'uapi-token create' on the router>
 
 ./firewall_rules.sh

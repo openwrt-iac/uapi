@@ -11,6 +11,15 @@ change at the upgrade, and what that does to ETags and to a plan made on 3.x.
 One installation serves exactly one API major. The package upgrade flips the
 prefix from `/api/v3` to `/api/v4` and strips every older prefix, and a
 generated client takes the new base URL from the v4 spec's `servers` block.
+Change the base URL of every other client, a Prometheus `metrics_path` and
+each curl script. uapi no longer answers at `/api/v3` after the upgrade.
+
+The upgrade writes this change to `ucode_prefix` of `uhttpd.main`. So `GET
+/uhttpd/instances/main` reads `/api/v4=/usr/share/uapi/main.uc`, and the section
+gets a new ETag. A plan that sets the 3.x entry shows a diff. A write to `main`
+that keeps the 3.x entry and not the v4 one answers 422 `conflict` on
+`ucode_prefix`, because it removes the mount of uapi. Tokens, their scopes and
+every id stay as they are.
 
 ## The special endpoints move under `/uapi/...`
 
@@ -530,11 +539,11 @@ A client that sends only the query forms sees no change.
 
 ## Reads that change at the upgrade
 
-The upgrade keeps `/etc/config`, the token store and every id as they are. Of
-the stored scopes, only `dhcp:leases`, `dhcp:leases6`, `*:leases` and
-`*:leases6` change what they grant, as the `dhcp/leases` section says. Some
-reads now answer another value for the same stored option, to follow what the
-daemon does:
+Apart from the mount in `uhttpd.main`, the upgrade keeps `/etc/config`, the
+token store and every id as they are. Of the stored scopes, only `dhcp:leases`,
+`dhcp:leases6`, `*:leases` and `*:leases6` change what they grant, as the
+`dhcp/leases` section says. Some reads now answer another value for the same
+stored option, to follow what the daemon does:
 
 | Resource | Field | The read changes when the option is |
 |---|---|---|

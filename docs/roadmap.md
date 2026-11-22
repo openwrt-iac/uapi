@@ -958,9 +958,6 @@ live in the issues.
 - [The HTTP token mint takes a scope that the server does not
   know](https://github.com/openwrt-iac/uapi/issues/415): it answers 422, as
   `uapi-token create` refuses it, announced in 3.5.0.
-- The mount moves to `/api/v4` and the install hook strips every older prefix,
-  as each major moved it before. The v3-to-v4 migration document rides the
-  release.
 
 **Left the milestone:**
 
@@ -1018,6 +1015,9 @@ live in the issues.
   fails the write.
 - [dnsmasq on OpenWrt main](https://github.com/openwrt-iac/uapi/issues/360): the
   test writes `dhcpv4 'server'`, as the stock config of main does.
+- The mount moves to `/api/v4` and the install hook strips every older prefix,
+  as each major moved it before. The v3-to-v4 migration document rides the
+  release.
 
 ## Out of scope by design
 

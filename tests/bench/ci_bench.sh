@@ -25,7 +25,7 @@ TOKEN=$($SSH 'uapi-token create --name ci_bench --scope "*:ro" 2>/dev/null' | he
 tmpdir=$(mktemp -d)
 trap "rm -rf $tmpdir; $SSH 'uapi-token revoke ci_bench >/dev/null 2>&1' || true" EXIT
 
-endpoints="/api/v3/healthz /api/v3/system /api/v3/firewall/zones /api/v3/firewall/rules /api/v3/network/interfaces /api/v3/dhcp/hosts /api/v3/wireless/devices"
+endpoints="/api/v4/healthz /api/v4/system /api/v4/firewall/zones /api/v4/firewall/rules /api/v4/network/interfaces /api/v4/dhcp/hosts /api/v4/wireless/devices"
 
 mkdir -p bench
 SHA="${GITHUB_SHA:-local}"
