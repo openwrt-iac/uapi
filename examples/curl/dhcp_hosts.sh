@@ -2,7 +2,7 @@
 set -eu
 
 : "${UAPI_BASE:?set UAPI_BASE}"
-: "${UAPI_TOKEN:?set UAPI_TOKEN with dhcp:hosts:rw}"
+: "${UAPI_TOKEN:?set UAPI_TOKEN with dhcp:hosts:rw and dhcp:leases:ro}"
 
 H_AUTH="Authorization: Bearer $UAPI_TOKEN"
 H_JSON='Content-Type: application/json'
