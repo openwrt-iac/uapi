@@ -59,7 +59,8 @@ This works now because the substrate finally caught up: `ucode-mod-ubus`,
 attempts had to pick between lua, Python, and C; uapi picked the right moment to
 be small.
 
-Target platform: **OpenWrt 25.12+** (apk-based releases).
+Target platform of uapi 4.x: **OpenWrt main**, and the next OpenWrt release cut
+from it. A router on OpenWrt 25.12 stays on uapi 3.5.0.
 
 ## Install
 

@@ -260,32 +260,20 @@ t.describe('network.interfaces dns items stay type-checked centrally', () => {
 	});
 });
 
-// netifd does not parse `disabled` the same way on all three section types. The interface
-// flag is compared literally against "1"; route and rule go through the boolean blob
-// converter, which also accepts "true". Measured on 25.12.5 against a reset baseline:
-// `disabled 'true'` removes a route and leaves an interface registered and running.
-//
-// So the two helpers here are not an inconsistency to tidy up. Unifying them puts the lie
-// back, in whichever direction it is unified: the wide helper reports an interface disabled
-// while it is up, the narrow one reports a route active while it is gone.
-t.describe('disabled follows each section type parser, which differ', () => {
+// netifd compares the interface flag against "1" and "true" (e97e36f, 2026-07-16), and route
+// and rule go through the boolean blob converter, which takes the same two. The netifd of 25.12
+// compares the interface flag against "1" only, so this test pins the reader of OpenWrt main.
+t.describe('disabled reads "1" and "true" as netifd does, on interfaces, routes and rules', () => {
 	let ifaces = loadfile('src/resources/network.interfaces.uc')();
 	let conn = ubus.stub({ uci: {} });
 
-	t.it('an interface honours only "1", because netifd compares it literally', () => {
-		t.assert_true(ifaces.fromUci({ '.name': 'w', proto: 'static', disabled: '1' }, conn).disabled);
-		for (let v in ['true', 'on', 'yes', '0', 'false'])
-			t.assert_false(ifaces.fromUci({ '.name': 'w', proto: 'static', disabled: v }, conn).disabled);
-		t.assert_false(ifaces.fromUci({ '.name': 'w', proto: 'static' }, conn).disabled);
-	});
-
-	t.it('a route and a rule also honour "true", via the blob converter', () => {
-		for (let r in [routes, rules]) {
-			t.assert_true(r.fromUci({ '.name': 'x', disabled: '1' }).disabled);
-			t.assert_true(r.fromUci({ '.name': 'x', disabled: 'true' }).disabled);
-			for (let v in ['on', 'yes', '0', 'false'])
-				t.assert_false(r.fromUci({ '.name': 'x', disabled: v }).disabled);
-			t.assert_false(r.fromUci({ '.name': 'x' }).disabled);
+	t.it('an interface, a route and a rule honour "1" and "true" only', () => {
+		for (let read in [ (s) => ifaces.fromUci({ ...s, proto: 'static' }, conn), routes.fromUci, rules.fromUci ]) {
+			for (let v in ['1', 'true'])
+				t.assert_true(read({ '.name': 'x', disabled: v }).disabled, v);
+			for (let v in ['on', 'yes', 'enabled', '0', 'false'])
+				t.assert_false(read({ '.name': 'x', disabled: v }).disabled, v);
+			t.assert_false(read({ '.name': 'x' }).disabled);
 		}
 	});
 });

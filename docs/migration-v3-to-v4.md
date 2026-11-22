@@ -6,6 +6,20 @@ here, and a section names the 3.x release that announced its change when one
 did. The section "Reads that change at the upgrade" lists those reads, and what
 that does to ETags and to a plan made on 3.x.
 
+## 4.x needs OpenWrt main or the next release
+
+4.x runs on OpenWrt main and on the next OpenWrt release cut from it. It needs
+a netifd that carries `e97e36f` (2026-07-16), which takes `disabled 'true'` on
+an interface. OpenWrt 25.12 does not carry it, and 4.x does not support 25.12.
+The 4.x package depends on a netifd that 25.12 does not have, so apk does not
+install 4.x on a 25.12 router, and such a router stays on 3.5.0. To move to
+4.x, move the router to OpenWrt main or to that release first, then install
+4.x.
+
+Some sections below say what uapi does on 25.12, where netifd sets up a
+wireguard interface with `wireguard.sh`. They compare with 3.x on 25.12, or
+describe code that 4.x still holds. They do not mean that 4.x supports 25.12.
+
 ## The mount moves to `/api/v4`
 
 One installation serves exactly one API major. The package upgrade flips the
@@ -494,10 +508,10 @@ change.
 
 ## WireGuard peer writes on OpenWrt main
 
-4.x runs its tests on OpenWrt 25.12 and on the OpenWrt main snapshot, and 3.x
-only on 25.12. On main, netifd sets up a wireguard interface with a ucode proto
-handler, `/lib/netifd/proto/wireguard.uc`, in place of `wireguard.sh`. That
-changes what a write to `network/wireguard_peers` does there:
+3.x runs on OpenWrt 25.12, and 4.x on OpenWrt main and the next release. On
+main, netifd sets up a wireguard interface with a ucode proto handler,
+`/lib/netifd/proto/wireguard.uc`, in place of `wireguard.sh`. That changes what
+a write to `network/wireguard_peers` does there:
 
 - netifd restarts the interface on every peer change. So each peer write
   interrupts the tunnel for every peer of the interface, not only for the peer
@@ -684,6 +698,7 @@ stored option, to follow what the daemon does:
 | `firewall/rules`, `firewall/nat`, `firewall/redirects` | `match.proto` | one option of several words |
 | `uhttpd/instances` | `listen_http`, `listen_https` | an option or an entry of several words |
 | `network/routes` | `type` | a number from 1 to 9, in decimal, hex or octal as strtoul reads it, such as `6` or `010` |
+| `network/interfaces` | `disabled` | `true`, which reads true: netifd `e97e36f` disables the interface for it, and the netifd of 25.12 did not |
 
 A section whose read changes gets a new ETag once, at the upgrade. A write that
 sends an `If-Match` from before the upgrade answers 412 `precondition_failed`.

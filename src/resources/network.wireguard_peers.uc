@@ -230,7 +230,7 @@ function blocking_fields(s, conn) {
 
 function runs_wireguard(conn, iface) {
 	let s = conn.uci_get('network', iface);
-	return s?.['.type'] == "interface" && s.proto == "wireguard" && !values.strict_bool(s.disabled);
+	return s?.['.type'] == "interface" && s.proto == "wireguard" && !values.platform_bool(s.disabled, false);
 }
 
 // The ids of the peers that keep an enabled wireguard interface down, for the kernel apply.

@@ -2,7 +2,10 @@
 
 ## Prerequisites
 
-A router running **OpenWrt 25.12+** (the first apk-based release line).
+A router running **OpenWrt main**, or the next OpenWrt release cut from it.
+uapi 4.x needs a netifd that carries `e97e36f` (2026-07-16). OpenWrt 25.12 does
+not carry it, so apk does not install 4.x there, and a 25.12 router stays on
+uapi 3.5.0. `docs/migration-v3-to-v4.md` says how to move such a router to 4.x.
 Pulled-in dependencies are all in OpenWrt's `base` feed: `uhttpd`,
 `uhttpd-mod-ucode`, `ucode`, the `ucode-mod-{ubus,uci,fs,digest,log,io}` mods,
 and `rpcd-mod-iwinfo` (for the wireless `runtime` block). The package's

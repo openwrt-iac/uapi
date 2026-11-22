@@ -164,14 +164,10 @@ function fromUci(section, conn) {
 		// addresses, routes and peers go with it. Unmodelled, that box reads as ordinary
 		// active config, which is the one thing a read must never do.
 		//
-		// strict_bool, not the platform_bool that `network/routes` and `network/rules` use
-		// for the same option name. netifd compares this one literally against "1" while
-		// route and rule go through the boolean blob converter, which also takes "true", so
-		// on 25.12.5 `disabled 'true'` disables a route and leaves an interface running.
-		// Measured three times against a reset baseline: the interface stayed registered on
-		// ubus every time. Reading it with the wider helper would report an interface as
-		// disabled while it is up, which is the same lie this field exists to end.
-		disabled: strict_bool(section.disabled),
+		// netifd compares the option against "1" and, since e97e36f (2026-07-16), "true", and
+		// takes anything else as enabled. The netifd of 25.12 compares against "1" only, and
+		// left an interface with `disabled 'true'` registered and running.
+		disabled: platform_bool(section.disabled, false),
 		ip4table: section.ip4table ?? null,
 		ip6table: section.ip6table ?? null,
 		metric: netifd_int(section.metric),
@@ -552,7 +548,7 @@ return {
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,
-		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A write that enables a wireguard interface while one of its enabled peers holds a value that makes wg refuse the whole interface keeps its commit, and answers `X-Kernel-Status: blocked`." },
+		             description: "Whether netifd ignores this interface entirely. A disabled interface is not registered at all, so it has no ubus object and its addresses and routes are not installed. A stored `1` or `true` reads true, as netifd reads it, and any other value reads false. A write stores `1` or `0`. A write that enables a wireguard interface while one of its enabled peers holds a value that makes wg refuse the whole interface keeps its commit, and answers `X-Kernel-Status: blocked`." },
 		addresses: { type: ["array", "null"], items: { type: "string" },
 		             description: "Proto wireguard requires at least one address, as an IPv4 or IPv6 CIDR." },
 		private_key: { type: "string", writeOnly: true,
