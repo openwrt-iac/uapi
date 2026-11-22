@@ -1,6 +1,7 @@
 let fs = require('fs');
 let errors = require('errors');
 let non_uci = require('non_uci');
+let transaction = require('transaction');
 let values = require('values');
 
 const PKG_NAME_RE  = /^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$/;
@@ -15,6 +16,18 @@ function apk_exec(args) {
 	let output = p.read("all") ?? "";
 	let exit_code = p.close();
 	return { ok: exit_code == 0, exit_code: exit_code, output: trim(output) };
+}
+
+// apk gives up on a fetch that makes no progress after 60 s by default, so a feed host that did not
+// answer outlasted uhttpd's 60 s script timeout: the request got no answer, and apk ran on with its
+// database lock, so the next apk write answered 500. Each apk write passes the reload bound of
+// `config limits` as --timeout, and apk update is also killed at that bound. apk opens its lock
+// with O_CLOEXEC, so the lock ends with apk and the wget that a kill leaves running holds no copy.
+// apk writes each index through a temporary file, so a kill keeps the previous one. apk add and
+// del are not killed: a kill in the middle of an install leaves a package half done.
+function apk_update(budget_s) {
+	let r = transaction.run_bounded([ "apk", "--timeout", sprintf("%d", budget_s), "update" ], budget_s * 1000);
+	return { ok: r.code == 0, exit_code: r.code, output: trim(r.output), killed: r.code == -9 };
 }
 
 function audit_apk_failure(ctx, action, name, r) {
@@ -87,13 +100,13 @@ function get_one_handler(ctx, name) {
 // now 404s, and a package added to the feed in that window is not listed at all. A refresh
 // and one more attempt cover both, at no cost when the first attempt works. The retry runs
 // whatever `apk update` returns: it exits with the count of feeds it could not refresh, so
-// one unreachable feed makes it fail after it has refreshed all the others.
-function add_with_refresh(name, exec) {
-	let r = exec(sprintf("add -- %s", name));
-	if (!r.ok) {
-		exec("update");
-		r = exec(sprintf("add -- %s", name));
-	}
+// one unreachable feed makes it fail after it has refreshed all the others. A refresh killed at
+// its bound skips the retry: the feed that held it is still stale, so the retry would wait on it as
+// long again, and the install would outlast uhttpd's timeout.
+function add_with_refresh(add, update) {
+	let r = add();
+	if (!r.ok && !update().killed)
+		r = add();
 	return r;
 }
 
@@ -109,8 +122,10 @@ function install_handler(ctx, body) {
 			[errors.field_error("name", "invalid_format",
 			                    "must match ^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$")]);
 
+	let budget_s = ctx.limits.reload_budget_s;
 	let lr = non_uci.with_lock_translated(ctx, function() {
-		let exec = add_with_refresh(name, apk_exec);
+		let exec = add_with_refresh(() => apk_exec(sprintf("--timeout %d add -- %s", budget_s, name)),
+		                            () => apk_update(budget_s));
 		return { ok: exec.ok, exec: exec };
 	});
 	if (lr.envelope) return lr.envelope;
@@ -135,7 +150,7 @@ function remove_handler(ctx, name) {
 		return errors.error(ctx, "not_found", sprintf("package %J is not installed", name));
 
 	let lr = non_uci.with_lock_translated(ctx, function() {
-		let exec = apk_exec(sprintf("del -- %s", name));
+		let exec = apk_exec(sprintf("--timeout %d del -- %s", ctx.limits.reload_budget_s, name));
 		return { ok: exec.ok, exec: exec };
 	});
 	if (lr.envelope) return lr.envelope;
@@ -229,9 +244,7 @@ function create_feed_handler(ctx, body) {
 			fs.unlink(path);
 			return { ok: false, kind: "io_error" };
 		}
-		let upd = apk_exec("update");
-		return { ok: true, update_ok: upd.ok, update_output: upd.output,
-		         update_exit: upd.exit_code };
+		return { ok: true, update: apk_update(ctx.limits.reload_budget_s) };
 	}, {
 		conflict: sprintf("feed %J already exists", name),
 		io_error: sprintf("could not create feed %J", name),
@@ -240,11 +253,13 @@ function create_feed_handler(ctx, body) {
 	let r = lr.result;
 
 	let update_status = "ok";
-	if (!r.update_ok) {
-		audit_apk_failure(ctx, "feed_create_update", name,
-			{ exit_code: r.update_exit, output: r.update_output });
-		update_status = sprintf("apk update failed (exit %d); see syslog %s",
-			r.update_exit, ctx.request_id);
+	if (!r.update.ok) {
+		audit_apk_failure(ctx, "feed_create_update", name, r.update);
+		update_status = r.update.killed
+			? sprintf("apk update did not finish within %d s and was killed; see syslog %s",
+				ctx.limits.reload_budget_s, ctx.request_id)
+			: sprintf("apk update failed (exit %d); see syslog %s",
+				r.update.exit_code, ctx.request_id);
 	}
 	return errors.ok(ctx, { id: name, managed: true, name: name,
 	                        filename: name + ".list", url: url, enabled: true,
@@ -262,7 +277,7 @@ function remove_feed_handler(ctx, id) {
 	let lr = non_uci.with_lock_translated(ctx, function() {
 		if (fs.stat(path) == null) return { ok: false, kind: "gone" };
 		if (!fs.unlink(path)) return { ok: false, kind: "io_error" };
-		apk_exec("update");
+		apk_update(ctx.limits.reload_budget_s);
 		return { ok: true };
 	}, {
 		gone:     sprintf("feed %J vanished", id),

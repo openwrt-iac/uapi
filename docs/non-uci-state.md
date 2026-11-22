@@ -57,10 +57,27 @@ read-only collection, and a writable one puts it in its item view.
   and the second result is the one reported. The retry runs even when `apk
   update` fails, because it exits with the number of feeds it could not refresh:
   one unreachable feed makes it fail after it has refreshed all the others. A
-  successful install costs nothing extra. A failure that a refresh cannot fix,
-  such as a bad name, pays for one refresh before it is reported. Read-only apk
-  commands (`apk search`, `apk fetch`, any `--simulate`) never refresh, so they
-  can show a stale index that `apk add` would refresh.
+  refresh that uapi killed at its bound skips the retry: the feed that held it
+  is still stale, so the retry would wait on it as long again. A successful
+  install costs nothing extra. A failure that a refresh cannot fix, such as a
+  bad name, pays for one refresh before it is reported. Read-only apk commands
+  (`apk search`, `apk fetch`, any `--simulate`) never refresh, so they can show
+  a stale index that `apk add` would refresh.
+- **Time bound.** apk gives up on a fetch that makes no progress after 60 s by
+  default, which is also when uhttpd kills a request. One feed that did not
+  answer then left the client with no answer, and the apk that ran on kept its
+  database lock, so the next apk write answered 500. uapi passes
+  `reload_budget_s` of `config limits` (20 s unless set) to `apk add`, `apk del`
+  and `apk update` as `--timeout`, and kills `apk update` when it runs longer
+  than that. A kill frees the apk lock, which apk opens with `O_CLOEXEC`, and
+  keeps the previous index, which apk replaces through a temporary file. uapi
+  does not kill `apk add` or `apk del`, because a kill in the middle of an
+  install leaves a package half done. Their time stays unbounded: each stale
+  index and each package is a fetch that can stall for up to the bound, a name
+  lookup takes as long as the resolver allows, and the scripts of a package run
+  as long as they run. GNU wget, which `wget-ssl` or `wget-nossl` puts in place
+  of `uclient-fetch`, tries a fetch that times out up to 20 times, so
+  `--timeout` then bounds each try only.
 - **Lock.** `transaction.with_lock` on `/var/lock/uapi.lock`. apk has its own DB
   lock; the uapi flock serialises concurrent uapi requests so they don't race
   apk-vs-apk and surface as nondeterministic `5xx`s. Contention returns `423
@@ -86,7 +103,12 @@ read-only collection, and a writable one puts it in its item view.
 - **Source of truth.** Files under `/etc/apk/repositories.d/*.list`.
 - **Lock.** Same as `packages/installed`. After every write, `apk update` is
   invoked so the new feed is immediately available.
-- **Reload.** None; `apk update` IS the reload.
+- **Reload.** None; `apk update` IS the reload. It runs under the time bound of
+  `packages/installed`, and the feed file stays written when it fails. A
+  create reports the result in `update_status`: `ok`, `apk update failed (exit
+  N); see syslog <request_id>`, or `apk update did not finish within N s and was
+  killed; see syslog <request_id>`. A remove answers 204 whatever `apk update`
+  returns.
 - **Validation.** Feed name must match `^[A-Za-z0-9_][A-Za-z0-9_.-]*$` (no
   leading dot, no leading dash). URL must be `http://` or `https://`. `file://`
   and other schemes are rejected.

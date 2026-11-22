@@ -3,7 +3,7 @@ let fs = require('fs');
 
 let pkg = loadfile('src/lib/packages.uc')();
 
-function ctx() { return { request_id: "01hx0000000000000000000000" }; }
+function ctx(budget_s) { return { request_id: "01hx0000000000000000000000", limits: { reload_budget_s: budget_s ?? 20 } }; }
 
 t.describe('packages module', () => {
 	t.it('exports the expected handler set', () => {
@@ -137,15 +137,15 @@ t.describe('packages.create_feed validation', () => {
 
 // /etc/apk and /var/lock are root's, so the feed files are kept in a directory in /tmp and the lock
 // is a file in /tmp. A full overlay creates the file and then fails the write, so the full case
-// creates the file and hands the module a handle on /dev/full.
+// creates the file and hands the module a handle on /dev/full. `run` stands in for run_bounded.
 t.describe('packages.create_feed writes the feed file', () => {
 	const DIR = '/tmp/uapi-test-feeds';
-	function create_with(full) {
-		let s = { commands: [] };
+	function create_with(full, run, budget_s) {
+		let s = { runs: [] };
 		fs.mkdir(DIR);
 		for (let f in fs.lsdir(DIR)) fs.unlink(DIR + '/' + f);
 		let at = (path) => replace(path, /^\/etc\/apk\/repositories\.d\//, DIR + '/');
-		let p = t.load_with_fs({ ...fs,
+		let fsx = { ...fs,
 			stat: (path) => fs.stat(at(path)),
 			open: (path, m) => {
 				if (path == '/var/lock/uapi.lock') return fs.open('/tmp/uapi-test-packages.lock', m);
@@ -155,9 +155,16 @@ t.describe('packages.create_feed writes the feed file', () => {
 				return fs.open('/dev/full', 'w');
 			},
 			unlink: (path) => fs.unlink(at(path)),
-			popen: (cmd) => { push(s.commands, cmd); return { read: () => '', close: () => 0 }; },
-		}, [ 'transaction', 'non_uci', 'packages' ]);
-		s.r = p.create_feed(ctx(), { name: 'extra', url: 'https://example.com/extra' });
+		};
+		let tx = t.load_with_fs(fsx, [ 'transaction' ]);
+		let p = t.load_with({ fs: fsx, transaction: { ...tx, run_bounded: (argv, ms) => {
+			push(s.runs, [ argv, ms ]);
+			return run(tx, argv, ms);
+		} } }, [ 'non_uci', 'packages' ]);
+		let start = clock(true);
+		s.r = p.create_feed(ctx(budget_s), { name: 'extra', url: 'https://example.com/extra' });
+		let end = clock(true);
+		s.ms = (end[0] - start[0]) * 1000 + (end[1] - start[1]) / 1000000;
 		s.files = fs.lsdir(DIR);
 		s.feed = fs.readfile(DIR + '/extra.list');
 		// Before the asserts, because a failed one dies and would leave the directory in /tmp.
@@ -165,21 +172,41 @@ t.describe('packages.create_feed writes the feed file', () => {
 		fs.rmdir(DIR);
 		return s;
 	}
+	let updated = () => ({ code: 0, output: '' });
 
-	t.it('writes the URL, then refreshes the index', () => {
-		let s = create_with(false);
+	t.it('writes the URL, then refreshes the index under the reload bound', () => {
+		let s = create_with(false, updated);
 		t.assert_equal(s.r.status, 200);
+		t.assert_equal(s.r.body.update_status, 'ok');
 		t.assert_deep_equal(s.files, [ 'extra.list' ]);
 		t.assert_equal(s.feed, 'https://example.com/extra\n');
-		t.assert_deep_equal(s.commands, [ 'apk update 2>&1' ]);
+		t.assert_deep_equal(s.runs, [ [ [ 'apk', '--timeout', '20', 'update' ], 20000 ] ]);
 	});
 
 	t.it('answers 500 and leaves no file when the overlay cannot hold the URL', () => {
-		let s = create_with(true);
+		let s = create_with(true, updated);
 		t.assert_equal(s.r.status, 500);
 		t.assert_equal(s.r.body.code, 'internal_error');
 		t.assert_deep_equal(s.files, []);
-		t.assert_deep_equal(s.commands, []);
+		t.assert_deep_equal(s.runs, []);
+	});
+
+	// A feed host that did not answer held apk update past uhttpd's 60 s timeout, so the request got
+	// no answer. The stub leaves a child behind, as a killed apk leaves its wget, and that child must
+	// not hold the answer either.
+	t.it('kills an apk update that outlasts the bound, and answers with the feed written', () => {
+		let dir = '/tmp/uapi-test-apk-hang';
+		system(sprintf('rm -rf %s; mkdir -p %s', dir, dir));
+		fs.writefile(dir + '/apk', '#!/bin/sh\nsleep 5 &\nexec sleep 5\n');
+		fs.chmod(dir + '/apk', 0755);
+		let s = create_with(false, (tx, argv, ms) => tx.run_bounded([ dir + '/apk', ...slice(argv, 1) ], ms), 1);
+		system('rm -rf ' + dir);
+		t.assert_equal(s.r.status, 200);
+		t.assert_equal(s.r.body.update_status,
+			'apk update did not finish within 1 s and was killed; see syslog 01hx0000000000000000000000');
+		t.assert_equal(s.feed, 'https://example.com/extra\n');
+		t.assert_deep_equal(s.runs, [ [ [ 'apk', '--timeout', '1', 'update' ], 1000 ] ]);
+		t.assert_true(s.ms < 4000, sprintf('the request answered after %d ms', s.ms));
 	});
 });
 
@@ -191,37 +218,70 @@ t.describe('packages.remove_feed validation', () => {
 });
 
 t.describe('packages.add_with_refresh', () => {
-	function fake(results) {
+	function fake(adds, update) {
 		let calls = [];
-		return { calls: calls, exec: function(args) {
-			push(calls, args);
-			return { ok: shift(results), exit_code: 1, output: sprintf("%d:%s", length(calls), args) };
-		} };
+		return { calls: calls,
+			add: function() {
+				push(calls, "add");
+				return { ok: shift(adds), output: sprintf("%d:add", length(calls)) };
+			},
+			update: function() {
+				push(calls, "update");
+				return update;
+			} };
 	}
 
 	t.it('does not refresh when the first attempt works', () => {
-		let f = fake([true]);
-		t.assert_true(pkg.add_with_refresh("ethtool", f.exec).ok);
-		t.assert_deep_equal(f.calls, ["add -- ethtool"]);
+		let f = fake([true], { ok: true });
+		t.assert_true(pkg.add_with_refresh(f.add, f.update).ok);
+		t.assert_deep_equal(f.calls, ["add"]);
 	});
 
 	t.it('refreshes and tries once more when the cached index is stale', () => {
-		let f = fake([false, true, true]);
-		t.assert_true(pkg.add_with_refresh("ethtool", f.exec).ok);
-		t.assert_deep_equal(f.calls, ["add -- ethtool", "update", "add -- ethtool"]);
+		let f = fake([false, true], { ok: true });
+		t.assert_true(pkg.add_with_refresh(f.add, f.update).ok);
+		t.assert_deep_equal(f.calls, ["add", "update", "add"]);
 	});
 
 	t.it('reports the second failure when the refresh did not help', () => {
-		let f = fake([false, true, false]);
-		let r = pkg.add_with_refresh("ethtool", f.exec);
+		let f = fake([false, false], { ok: true });
+		let r = pkg.add_with_refresh(f.add, f.update);
 		t.assert_false(r.ok);
-		t.assert_equal(r.output, "3:add -- ethtool");
+		t.assert_equal(r.output, "3:add");
 	});
 
 	t.it('retries even when apk update reports a failure, as one unreachable feed makes it do', () => {
-		let f = fake([false, false, true]);
-		t.assert_true(pkg.add_with_refresh("ethtool", f.exec).ok);
-		t.assert_deep_equal(f.calls, ["add -- ethtool", "update", "add -- ethtool"]);
+		let f = fake([false, true], { ok: false, killed: false });
+		t.assert_true(pkg.add_with_refresh(f.add, f.update).ok);
+		t.assert_deep_equal(f.calls, ["add", "update", "add"]);
+	});
+
+	// The stale index of the feed that held the refresh would hold the retry as long again.
+	t.it('does not retry when the refresh was killed at its bound', () => {
+		let f = fake([false, true], { ok: false, killed: true });
+		let r = pkg.add_with_refresh(f.add, f.update);
+		t.assert_false(r.ok);
+		t.assert_equal(r.output, "1:add");
+		t.assert_deep_equal(f.calls, ["add", "update"]);
+	});
+});
+
+t.describe('packages.install bounds apk', () => {
+	t.it('passes the reload bound to apk add as --timeout, and kills the refresh at it', () => {
+		let commands = [], runs = [];
+		let fsx = { ...fs,
+			open: (path, m) => fs.open((path == '/var/lock/uapi.lock') ? '/tmp/uapi-test-packages.lock' : path, m),
+			popen: (cmd) => { push(commands, cmd); return { read: () => '', close: () => 1 }; },
+		};
+		let tx = t.load_with_fs(fsx, [ 'transaction' ]);
+		let p = t.load_with({ fs: fsx, transaction: { ...tx, run_bounded: (argv, ms) => {
+			push(runs, [ argv, ms ]);
+			return { code: -9, output: '' };
+		} } }, [ 'non_uci', 'packages' ]);
+		let r = p.install(ctx(7), { name: "ethtool" });
+		t.assert_equal(r.status, 500);
+		t.assert_deep_equal(commands, [ "apk --timeout 7 add -- ethtool 2>&1" ]);
+		t.assert_deep_equal(runs, [ [ [ "apk", "--timeout", "7", "update" ], 7000 ] ]);
 	});
 });
 

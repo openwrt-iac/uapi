@@ -207,14 +207,17 @@ function default_watch(conn, services, total_ms, step_ms) {
 
 // A popen has no time bound, so a conf-file on a mount that hangs held the locks until uhttpd
 // killed the request at its 60 s script timeout, before any restore. A write that fails runs the
-// check twice, and the parse of a conf-dir with 500k adblock lines took 0.6 s on x86. The exec
-// makes dnsmasq the child that system() kills, and procd starts dnsmasq with stdin on /dev/null.
-// system() raises when fork fails, after the commit, where a throw would skip the restore. The
-// SIGCHLD that system() blocks harms no --test, which starts no child.
+// check twice, and the parse of a conf-dir with 500k adblock lines took 0.6 s on x86.
 const DNSMASQ_TEST_MS = 10000;
 
-function run_test(argv, timeout_ms) {
-	let out = fs.mkstemp("uapi-dnsmasq-test");
+// The exec makes the command the child that system() kills at the bound. Its output goes to a
+// file, so a child that it leaves behind, as a killed apk leaves its wget, does not hold the
+// request as it held the read of a popen. procd starts dnsmasq with stdin on /dev/null. system()
+// raises when fork fails, after the commit, where a throw would skip the restore. The SIGCHLD that
+// system() blocks stays blocked after the exec: dnsmasq --test starts no child, and apk update
+// reaps its wget with waitpid(), which the mask does not stop.
+function run_bounded(argv, timeout_ms) {
+	let out = fs.mkstemp("uapi-run");
 	if (out == null) return { code: -1, output: "cannot create a file for its output" };
 	let code = null;
 	try {
@@ -270,7 +273,7 @@ function dnsmasq_check(conn, services, run) {
 // must not fail or undo that write, so only a dhcp write runs the dnsmasq check.
 function check_daemons(conn, services, packages, test_ms) {
 	let checks = filter([ (index(packages ?? [], "dhcp") >= 0)
-	                      ? dnsmasq_check(conn, services, (argv) => run_test(argv, test_ms ?? DNSMASQ_TEST_MS)) : null,
+	                      ? dnsmasq_check(conn, services, (argv) => run_bounded(argv, test_ms ?? DNSMASQ_TEST_MS)) : null,
 	                      default_watch(conn, services, 2000, 100) ],
 	                    (c) => c != null);
 	return function(only) {
@@ -775,4 +778,4 @@ function with_lock(params) {
 return { transaction, multi_transaction, with_lock,
          default_acquire, default_release,
          default_acquire_pkg, default_release_pkg, acquire_pkg_waiting,
-         default_check_services, default_reload, default_watch, dnsmasq_check, run_test, check_daemons };
+         default_check_services, default_reload, default_watch, dnsmasq_check, run_bounded, check_daemons };

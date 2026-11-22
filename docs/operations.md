@@ -85,7 +85,9 @@ an endpoint name whose lookup fails for a time. busybox's `nslookup` runs under
 the lock of `network` too, about 5 s at most for each name server of
 `/etc/resolv.conf`: on 25.12 once for an endpoint name that a peer write sends,
 and on OpenWrt main once for each peer with an endpoint name in the kernel apply
-and in the reconcile of the restore. uapi does not read
+and in the reconcile of the restore. A feed write waits for `apk update` up to
+`reload_budget_s`, but `apk add` and `apk del` have no total bound
+(`docs/non-uci-state.md`). uapi does not read
 `script_timeout`. Set it lower, through `uhttpd/instances` or otherwise, and
 uhttpd can kill such a request before its restore or its answer: the client
 gets a 502, and uci keeps whatever the write had reached. Keep it at 60 s or
@@ -387,7 +389,9 @@ config limits
   drain of a body no handler read.
 - `reload_budget_s` (1..20): total time a write waits for its daemon reloads,
   after which the write answers `X-Reload-Status: unverified` instead of
-  waiting longer.
+  waiting longer. A write of `packages/installed` or `packages/feeds` passes it
+  to apk as `--timeout`, and kills `apk update` after it
+  (`docs/non-uci-state.md`).
 
 `GET /uapi/diagnostics` reports the effective values under `limits`.
 
