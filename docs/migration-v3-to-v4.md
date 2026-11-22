@@ -167,9 +167,8 @@ A value that the read cannot show is judged too. fw4 stops while it reads a
 `synflood_rate` of `abc`, a `drop_invalid` of `YES` or a list, and applies no
 ruleset. A `synflood_burst` that is a number but no integer, such as `16.5`,
 is an error too: nft refuses it, so fw4 applies no ruleset while `syn_flood` is
-on. Such a bool reads `false` and such a number reads `null`, and the sweep
-names the option and says why. A write that sends the field replaces the value,
-and a null removes it.
+on. Such an option reads `null`, and the sweep names the option and says why.
+A write that sends the field replaces the value, and a null removes it.
 
 A value that LuCI or the daemon takes is no error, so it blocks no write and the
 v4 sweep does not list it. Examples are the `proto` of an interface that uapi
@@ -407,6 +406,19 @@ kept the value of `synflood_protect`. A `synflood_protect` that fw4 refuses,
 such as `maybe` or a list, is an error of `syn_flood` that blocks every write
 of the section that does not replace it.
 
+fw4's parser refuses a bool of `firewall/defaults` that holds a list or a
+value other than `1`, `on`, `true`, `yes`, `0`, `off`, `false` or `no`, such
+as a `drop_invalid` of `YES`. fw4 then applies no ruleset, and the value is an
+error of the section that blocks every write that does not replace it. 3.x
+read such a bool as `false`. v4 reads `null`, and the schemas of `syn_flood`,
+`drop_invalid`, `tcp_syncookies`, `flow_offloading` and `flow_offloading_hw`
+admit null. So a plan that holds `true` or `false` shows a diff, and its apply
+sends the field and fixes the section. With a read of `false`, a plan that
+holds `false` would never send the field, and each other write would answer
+422. fw4 parses both `synflood_protect` and `syn_flood`, so `syn_flood` reads
+`null` when either holds such a value, and a write of `syn_flood` then replaces
+both. An unset bool reads `false`, as in 3.x.
+
 ## Curated string fields refuse newlines and carriage returns
 
 One check in the type gate now refuses `\n` and `\r` in every curated string on
@@ -574,6 +586,7 @@ stored option, to follow what the daemon does:
 | `firewall/defaults` | `synflood_rate` | any rate: a number, such as `25`, reads as the string `25/second` instead of an integer, and a rate with a unit, such as `25/s`, or after spaces or a `!`, reads with the whole unit instead of null |
 | `firewall/defaults` | `synflood_burst` | a number that fw4 reads in another form, such as `0x10`, ` 16` or `1e3` |
 | `firewall/defaults` | `syn_flood` | `synflood_protect`, which LuCI writes, is set, and `syn_flood` does not read the same value |
+| `firewall/defaults` | `drop_invalid`, `tcp_syncookies`, `flow_offloading`, `flow_offloading_hw`, and `syn_flood` for `synflood_protect` and `syn_flood` | a list, or a value other than `1`, `on`, `true`, `yes`, `0`, `off`, `false` or `no`, which reads null instead of `false` |
 | `firewall/rules`, `firewall/nat`, `firewall/redirects` | `target` | a target in another case or a prefix of one, or for nat and redirects a target that fw4 replaces with its default |
 | `firewall/redirects` | `reflection_src` | a choice in another case or a prefix of one |
 | `firewall/zones`, `firewall/forwardings` | `family` | `all`, `*`, `inet`, or a word with 4 or 6 |

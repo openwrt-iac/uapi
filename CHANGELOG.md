@@ -96,6 +96,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of the section, as the other options of #423 are, under the stored-error
   rule announced in 3.4.0 (#308). Migration note in
   `docs/migration-v3-to-v4.md`. (#439)
+- **BREAKING: a bool of `firewall/defaults` that fw4 refuses reads null.** fw4
+  stops on a list, or a value other than `1`, `on`, `true`, `yes`, `0`, `off`,
+  `false` or `no`, such as a `drop_invalid` of `YES`, and applies no ruleset.
+  Such a value is an error of the section that blocks every write that does not
+  replace it (#423). It read `false`, so a plan that held `false` never sent the
+  field, and each other write answered 422 on it. Now it reads null, and the
+  schemas of the five bools admit null, so the plan shows a diff and its apply
+  fixes the section. `syn_flood` reads null when `synflood_protect` or
+  `syn_flood` holds such a value, since fw4 parses both, and a write of it then
+  replaces both. An unset bool reads `false` as before. Such a section gets
+  another ETag at the upgrade. Migration note in `docs/migration-v3-to-v4.md`.
+  (#450)
 - **BREAKING: three mwan3 rule and firewall zone writes that produce broken
   state answer 422.** mwan3 compares the `proto` of `mwan3/rules` with `tcp` and
   `udp` in lower case and drops the ports of another spelling, such as `TCP`, so
