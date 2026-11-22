@@ -248,7 +248,7 @@ unpacking. An independent verifier can:
 sha256sum -c build/sdk.sha256             # verify the SDK was the expected one
 make stage                                # populate files/
 ( cd build/sdk && make package/uapi/compile )
-sha256sum bin/packages/all/uapi-*.apk     # compare against the released APK
+sha256sum build/sdk/bin/packages/*/base/uapi-*.apk   # compare against the released APK
 ```
 
 The build is deterministic: file ordering in the APK is sorted; the

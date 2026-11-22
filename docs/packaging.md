@@ -16,15 +16,14 @@ handler into uhttpd's config, (c) clean up that wiring on removal. There is no
 `uapi` process, no `procd` service definition, no init script.
 
 **Wires only to the `main` uhttpd instance.** Operators running multiple uhttpd
-instances who want the API on another instance configure it manually (the
-post-install message points at this).
+instances who want the API on another instance configure it manually.
 
 **No conflicts.** Coexists with rpcd, LuCI, and anything else hosted on uhttpd.
 
 **No default token shipped.** Operators mint the first token via `uapi-token
 create` after install. Shipping a default would be a security hole.
 
-**Distribution.** v1 launch ships on the project-owned OpenWrt feed at
+**Distribution.** The package ships on the project-owned OpenWrt feed at
 `openwrt-iac.github.io/feed/`. Submission to the official `packages` feed is
 open as openwrt/packages#30752, and is not a blocker.
 
@@ -51,23 +50,9 @@ package:
 /etc/config/uapi                         token store, mode 0600
 ```
 
-Runtime files created on first use (tmpfs, reset on reboot):
-
-```
-/var/run/uapi-ratelimit/<token>.txt          per-token bucket state
-/var/run/uapi-idempotency/<sha>.json         per-key cached POST responses (24h TTL)
-/var/run/uapi-metrics/<series>/<labels>.txt  Prometheus counter/histogram store
-/var/run/uapi-error-ring/ring.json           the last 20 errors, for /uapi/diagnostics
-/var/run/uapi-token-update/<token>           last-used throttle sentinel
-/var/lock/uapi.lock                          global flock (SH for uci tx, EX for non-uci)
-/var/lock/uapi.pkg.<package>.lock            per-package EX flock
-```
-
-`<token>` is the token name, or its sha256 when the name is longer than 63
-characters.
-
-The `/var/run/uapi-*` directories have mode 0700 and their files 0600, see
-`docs/architecture.md` § Where state lives.
+uapi creates its runtime files under `/var/run` and `/var/lock` on first use.
+They are on tmpfs, so a reboot resets them. `docs/architecture.md` § Where state
+lives lists each of them with its mode and lifetime.
 
 Dependencies (pulled in automatically):
 
@@ -94,6 +79,9 @@ SDK_URL=https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/openwrt-sd
 mkdir -p build/sdk
 curl -L "$SDK_URL" | tar --use-compress-program=unzstd -xvf - -C build/sdk --strip-components=1
 ```
+
+`tools/openwrt-sdk.sh fetch x86/64` does the same and checks the tarball
+against `build/sdk.sha256`.
 
 Adjust `targets/x86/64` for your target architecture if cross-compiling for
 something other than x86_64. uapi is pure ucode (`PKGARCH:=all`), so the
@@ -137,13 +125,15 @@ make defconfig
 make package/uapi/compile V=s
 ```
 
-The output `.apk` lands at `bin/packages/all/base/uapi-<version>-r1.apk` (or
-whatever the SDK reports at the end of the build).
+The output `.apk` lands under `bin/packages/<arch>/base/`, where `<arch>` is
+the architecture of the SDK, such as
+`bin/packages/x86_64/base/uapi-<version>-r1.apk`. The package itself is
+`PKGARCH:=all`.
 
 ### 4. Install on a router
 
 ```sh
-scp bin/packages/all/base/uapi-*.apk root@<router>:/tmp/
+scp bin/packages/*/base/uapi-*.apk root@<router>:/tmp/
 ssh root@<router> 'apk add /tmp/uapi-<version>-r1.apk'
 ssh root@<router> 'uapi-token create --name first --scope "*:rw"'
 ```
@@ -187,17 +177,18 @@ example because another web server uses its ports. That operator starts uhttpd
 when they want the API.
 
 After the restart, `postinst` removes `/var/run/uapi-idempotency`,
-`/var/run/uapi-metrics`, `/var/run/uapi-ratelimit`, `/var/run/uapi-error-ring`
-and `/var/run/uapi-token-update`, and the four that an older uapi kept in `/tmp`
-with mode 0755 and files 0644. It removes each only when it is itself a
-directory that root owns. They hold the 24 h replay window of the idempotency
-cache and state that a reboot clears too, so each starts empty in a directory
-that uapi creates 0700: the counters start again from zero, which Prometheus
-reads as a reset, every token has a full burst, `recent_errors` is empty, and
-the idempotency cache replays nothing from before. The removal comes after the
-restart, because the previous version keeps writing those directories until
-uhttpd stops it. A request of the previous version still in flight at the
-restart can write one again, and that one stays until a reboot.
+`/var/run/uapi-metrics`, `/var/run/uapi-ratelimit`, `/var/run/uapi-error-ring`,
+`/var/run/uapi-token-update` and `/var/run/uapi-interrupted-writes`, and the
+four that an older uapi kept in `/tmp` with mode 0755 and files 0644. It removes
+each only when it is itself a directory that root owns. They hold the 24 h
+replay window of the idempotency cache and state that a reboot clears too, so
+each starts empty in a directory that uapi creates 0700: the counters start
+again from zero, which Prometheus reads as a reset, every token has a full
+burst, `recent_errors` and `interrupted_writes` are empty, and the idempotency
+cache replays nothing from before. The removal comes after the restart, because
+the previous version keeps writing those directories until uhttpd stops it. A
+request of the previous version still in flight at the restart can write one
+again, and that one stays until a reboot.
 
 After that, `https://<router>/api/v4/healthz` is reachable if uhttpd is enabled.
 
@@ -280,8 +271,8 @@ upgrades will stop replacing them.
 
 Tag-pushed releases produce more than just the APK:
 
-- **APK** at `bin/packages/all/uapi-<version>-r<N>.apk`. `PKGARCH:=all` means a
-  single APK works on every OpenWrt arch.
+- **APK** at `bin/packages/<arch>/base/uapi-<version>-r<N>.apk` in the SDK.
+  `PKGARCH:=all` means a single APK works on every OpenWrt arch.
 - **SPDX 2.3 SBOM** at `build/sbom.spdx.json` (via `make sbom APK=<apk>`).
   Carries every shipped file's sha256, package dependencies, and the built APK's
   verification hash.

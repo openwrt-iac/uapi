@@ -249,12 +249,10 @@ Unsafe (lint fails):
 ```
 
 Conservative scope: only annotate when there is **evidence** a field is
-leftover-prone (e.g. survives an adopt + proto switch). The initial set in 2.2.3
-is `network/interfaces` `netmask` and `gateway`. The originally-considered set
-in 2.2.2 also included `ipaddr`/`ipaddrs`/`dns`, but those failed the shape/type
-constraints as they stood then and were dropped; see `docs/deprecations.md` and
-the openwrt-iac/uapi#3 thread for the design discussion on how to handle the
-aliased/array-typed cases.
+leftover-prone (e.g. survives an adopt + proto switch). The set today is
+`network/interfaces` `netmask`, `broadcast`, `gateway`, `ip6gw` and
+`ip6prefix`. `ip6prefix` is an array, and it qualifies because a list field
+reads `null` when uci does not hold it (`docs/deprecations.md`).
 
 A field cannot be both `default:` and `"x-uapi-clear-on-omit": true`. Defaulted
 fields would cause perpetual non-converging diffs if the provider treats them as
@@ -454,8 +452,6 @@ consumer. The other hooks have more users: `openvpn/instances` declares
 
 ## 3. JSON conventions
 
-Per CLAUDE.md:
-
 - `snake_case` field names.
 - Stable `id` at top level (set by the dispatcher; your `fromUci` provides it
   from `section['.name']`).
@@ -614,7 +610,7 @@ registers the source module into `RESOURCE_SOURCES` (the thing backing
 ```
 
 So the module file has to be named `<domain>.<plural-type>.uc`, matching the
-key. That is not a new convention, it is what all 45 resources already do; the
+key. That is not a new convention, it is what all 44 resources already do. The
 filename simply is not written a second time.
 
 Use `handler.make_singleton` for singletons, `handler.make_collection`
@@ -699,14 +695,16 @@ resource.
 
 `examples/curl/<resource>.sh`. One POST + GET + PATCH cycle, ending with a "to
 delete: ..." reminder. The suite is a representative subset rather than one file
-per resource, so this is expected when the new resource shows a shape the
-existing sixteen do not, and optional when it is another instance of one they
+per resource, so this is expected when the new resource shows a shape that the
+existing scripts do not, and optional when it is another instance of one they
 already cover.
 
-## 9. Update docs/tokens.md
+## 9. Register the scope
 
-If the new resource introduces a new scope path (e.g. a new package), add it to
-the scope tree table.
+Add the scope path of the new resource, `<domain>:<sub>`, to `KNOWN_PATHS` in
+`src/lib/scope.uc`, and the domain too when it is new. A token mint refuses a
+scope that is not there. Then add the path to the scope tree table in
+`docs/tokens.md`.
 
 ## Curation completeness
 

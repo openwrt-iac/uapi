@@ -19,7 +19,7 @@ is client-agnostic.
   request.
 - Bearer tokens with hierarchical scopes, expiry, source-IP scoping, HTTP-side
   rotation (`POST /uapi/tokens`).
-- 45 curated resources plus a generic `/raw/<package>/<id>` passthrough for the
+- 44 curated resources plus a generic `/raw/<package>/<id>` passthrough for the
   long tail.
 - Conditional GET (304), idempotency keys, cursor pagination, per-resource ETags
   + `If-Match`, JSON Patch (RFC 6902), Prometheus `/uapi/metrics`,
@@ -158,8 +158,12 @@ Operator-facing:
 - `docs/resources.md`: curated resource catalog.
 - `docs/non-uci-state.md`: resources whose source of truth is not
   `/etc/config/`.
-- `docs/migration-v1-to-v2.md`: v1 -> v2 field renames, strict typing, new
-  endpoints, new errors.
+- `docs/migration-v3-to-v4.md`: what changes for a client and a router across
+  the v4 upgrade.
+- `docs/migration-v2-to-v3.md` and `docs/migration-v1-to-v2.md`: the same for
+  the earlier majors.
+- `docs/deprecations.md`: fields and endpoints announced for removal, and what
+  replaces them.
 - `examples/curl/`: runnable walkthroughs for a subset of resources, one per
   distinct shape, including the adopt flow for pre-existing config.
 - `build/openapi.json` (also `/api/v4/openapi.json` on a live router): the API
@@ -174,8 +178,9 @@ Contributor-facing:
   the fork-per-request model.
 - `docs/ucode-quirks.md`: language and runtime gotchas that have each cost a CI
   iteration on this project.
-- `docs/security.md`: threat model, scope tree, TLS posture, token storage,
-  rate-limit guarantees, audit shape.
+- `docs/security.md`: threat model, scopes that grant root, TLS posture, token
+  storage, rate-limit guarantees, audit shape.
+- `docs/testing.md`: test layers, harness, lint suite and CI shape.
 - `docs/adding-a-resource.md`: how to write a new curated resource module.
 - `docs/packaging.md`: building the APK from source against the OpenWrt SDK.
 - `docs/release-process.md`: signed tags, reproducible builds, SBOM, multi-arch
@@ -191,24 +196,8 @@ Contributor-facing:
 
 ## Versioning
 
-uapi follows [semver](https://semver.org/), with the major version aligned to
-the API major:
-
-- **MAJOR**: breaking on-the-wire change. The URL prefix bumps to `/api/v<x+1>/`
-  to match the wire contract major (standard HTTP idiom). A given uapi
-  installation serves exactly one API major - we do NOT mount `/api/v(x+1)/`
-  alongside `/api/v<x>/` in the same binary; operators who need to keep an old
-  client working keep the previous package version installed. The install hook
-  handles uhttpd prefix migration automatically on `apk upgrade`.
-- **MINOR**: backwards-compatible additions. New endpoints, new optional
-  request/response fields, new error codes, new scopes.
-- **PATCH**: bug fixes only. No surface change.
-
-Concretely: a client tested against `2.0.0` keeps working against any future
-`2.y.z`. Pin a minimum minor if you depend on something introduced in it (`apk
-add 'uapi>=2.0.0'`). See `docs/versioning.md` ("API versioning policy") for the
-precise list of what counts as a breaking vs additive change, and
-`docs/migration-v1-to-v2.md` for the v1 -> v2 migration table.
+uapi follows [semver](https://semver.org/), and its major is the API major in
+the URL prefix. `docs/versioning.md` says what each kind of change ships as.
 
 ## License
 
