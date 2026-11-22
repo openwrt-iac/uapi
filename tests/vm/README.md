@@ -2,38 +2,23 @@
 
 Boots a real OpenWrt x86_64 QEMU VM for integration testing.
 
-## Pinned versions
+## Image
 
-Two series run, selected by `OPENWRT_SERIES` (`stable` by default). CI runs both
-on the v4 line and `stable` alone on every other ref:
-
-- **stable**: OpenWrt release **25.12.6**, image
-  `openwrt-25.12.6-x86-64-generic-ext4-combined.img.gz` from
-  `https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/`. `setup.sh`
-  takes the version from `OPENWRT_VERSION`, or else from the x86-64 pin in
-  `build/sdk.sha256`.
-- **main**: the daily snapshot, image
-  `openwrt-x86-64-generic-ext4-combined.img.gz` from
-  `https://downloads.openwrt.org/snapshots/targets/x86/64/`. The filename is
-  fixed while the content is not; `setup.sh` downloads it again when the server
-  holds a newer one (`curl -z`), then re-decompresses and re-injects.
-
-Each series keeps its own image (`openwrt-stable.img`, `openwrt-main.img`) and
-its own injection marker, and `start.sh` boots the one that `OPENWRT_SERIES`
-selects.
-
-When bumping the stable target, update `OPENWRT_VERSION` and
-`OPENWRT_IMAGE_CACHE_KEY` in `.github/workflows/ci.yml`, the default version in
-`tools/openwrt-sdk.sh`, the pins in `build/sdk.sha256`, and this file.
+The daily snapshot of OpenWrt main, image
+`openwrt-x86-64-generic-ext4-combined.img.gz` from
+`https://downloads.openwrt.org/snapshots/targets/x86/64/`. uapi 4.x supports
+OpenWrt main and the release cut from it, and not 25.12, so no release image
+runs here. The filename is fixed while the content is not; `setup.sh` downloads
+it again when the server holds a newer one (`curl -z`), then re-decompresses and
+re-injects.
 
 ## Scripts
 
-- `setup.sh`: downloads the image (if absent, or for the snapshot if newer),
-  decompresses it, injects an SSH key for root login. Idempotent. Requires
+- `setup.sh`: downloads the image when it is absent or the server holds a newer
+  one, decompresses it, injects an SSH key for root login. Idempotent. Requires
   `sudo` for the loop mount step.
-- `start.sh`: boots the image of the selected series in the background via QEMU
-  user-mode networking. Forwards host ports 2222->22, 8080->80, 8443->443.
-  Writes PID to `qemu.pid`.
+- `start.sh`: boots the image in the background via QEMU user-mode networking.
+  Forwards host ports 2222->22, 8080->80, 8443->443. Writes PID to `qemu.pid`.
 - `wait.sh`: blocks until SSH on port 2222 accepts a connection.
 - `align_uhttpd.sh`: upgrades `uhttpd` and its installed `uhttpd-mod-*` from the
   feed, so that they come from one build. The image of a release ships them from
@@ -56,7 +41,3 @@ tests/vm/stop.sh
 `make test-integration` runs `setup`, `start`, `wait`, the integration suite,
 then `stop` even on failure.
 
-```sh
-# The main snapshot instead of the stable release
-OPENWRT_SERIES=main make test-integration
-```

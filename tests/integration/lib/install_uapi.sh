@@ -49,9 +49,10 @@ source_fingerprint() {
 # suite can never run against a module list the package does not ship. A
 # hand-kept list here once missed ucode-mod-log, which the stable image ships
 # and the main snapshot's bare image does not, and the handler then killed
-# uhttpd at its start on every request.
+# uhttpd at its start on every request. EXTRA_DEPENDS is left out: it only
+# sets a floor on netifd, which every image has.
 package_depends() {
-	awk '/DEPENDS:=/ { f = 1; sub(/^.*DEPENDS:=/, "") }
+	awk '/^[ \t]*DEPENDS:=/ { f = 1; sub(/^.*DEPENDS:=/, "") }
 	     f { print; if (!/\\$/) f = 0 }' "$PKG_MAKEFILE" \
 		| tr ' \\' '  ' | tr -s ' ' '\n' | sed 's/^+//' | grep -v '^$' | tr '\n' ' '
 }

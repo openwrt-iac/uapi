@@ -2,34 +2,22 @@
 set -eu
 cd "$(dirname "$0")"
 
-# The stable series boots the release that CI names in OPENWRT_VERSION, or else the one that
-# build/sdk.sha256 pins. The main series (the v4 line) boots the daily snapshot, whose filename
-# is fixed while its content is not. Each series keeps its own image and marker: with one
-# shared pair, a stable run after a main run found both up to date and booted the snapshot.
-SERIES=${OPENWRT_SERIES:-stable}
-if [ "$SERIES" = main ]; then
-	IMAGE_URL=https://downloads.openwrt.org/snapshots/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz
-	IMAGE_GZ=openwrt-main.img.gz
-else
-	VERSION=${OPENWRT_VERSION:-$(sed -n 's/^[0-9a-f]*  openwrt-sdk-\(.*\)-x86-64_gcc-.*/\1/p' ../../build/sdk.sha256)}
-	IMAGE_URL=https://downloads.openwrt.org/releases/$VERSION/targets/x86/64/openwrt-$VERSION-x86-64-generic-ext4-combined.img.gz
-	IMAGE_GZ=openwrt-$VERSION.img.gz
-fi
-IMAGE=openwrt-$SERIES.img
-MARKER=.injected-$SERIES
+# The daily snapshot of OpenWrt main, whose filename is fixed while its content is not.
+IMAGE_URL=https://downloads.openwrt.org/snapshots/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz
+IMAGE_GZ=openwrt-main.img.gz
+IMAGE=openwrt-main.img
+MARKER=.injected-main
 KEY=id_ed25519
 
 # -z asks again for the snapshot and leaves the archive alone when the server holds no newer
 # one. curl writes no file on that 304, so a leftover partial file must not be moved in.
-if [ "$SERIES" = main ] || [ ! -f "$IMAGE_GZ" ]; then
-	echo "Downloading $IMAGE_URL"
-	rm -f "$IMAGE_GZ.tmp"
-	set --
-	[ ! -f "$IMAGE_GZ" ] || set -- -z "$IMAGE_GZ"
-	# The CDN cuts HTTP/2 streams of the snapshot image (curl 92), which killed the package job.
-	curl -fsSL --http1.1 --retry 5 --retry-all-errors "$@" -o "$IMAGE_GZ.tmp" "$IMAGE_URL"
-	[ ! -f "$IMAGE_GZ.tmp" ] || mv "$IMAGE_GZ.tmp" "$IMAGE_GZ"
-fi
+echo "Downloading $IMAGE_URL"
+rm -f "$IMAGE_GZ.tmp"
+set --
+[ ! -f "$IMAGE_GZ" ] || set -- -z "$IMAGE_GZ"
+# The CDN cuts HTTP/2 streams of the snapshot image (curl 92), which killed the package job.
+curl -fsSL --http1.1 --retry 5 --retry-all-errors "$@" -o "$IMAGE_GZ.tmp" "$IMAGE_URL"
+[ ! -f "$IMAGE_GZ.tmp" ] || mv "$IMAGE_GZ.tmp" "$IMAGE_GZ"
 
 # A re-download replaces the archive, so decompress and inject again: the
 # markers below compare against the archive, not only against each other.

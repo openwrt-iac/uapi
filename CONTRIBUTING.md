@@ -40,7 +40,7 @@ coverage drops below 80% of lib exports, so new helpers need a focused test.
 For integration tests against a real OpenWrt VM:
 
 ```sh
-make vm-setup            # one-time: downloads + verifies the OpenWrt 25.12 image
+make vm-setup            # downloads the OpenWrt main snapshot when it is newer
 make vm-start            # boots the VM in the background
 make test-integration    # runs tests/integration/*.sh against the VM
 make vm-stop             # shuts the VM down
@@ -103,7 +103,7 @@ build/
   gen_openapi.uc         # OpenAPI generator (reads src/resources/*.uc + ENDPOINTS table)
   openapi.json           # generated; committed; CI gates against drift
   openwrt/uapi/          # OpenWrt package skeleton; staged from src/ by `make stage`
-  sdk.sha256             # pinned OpenWrt SDK checksums (multi-arch)
+  openwrt-snapshot-usign.pub  # key that signs the checksums of the OpenWrt snapshot SDKs
 cli/
   uapi-token             # CLI for token mint / list / revoke
 docs/                    # operator + contributor docs (you are here)

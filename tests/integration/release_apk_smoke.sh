@@ -36,6 +36,9 @@ tests/vm/align_uhttpd.sh
 echo "--- apk add the uapi package ---"
 $SSH 'apk add --allow-untrusted /tmp/uapi.apk 2>&1 | tail -10'
 
+echo "--- the package carries the netifd floor that keeps it off OpenWrt 25.12 ---"
+$SSH 'apk info -R uapi' | grep -q '^netifd>=' || fail "the package does not depend on a netifd version"
+
 echo "--- post-install: uci-defaults should have wired the prefix and removed itself ---"
 $SSH 'uci show uhttpd.main.ucode_prefix' | grep -q '/api/v4=/usr/share/uapi/main.uc' \
 	|| fail "ucode_prefix not wired by uci-defaults"

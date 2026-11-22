@@ -5,8 +5,8 @@ The version comes from a single source: the `VERSION` file at the repo root
 `PKG_VERSION` (hyphens become underscores), and `make stage` ships a copy to
 `/usr/share/uapi/VERSION` so `main.uc` and `/healthz` report the same string.
 
-This document walks through producing `uapi-<version>-r1.apk` for OpenWrt
-25.12.6 using the official OpenWrt SDK. Substitute the actual version from the
+This document walks through producing `uapi-<version>-r1.apk` for OpenWrt main
+using the snapshot SDK of OpenWrt main. Substitute the actual version from the
 `VERSION` file (or the release page) wherever you see `<version>` below.
 
 ## Package contract
@@ -70,22 +70,82 @@ apk). A package built without the dependency still runs, but has no deadline:
 uapi then reads a body from the blocking pipe, and logs one `uapi-body-deadline`
 line when uhttpd starts.
 
-## Build steps
+## The netifd floor
 
-### 1. Get the matching OpenWrt SDK
+uapi 4.x supports OpenWrt main and the release that OpenWrt cuts from it, and
+not OpenWrt 25.12. Routers on 25.12 stay on uapi 3.5.0. The package tells apk
+with a versioned dependency in `build/openwrt/uapi/Makefile`:
 
-```sh
-SDK_URL=https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/openwrt-sdk-25.12.6-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
-mkdir -p build/sdk
-curl -L "$SDK_URL" | tar --use-compress-program=unzstd -xvf - -C build/sdk --strip-components=1
+```
+EXTRA_DEPENDS:=netifd (>=2026.07.17)
 ```
 
-`tools/openwrt-sdk.sh fetch x86/64` does the same and checks the tarball
-against `build/sdk.sha256`.
+The build writes it into the metadata of the APK as `netifd>=2026.07.17`, as it
+writes `ucode>=2022.03.22` for the `EXTRA_DEPENDS` of `firewall4`. The APK
+smoke test checks that the installed package carries it.
 
-Adjust `targets/x86/64` for your target architecture if cross-compiling for
-something other than x86_64. uapi is pure ucode (`PKGARCH:=all`), so the
-resulting `.apk` is architecture-independent.
+OpenWrt names a package that it builds from a git commit
+`<date>~<commit>-r<release>`, from `PKG_SOURCE_DATE` and `PKG_SOURCE_VERSION` in
+its Makefile (`include/download.mk` of OpenWrt). The date is the commit date in
+netifd. netifd commit e97e36f ("config: accept 'true' for the interface disabled
+option", which #311 needs) has the commit date 2026-07-17, and the floor is that
+date:
+
+| OpenWrt                                 | netifd                            | apk      |
+|-----------------------------------------|-----------------------------------|----------|
+| 25.12.6, and the `openwrt-25.12` branch | `2026.02.26~cbb83a18-r2`          | refuses  |
+| main before 2026-09-13                  | `2026.07.08~6088f7b3-rN` or older | refuses  |
+| main from 2026-09-13                    | `2026.09.11~06d06c86-r1`          | installs |
+| main on 2026-11-22                      | `2026.10.28~a1e39a45-r1`          | installs |
+
+apk compares the dotted date first. It sorts `2026.07.17~<commit>-r1` after
+`2026.07.17`, so a netifd built from e97e36f itself passes too. `apk version -t`
+of apk-tools 3.0.5, the apk of 25.12, gives these results.
+
+On 25.12, apk refuses the package before it changes a file or runs a script:
+
+- `apk add` of the APK file, or `apk add 'uapi>=4'`, stops with exit status 3:
+
+  ```
+  ERROR: unable to select packages:
+    netifd-2026.02.26~cbb83a18-r2:
+      breaks: uapi-<version>-r1[netifd>=2026.07.17]
+      satisfies: world[netifd]
+                 base-files-1718~981c978eff[netifd]
+  ```
+
+  On a router with 3.x, 3.x stays installed and keeps its token store.
+- `apk upgrade` and `apk upgrade uapi`, with a feed that serves 4.x, keep 3.x
+  and print nothing about uapi. `apk list --upgradable` still lists 4.x.
+- `apk add uapi` on a router without uapi, from a feed that serves only 4.x,
+  fails with the same error.
+
+The floor is a date, not a commit. If a later 25.12 release takes a netifd of
+the `openwrt-25.12` branch with a commit date after 2026-07-17, that netifd
+passes the floor without e97e36f. Before each 4.x release, read
+`package/network/config/netifd/Makefile` on the `openwrt-25.12` branch of
+OpenWrt, and raise the floor above its date if needed.
+
+## Build steps
+
+### 1. Get the OpenWrt SDK
+
+```sh
+tools/openwrt-sdk.sh fetch x86/64 build/sdk
+```
+
+The script downloads the snapshot SDK of OpenWrt main for the target. OpenWrt
+rebuilds it daily under the same name and deletes the previous one, so the
+repository cannot pin its checksum. The script checks the signature of the
+`sha256sums` published beside the SDK against
+`build/openwrt-snapshot-usign.pub`, the usign key of the OpenWrt snapshot builds
+(`usign/b5043e70f9a75cde` of the OpenWrt keyring), then the tarball against
+those sums. It needs `signify-openbsd`, or `SIGNIFY=usign` where usign is
+installed.
+
+Give another target, such as `armsr/armv8`, if cross-compiling for something
+other than x86_64. uapi is pure ucode (`PKGARCH:=all`), so the resulting `.apk`
+is architecture-independent.
 
 ### 2. Stage the package files
 
@@ -142,6 +202,9 @@ The CLI prints the cleartext bearer to stdout exactly once. Save it.
 
 ## Post-install behavior
 
+On OpenWrt 25.12, apk refuses the package before it runs a script (see The
+netifd floor), so nothing below runs there.
+
 The `postinst` script runs `/etc/uci-defaults/99-uapi` immediately on live
 installs (not chroots/INSTROOT builds) and then deletes the script. In an image,
 the script runs at first boot instead. That single run:
@@ -167,7 +230,7 @@ instance runs. A uhttpd that cannot load a plugin exits within that second. When
 one does not run, `postinst` prints that neither uapi nor LuCI answers, and the
 commands that align `uhttpd` and its `uhttpd-mod-*` on the feed (see
 `docs/installation.md`, Align the uhttpd packages first), which is the cause on
-a 25.12 image whose feed was rebuilt after the release. It reports and does not
+an image whose feed was rebuilt after it. It reports and does not
 upgrade them itself. The install still ends with status 0, because the package
 files are in place.
 
@@ -235,6 +298,11 @@ The token store at `/etc/config/uapi` is precious user state. The package does
 not install it, and the install hook creates it when it does not exist. apk then
 never writes, replaces or deletes it, at an upgrade, a reinstall or a removal.
 
+An upgrade from 3.x to 4.x happens on OpenWrt main only. The APK smoke test
+upgrades from 3.2.0 on the main snapshot. On 25.12, apk refuses the upgrade as
+a whole before it changes a file (see The netifd floor), so the router keeps
+3.x, its `/api/v3` mount and its token store.
+
 Up to 3.2.0 the package shipped a template at that path. apk-tools 3 protects
 `/etc`: at an upgrade it keeps a file there that differs from the one it
 installed, and writes the shipped copy beside it as `/etc/config/uapi.apk-new`.
@@ -279,13 +347,17 @@ Tag-pushed releases produce more than just the APK:
 - **Multi-arch verification**: CI's `verify-arch-build` matrix cross-compiles
   against `aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` SDKs. It does NOT
   prove arch-neutrality: it compares no digests and has no x86_64 leg to compare
-  against. What it hard-fails on is a missing per-arch SDK pin, a tarball that
-  does not match its pin, a cross-build that breaks, and a build that yields no
-  `.apk`. See the comment on the job itself.
+  against. What it hard-fails on is, at an SDK download, `sha256sums` without a
+  valid signature of the snapshot key, a tarball that does not match those sums,
+  a cross-build that breaks, and a build that yields no `.apk`. See the comment
+  on the job itself.
 - **Signed tag**: required for the `release-apk` job to run; verified against
   `.github/release-signers.asc`.
-- **Reproducible SDK pin**: `build/sdk.sha256` records the exact SDK tarball
-  checksums for all four arches.
+- **SDK signing key**: `build/openwrt-snapshot-usign.pub` pins the key that
+  signs the checksums of the snapshot SDKs of every target. It pins who built
+  the SDK, not its bytes, and the SDK of a release cannot be downloaded again
+  after the next snapshot. `docs/release-process.md`, Reproducible builds, says
+  what a verifier checks instead.
 
 See `docs/release-process.md` for the full release flow, signed-tag setup, and
 pre-tag checklist.
