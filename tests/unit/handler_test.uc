@@ -709,12 +709,12 @@ t.describe('handler.patch', () => {
 		t.assert_equal(r.status, 200);
 	});
 
-	// Every spelling config_get_bool accepts has to survive a PATCH of some other field.
+	// Every spelling fw4's parse_bool accepts has to survive a PATCH of some other field.
 	// diff_apply_patch used to set every key toUci emitted, so `enabled 'on'` came back as
 	// '1': uapi correcting bytes it was not asked to touch. Asserted on the raw uci value,
 	// because the read view normalizes and would agree either way.
 	t.it('leaves an untouched boolean at the spelling the operator wrote', () => {
-		for (let spelling in [ 'on', 'yes', 'true', 'enabled', '1' ]) {
+		for (let spelling in [ 'on', 'yes', 'true', '1' ]) {
 			let c = with_existing();
 			c._state.uci.firewall.r_existing.enabled = spelling;
 			let r = rules.patch(c, ctx(), 'r_existing', { name: 'renamed' });

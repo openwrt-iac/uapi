@@ -161,6 +161,13 @@ proto that uci holds as one option of several words reads as its words, as LuCI
 writes the ports of a rule. A match port, mark or DSCP takes a `!` with blanks
 around it, as LuCI writes it.
 
+fw4 skips a zone, forwarding, rule, redirect or nat section with a bool that
+its parser refuses: a list, or a value other than `1`, `on`, `true`, `yes`,
+`0`, `off`, `false` or `no`. Such a value of `masq` or `mtu_fix` of a zone,
+`enabled`, or `reflection` of a redirect reads null and is an error of the
+section. A write that sends the field replaces it, a null removes it, and a PUT
+that leaves the field out removes it too. An unset bool reads its default.
+
 ## Wireless
 
 | Path | Wraps | Notes |

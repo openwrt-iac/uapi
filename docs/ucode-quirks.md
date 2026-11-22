@@ -244,7 +244,7 @@ netifd's is the strict one:
 |---|---|---|---|---|
 | netifd C and odhcpd, via uci's blob converter | `1`, `true` | `0`, `false` | option **dropped**, daemon default applies | `platform_bool` |
 | netifd ucode, `parse_bool` in `/lib/netifd/utils.uc` | `1`, `true` | `0`, `false` | undefined, caller default | `platform_bool` |
-| fw4, `parse_bool` in `/usr/share/ucode/fw4.uc` | `1`, `on`, `true`, `yes` | `0`, `off`, `false`, `no` | daemon default | `normalize_bool` |
+| fw4, `parse_bool` in `/usr/share/ucode/fw4.uc` | `1`, `on`, `true`, `yes` | `0`, `off`, `false`, `no` | a list too: the **section** is skipped, and a `defaults` section stops the load, read null | `fw_bool` |
 | shell init scripts, `get_bool` in `/lib/functions.sh` | those plus `enabled` | those plus `disabled` | caller default | `shell_bool` |
 | raw compare, `[ "$x" != "1" ]` | `1` | everything else | there is no else | `strict_bool` |
 | numeric test, `[ "$x" -gt 0 ]` | a number above 0, whitespace around it included | `0`, a number below it, and any word, `true` included | there is no else | see below |

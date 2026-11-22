@@ -26777,8 +26777,12 @@
 						"description": "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it. A target of NOTRACK requires `match.src_zone`, a named zone other than `*`"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": [
+							"boolean",
+							"null"
+						],
+						"default": true,
+						"description": "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"set_mark": {
 						"type": [
@@ -27004,8 +27008,12 @@
 						"description": "A read also gives HELPER, which LuCI writes for a conntrack helper rule. uapi does not model the helper, so a write refuses a change to it. A PATCH that sends a stored HELPER back passes, and a PUT answers 422 for it, because a PUT removes the set_helper option, and firewall4 skips a HELPER rule without it. A target of NOTRACK requires `match.src_zone`, a named zone other than `*`"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": [
+							"boolean",
+							"null"
+						],
+						"default": true,
+						"description": "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"set_mark": {
 						"type": [
@@ -27422,14 +27430,20 @@
 						}
 					},
 					"masq": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"default": false,
-						"description": "Enable IPv4 masquerading on this zone"
+						"description": "Enable IPv4 masquerading on this zone. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"mtu_fix": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"default": false,
-						"description": "Clamp MSS to PMTU for traffic in this zone"
+						"description": "Clamp MSS to PMTU for traffic in this zone. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"family": {
 						"type": "string",
@@ -27521,14 +27535,20 @@
 						}
 					},
 					"masq": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"default": false,
-						"description": "Enable IPv4 masquerading on this zone"
+						"description": "Enable IPv4 masquerading on this zone. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"mtu_fix": {
-						"type": "boolean",
+						"type": [
+							"boolean",
+							"null"
+						],
 						"default": false,
-						"description": "Clamp MSS to PMTU for traffic in this zone"
+						"description": "Clamp MSS to PMTU for traffic in this zone. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"family": {
 						"type": "string",
@@ -27662,8 +27682,12 @@
 						"description": "DNAT forwards an incoming connection onward. SNAT rewrites the source of forwarded traffic and additionally needs match.dest_zone and match.src_dip; it is the legacy spelling, and LuCI migrates such sections to firewall/nat, so prefer that resource for new source NAT"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": [
+							"boolean",
+							"null"
+						],
+						"default": true,
+						"description": "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"match": {
 						"type": "object",
@@ -27758,7 +27782,7 @@
 							"boolean",
 							"null"
 						],
-						"description": "Enable NAT loopback / hairpinning for this redirect (fw4 default true)"
+						"description": "Enable NAT loopback / hairpinning for this redirect. Unset, it reads null, and fw4 applies true. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"reflection_src": {
 						"type": [
@@ -27867,8 +27891,12 @@
 						"description": "DNAT forwards an incoming connection onward. SNAT rewrites the source of forwarded traffic and additionally needs match.dest_zone and match.src_dip; it is the legacy spelling, and LuCI migrates such sections to firewall/nat, so prefer that resource for new source NAT"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": [
+							"boolean",
+							"null"
+						],
+						"default": true,
+						"description": "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"match": {
 						"type": "object",
@@ -27968,7 +27996,7 @@
 							"boolean",
 							"null"
 						],
-						"description": "Enable NAT loopback / hairpinning for this redirect (fw4 default true)"
+						"description": "Enable NAT loopback / hairpinning for this redirect. Unset, it reads null, and fw4 applies true. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"reflection_src": {
 						"type": [
@@ -28219,8 +28247,12 @@
 						"description": "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": [
+							"boolean",
+							"null"
+						],
+						"default": true,
+						"description": "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"snat_ip": {
 						"type": [
@@ -28380,8 +28412,12 @@
 						"description": "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": [
+							"boolean",
+							"null"
+						],
+						"default": true,
+						"description": "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"snat_ip": {
 						"type": [
@@ -28668,8 +28704,12 @@
 						"default": "any"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": [
+							"boolean",
+							"null"
+						],
+						"default": true,
+						"description": "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					},
 					"runtime": {
 						"type": "object",
@@ -28717,8 +28757,12 @@
 						"default": "any"
 					},
 					"enabled": {
-						"type": "boolean",
-						"default": true
+						"type": [
+							"boolean",
+							"null"
+						],
+						"default": true,
+						"description": "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it."
 					}
 				},
 				"required": [

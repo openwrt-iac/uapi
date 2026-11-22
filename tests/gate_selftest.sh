@@ -117,6 +117,16 @@ p.write_text(s[:j] + '\n\t\tprobe_b: shell_bool(section.probe_b, true),' + s[j:]
 EOF
 }
 
+mut_unannotated_fw_bool_default() {
+	python3 - <<'EOF'
+import pathlib
+p = pathlib.Path('src/resources/firewall.zones.uc'); s = p.read_text()
+i = s.index('function fromUci')
+j = s.index('return {', i) + len('return {')
+p.write_text(s[:j] + '\n\t\tprobe_b: fw_bool(section.probe_b, true),' + s[j:])
+EOF
+}
+
 mut_doc_bad_path()   { printf '\nSee `src/lib/nope.uc`.\n' >> docs/testing.md; }
 mut_doc_bad_symbol() { printf '\nHandled by `values.no_such_helper`.\n' >> docs/testing.md; }
 mut_doc_bad_target() { printf '\nRun `make nope-target`.\n' >> docs/testing.md; }
@@ -654,6 +664,7 @@ probe lint-openapi-shape "a header on a verb that cannot emit it" "attach_mgmt_w
 probe lint-reserved      "an HCL block keyword as a property"  "HCL block keywords"                mut_hcl_keyword
 probe lint-defaults      "a fromUci default, unannotated"      "absent from schema_properties"     mut_unannotated_default
 probe lint-defaults      "an unannotated shell_bool default"   "has fromUci default true but"      mut_unannotated_bool_default
+probe lint-defaults      "an unannotated fw_bool default"      "has fromUci default true but"      mut_unannotated_fw_bool_default
 probe lint-defaults      "default and clear-on-omit together"  ""                                  mut_default_and_clear_on_omit
 probe lint-defaults      "a clear-on-omit read with a fallback" "its fromUci is not"               mut_clear_on_omit_reads_fallback
 # lint-doc-refs carries five distinct checks, so it gets five probes: one passing check

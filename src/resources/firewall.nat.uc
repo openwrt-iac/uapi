@@ -1,5 +1,5 @@
 let values = require('values');
-let normalize_bool = values.normalize_bool;
+let fw_bool = values.fw_bool;
 let as_list = values.as_list;
 
 const TARGETS = [ "SNAT", "MASQUERADE", "ACCEPT" ];
@@ -19,7 +19,7 @@ function fromUci(section) {
 		// fw4 defaults an unset target to masquerade, and coerces anything
 		// outside snat/masquerade/accept to it with a warning.
 		target: values.fw_target(section.target, [ ...TARGETS, "NPT" ], "MASQUERADE") ?? "MASQUERADE",
-		enabled: normalize_bool(section.enabled, true),
+		enabled: fw_bool(section.enabled, true),
 		snat_ip: section.snat_ip ?? null,
 		snat_port: section.snat_port ?? null,
 		match: {
@@ -44,7 +44,7 @@ function toUci(json) {
 	let out = {};
 	if (json.name != null) out.name = json.name;
 	if (json.target != null) out.target = json.target;
-	if (json.enabled != null) out.enabled = json.enabled ? "1" : "0";
+	out.enabled = (json.enabled != null) ? (json.enabled ? "1" : "0") : [];
 	if (is_set(json.snat_ip)) out.snat_ip = json.snat_ip;
 	if (is_set(json.snat_port)) out.snat_port = json.snat_port;
 	let m = json.match ?? {};
@@ -66,8 +66,9 @@ function port_error(field, value, allow_invert, errs) {
 		push(errs, { field, code: p.code, message: p.message });
 }
 
-function validate(json, conn) {
+function validate(json, conn, id, delta, partial) {
 	let errs = [];
+	values.fw_refused_bools(errs, conn, id, delta, partial, [ "enabled" ]);
 
 	let m = json.match ?? {};
 	if (type(m) != "object") {
@@ -173,7 +174,7 @@ return {
 		             description: sprintf("Human-readable label for this NAT rule. A write takes at most %d bytes, because firewall4 renders it into an nftables comment. A name with non-ASCII characters reaches that limit with fewer characters.", values.NAME_MAX) },
 		target:    { type: "string", enum: [ ...TARGETS, "NPT" ], "x-uapi-write": { enum: TARGETS }, default: "MASQUERADE",
 		             description: "SNAT rewrites to snat_ip/snat_port, MASQUERADE rewrites to the outbound interface address, ACCEPT exempts matched traffic from source NAT" },
-		enabled:   { type: "boolean", default: true },
+		enabled:   { "x-uapi-read-nullable": true, type: "boolean", default: true, description: values.FW_BOOL_REFUSED },
 		snat_ip:   { type: ["string", "null"],
 		             description: "IPv4 address to rewrite the source to. Requires target SNAT. On the NPT target that only a read gives, the prefix that firewall4 maps match.src_ip to" },
 		snat_port: { type: ["string", "null"],

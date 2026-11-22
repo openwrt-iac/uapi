@@ -798,6 +798,28 @@ function fw_enum(v, choices) {
 	return v;
 }
 
+// fw4's parse_opt gives its default to an unset bool, and refuses a list or a value that parse_bool
+// refuses, which skips the section, so such a value reads null and not the default. toUci gives a
+// null of such a field as [], or a PATCH of null would keep the value: the handler removes only an
+// option that the toUci of the read gives.
+function fw_bool(v, default_val) {
+	return (v == null) ? default_val : normalize_bool(v, null);
+}
+
+const FW_BOOL_REFUSED = "A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads null and is an error of the section, because fw4 then skips the section. A write of the field replaces such a value, and a null removes it.";
+
+// The read gives null for a bool that fw4 refuses, which the schema takes, so this judges each such
+// option as uci holds it. A PATCH keeps an option that the request does not name, and the sweep
+// judges what uci holds, where a PUT removes each option that it leaves out.
+function fw_refused_bools(errs, conn, id, delta, partial, opts) {
+	if (conn == null || id == null || partial === false) return;
+	let stored = conn.uci_get("firewall", id) ?? {};
+	for (let opt in opts)
+		if (stored[opt] != null && normalize_bool(stored[opt], null) == null && !exists(delta ?? {}, opt))
+			push(errs, { field: opt, code: "invalid_format", live: true,
+			             message: "holds a value that fw4 refuses, so fw4 skips the section: send true, false or null" });
+}
+
 // fw4's parse_target, in its order of choices. fw4 applies its default target, with a warning, to a
 // redirect or a nat rule whose target parses as another one.
 const FW_TARGETS = [ "ACCEPT", "REJECT", "DROP", "NOTRACK", "HELPER", "MARK", "DSCP", "DNAT", "SNAT",
@@ -833,6 +855,7 @@ return {
 	require_present, section_index,
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,
 	MARK_RE, MARK_MATCH_RE, MARK_MAX, masked_value_exceeds, fw_enum, fw_target, fw_family,
+	fw_bool, FW_BOOL_REFUSED, fw_refused_bools,
 	PORT_RE, PORT_MATCH_RE, PORT_MAX, port_problem,
 	PROTO_RE, PROTO_MAX, proto_problem, port_proto_conflict, MUSL_PROTOCOLS,
 	NAME_MAX, DEVICE_MAX,

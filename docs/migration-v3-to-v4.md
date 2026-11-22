@@ -170,6 +170,12 @@ is an error too: nft refuses it, so fw4 applies no ruleset while `syn_flood` is
 on. Such an option reads `null`, and the sweep names the option and says why.
 A write that sends the field replaces the value, and a null removes it.
 
+fw4 skips a `firewall/zones`, `firewall/forwardings`, `firewall/rules`,
+`firewall/redirects` or `firewall/nat` section with a bool that its parser
+refuses, such as an `enabled` of `YES` or a list. Such a bool reads `null` too,
+and the sweep names it. A PATCH that sends the field replaces the value, and a
+PUT that leaves the field out removes it.
+
 A value that LuCI or the daemon takes is no error, so it blocks no write and the
 v4 sweep does not list it. Examples are the `proto` of an interface that uapi
 does not model, such as the `6in4` that LuCI writes or the `qmi` that an LTE
@@ -442,6 +448,21 @@ holds `false` would never send the field, and each other write would answer
 `null` when either holds such a value, and a write of `syn_flood` then replaces
 both. An unset bool reads `false`, as in 3.x.
 
+fw4 refuses the same values in a bool of a zone, a forwarding, a rule, a
+redirect or a nat rule, and skips that section with the warning "skipped due
+to invalid options". 3.x read such a bool as its default, so a rule with
+`enabled 'YES'` read `true` while fw4 skipped it, and the 3.x sweep did not
+list it. v4 reads `null` for `masq` and `mtu_fix` of `firewall/zones`, for
+`enabled` of `firewall/forwardings`, `firewall/rules`, `firewall/redirects` and
+`firewall/nat`, and for `reflection` of `firewall/redirects`, and their schemas
+admit null. The value is an error of the section, so the sweep lists it and a
+PATCH that does not send the field answers 422. A write that sends `true` or
+`false` fixes the section, and a null removes the option. A PUT that leaves
+the field out removes it too. A plan that holds `true` or `false` shows a
+diff, and its apply sends the field and fixes the section. An unset bool reads
+as in 3.x: `false` for `masq` and `mtu_fix`, `true` for `enabled`, and `null`
+for `reflection`.
+
 ## Curated string fields refuse newlines and carriage returns
 
 One check in the type gate now refuses `\n` and `\r` in every curated string on
@@ -613,6 +634,9 @@ stored option, to follow what the daemon does:
 | `firewall/defaults` | `synflood_burst` | a number that fw4 reads in another form, such as `0x10`, ` 16` or `1e3` |
 | `firewall/defaults` | `syn_flood` | `synflood_protect`, which LuCI writes, is set, and `syn_flood` does not read the same value |
 | `firewall/defaults` | `drop_invalid`, `tcp_syncookies`, `flow_offloading`, `flow_offloading_hw`, and `syn_flood` for `synflood_protect` and `syn_flood` | a list, or a value other than `1`, `on`, `true`, `yes`, `0`, `off`, `false` or `no`, which reads null instead of `false` |
+| `firewall/zones` | `masq`, `mtu_fix` | a list, or a value other than `1`, `on`, `true`, `yes`, `0`, `off`, `false` or `no`, which reads null instead of `false` |
+| `firewall/forwardings`, `firewall/rules`, `firewall/redirects`, `firewall/nat` | `enabled` | a list, or a value other than `1`, `on`, `true`, `yes`, `0`, `off`, `false` or `no`, which reads null instead of `true` |
+| `firewall/redirects` | `reflection` | a list, or a value other than `1`, `on`, `true`, `yes`, `0`, `off`, `false` or `no`, which reads null instead of `true` |
 | `firewall/rules`, `firewall/nat`, `firewall/redirects` | `target` | a target in another case or a prefix of one, or for nat and redirects a target that fw4 replaces with its default |
 | `firewall/redirects` | `reflection_src` | a choice in another case or a prefix of one |
 | `firewall/zones`, `firewall/forwardings` | `family` | `all`, `*`, `inet`, or a word with 4 or 6 |
