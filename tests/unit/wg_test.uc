@@ -511,6 +511,34 @@ t.describe('wg.apply against logging wg and ip', () => {
 		                      null, null, null, null, null, null, null, null, null, null, null, null ]);
 	});
 
+	// lookup_ipliteral.c of musl 1.2.5 takes an index on any address, and a name only on a link-local
+	// or multicast link-local one, cut as the kernel reads it.
+	t.it('reads the zone of an IPv6 address as musl does', () => {
+		let cases = {
+			'fd00::1': null, 'vpn.example.org': null, 'host%3': null, '1.2.3.4%3': null,
+			'fe80::1%3': 3, '2001:db8::1%3': 3, '2001:db8::1%0004294967295': 4294967295,
+			'fe80::1%br-lan': 'br-lan', 'febf::1%eth0': 'eth0', 'ff02::1%eth0': 'eth0', 'ff32::1%eth0': 'eth0',
+			'fe80::1%3x': '3x', 'fe80::1%eth0:1': 'eth0', 'fe80::1%abcdefghijklmnopq': 'abcdefghijklmno',
+			'2001:db8::1%x': false, 'fd00::1%eth0': false, 'fec0::1%eth0': false, 'ff05::1%eth0': false,
+			'2001:db8::1%4294967296': false, 'fe80::1%99999999999999999999999': false, 'fe80::1%': false,
+			'fe80::1%..': false, 'fe80::1%.': false, 'fe80::1%a/b': false, 'fe80::1%:1': false,
+		};
+		for (let h, want in cases)
+			t.assert_equal(wg.ipv6_zone(h), want, h);
+	});
+
+	t.it('reads a zone as missing when it names no interface in /sys/class/net', () => {
+		let asked = [];
+		let w = t.load_with_fs({ ...fs, access: (p) => (push(asked, p), p == '/sys/class/net/br-lan' || p == '/sys/class/net/eth0') }, [ 'wg' ]);
+		let cases = {
+			'fe80::1%br-lan': false, 'fe80::1%eth0:1': false, 'fe80::1%3': false, '2001:db8::1%3': false, 'fd00::1': false,
+			'fe80::1%nosuchdev': true, 'fe80::1%../eth0': false, '2001:db8::1%x': false,
+		};
+		for (let h, want in cases)
+			t.assert_equal(w.missing_zone(h), want, h);
+		t.assert_deep_equal(asked, [ '/sys/class/net/br-lan', '/sys/class/net/eth0', '/sys/class/net/nosuchdev' ]);
+	});
+
 	// wireguard.sh gives wg every host, so the apply does too, and a host that does not resolve fails
 	// `wg set`, which the write then restores.
 	t.it('gives wg a host name as it is under wireguard.sh, and asks no resolver', () => {

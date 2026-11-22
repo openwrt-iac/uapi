@@ -394,6 +394,32 @@ t.describe('network.wireguard_peers via handler.make (dynamic-type plumbing)', (
 		}
 	});
 
+	// Both handlers give wg an IPv6 address as it stands, and musl's getaddrinfo refuses one whose zone
+	// it cannot read, so wg refused the config of the whole interface and the restore answered 500.
+	t.it('refuses an IPv6 host whose zone musl refuses, under both handlers', () => {
+		for (let ucode in [ false, true ]) {
+			let m = t.load_with_fs({ ...fs, access: (p) => (ucode && p == '/lib/netifd/proto/wireguard.uc') || p == '/sys/class/net/br-lan' }, [ 'wg' ]);
+			let h = handler.make(t.load_with({ wg: m }, [ '../resources/network.wireguard_peers' ]),
+			                     { tx: { acquire: () => ({}), release: () => null, reload: () => null, check_services: () => null } });
+			for (let host in [ 'fd00::1', 'fe80::1%3', '2001:db8::1%3', 'fe80::1%br-lan', ' fe80::1%br-lan ' ])
+				t.assert_equal(h.patch(with_wg(), ctx(), 'g_existing', { endpoint_host: host }).status, 200, [ ucode, host ]);
+			for (let host in [ '2001:db8::1%x', 'fd00::1%br-lan', 'fe80::1%', '2001:db8::1%4294967296' ])
+				t.assert_deep_equal(fields_of(h.patch(with_wg(), ctx(), 'g_existing', { endpoint_host: host, disabled: true })),
+				                    [ [ 'endpoint_host', 'invalid_format' ] ], [ ucode, host ]);
+			let c = with_wg();
+			let body = { interface: 'wg1', public_key: PK2, allowed_ips: [ '10.42.0.3/32' ], endpoint_host: 'fe80::1%nosuchdev' };
+			t.assert_deep_equal(fields_of(h.create(c, ctx(), body)), [ [ 'endpoint_host', 'conflict' ] ], ucode);
+			t.assert_deep_equal(sort(keys(c._state.uci.network)), [ 'g_existing', 'wg1' ], ucode);
+			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { endpoint_host: 'fe80::1%nosuchdev' })), [ [ 'endpoint_host', 'conflict' ] ], ucode);
+			// An interface exists at one time and not at another, so a stored zone that names none is no
+			// error of the section, and a disabled peer does not reach wg.
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { endpoint_host: 'fe80::1%nosuchdev', disabled: true }).status, 200, ucode);
+			t.assert_equal(h.patch(c, ctx(), 'g_existing', { description: 'x', disabled: false }).status, 200, ucode);
+			c._state.uci.network.g_existing.endpoint_host = '2001:db8::1%x';
+			t.assert_deep_equal(fields_of(h.patch(c, ctx(), 'g_existing', { description: 'y' })), [ [ 'endpoint_host', 'invalid_format' ] ], ucode);
+		}
+	});
+
 	t.it('a write that sends -1 or 0 is refused', () => {
 		let h = make_handler();
 		t.assert_deep_equal(fields_of(h.patch(with_wg(), ctx(), 'g_existing', { persistent_keepalive: -1 })), [ [ 'persistent_keepalive', 'out_of_range' ] ]);

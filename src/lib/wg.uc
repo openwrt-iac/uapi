@@ -154,6 +154,31 @@ function missing_host(host) {
 	return inet_aton(host) == null && index(host, ":") < 0 && lookup(host) == "none";
 }
 
+// The zone of an IPv6 address as musl's getaddrinfo reads it in lookup_ipliteral.c, after the first
+// `%`: digits up to UINT_MAX are an index, which it takes on any address. Any other zone has to be
+// the name of an interface that if_nametoindex finds, on a link-local or multicast link-local address.
+// musl answers EAI_NONAME otherwise, which wg does not retry, and both proto handlers give wg an IPv6
+// address as it stands, so wg refuses the config of the whole interface. The kernel reads 15 bytes of
+// the name and cuts it at a `:`, as for the alias `eth0:1`. The index or that name, false for a zone
+// that musl refuses on any router, or null for a host that is not an IPv6 address with a zone.
+function ipv6_zone(host) {
+	let i = index(host, "%");
+	let words = (i < 0) ? null : values.ipv6_words(substr(host, 0, i));
+	if (words == null) return null;
+	let zone = substr(host, i + 1);
+	if (match(zone, /^[0-9]+$/)) return (int(zone) <= 4294967295) ? int(zone) : false;
+	let name = split(substr(zone, 0, 15), ":")[0];
+	let link_local = (words[0] & 0xffc0) == 0xfe80 || (words[0] & 0xff0f) == 0xff02;
+	return (link_local && name != "" && name != "." && name != ".." && index(name, "/") < 0) ? name : false;
+}
+
+// /sys/class/net holds an entry for each interface name, and the checks above keep the path in it. An
+// alternative name of `ip link property`, which if_nametoindex finds too, has none, so a write refuses it.
+function missing_zone(host) {
+	let zone = ipv6_zone(host);
+	return type(zone) == "string" && fs.access("/sys/class/net/" + zone) !== true;
+}
+
 function handler_entries(v) {
 	if (v == null || v == "") return null;
 	return (type(v) == "array") ? v : split(trim(v), /[[:space:]]+/);
@@ -884,5 +909,5 @@ function interfaces_of(ops) {
 }
 
 return { apply, reconcile, runtime, interfaces_of, settled_up, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
-         keepalive, endpoint_port, handler_drops_key, resolves, missing_host, inet_aton,
+         keepalive, endpoint_port, handler_drops_key, resolves, missing_host, inet_aton, ipv6_zone, missing_zone,
          peer_flag, route_entries, ucode_handler, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };
