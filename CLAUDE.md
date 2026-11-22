@@ -69,9 +69,13 @@ semver impact of a change. These rules decide what the change must carry.
   accepts.
 - **A breaking change goes to the branch of the next major only** (today
   `main`, which carries 4.x, while `v3` carries the 3.x fixes). It needs its
-  issue, an announcement in a released 3.x (`docs/deprecations.md`
-  and the "Upcoming" block of the spec), a section in the migration doc of the
-  major, and a CHANGELOG entry that starts with `BREAKING:`.
+  issue, a section in the migration doc of the major, and a CHANGELOG entry
+  that starts with `BREAKING:`. A removal or a rename of a field, a query
+  parameter or a path that the current major still serves also needs a
+  deprecation in a release of the current major: `deprecated: true` in its
+  spec and a row in `docs/deprecations.md`. Any other breaking change, such as
+  a value that a write now refuses or a read that changes, needs no
+  announcement in an earlier release.
 - **The commit that changes the wire carries the whole change.** It also updates
   the resource schema and its descriptions, `build/openapi.json` (`make
   openapi`), `docs/errors.md` for codes and headers, `docs/resources.md`, and
