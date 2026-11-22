@@ -185,10 +185,27 @@ t.describe('firewall.defaults options that fw4 refuses', () => {
 		                    [ 'out_of_range' ]);
 	});
 
+	t.it('a bool reads null, and an unset one reads false', () => {
+		let response = json(require('fs').readfile("build/openapi.json")).components.schemas.FirewallDefaultsResponse.properties;
+		for (let opts in slice(REFUSED, 2)) {
+			let opt = keys(opts)[0];
+			t.assert_equal(dh.get(box(opts), ctx).body[opt], null, opt);
+			t.assert_true(index(response[opt].type, "null") >= 0, opt);
+			t.assert_equal(dh.get(box({}), ctx).body[opt], false, opt);
+		}
+	});
+
+	t.it('a write of false over a refused bool fixes the section', () => {
+		let c = box({ drop_invalid: 'YES' });
+		t.assert_equal(dh.patch(c, ctx, { drop_invalid: false }).status, 200);
+		t.assert_equal(c._state.uci.firewall.d.drop_invalid, '0');
+		t.assert_deep_equal(dh.sweep(c), []);
+	});
+
 	t.it('a write that names the option replaces the stored value, and a null removes it', () => {
-		let c = box({ synflood_rate: 'abc', synflood_burst: 'abc', drop_invalid: 'YES', syn_flood: 'maybe' });
+		let c = box({ synflood_rate: 'abc', synflood_burst: 'abc', drop_invalid: 'YES', syn_flood: 'maybe', tcp_syncookies: [ '1' ] });
 		t.assert_equal(dh.patch(c, ctx, { synflood_rate: 30, synflood_burst: null,
-		                                  drop_invalid: false, syn_flood: null }).status, 200);
+		                                  drop_invalid: false, syn_flood: null, tcp_syncookies: null }).status, 200);
 		t.assert_deep_equal(c._state.uci.firewall.d, { '.type': 'defaults', '.anonymous': true, input: 'ACCEPT',
 		                                               synflood_rate: '30', drop_invalid: '0' });
 		t.assert_equal(dh.get(c, ctx).body.synflood_rate, '30/second');
@@ -231,6 +248,12 @@ t.describe('firewall.defaults syn_flood says what fw4 applies', () => {
 		t.assert_equal(dh.get(box({ syn_flood: 'yes' }), ctx).body.syn_flood, true);
 	});
 
+	t.it('reads null when fw4 refuses either option', () => {
+		for (let opts in [ { synflood_protect: 'maybe', syn_flood: '1' }, { synflood_protect: '1', syn_flood: 'maybe' },
+		                   { synflood_protect: [ '1' ] } ])
+			t.assert_equal(dh.get(box(opts), ctx).body.syn_flood, null, opts);
+	});
+
 	t.it('a write leaves fw4 applying the value, and true writes what LuCI writes', () => {
 		let c = box({ synflood_protect: '1' });
 		t.assert_equal(dh.patch(c, ctx, { syn_flood: false }).body.syn_flood, false);
@@ -267,12 +290,14 @@ t.describe('firewall.defaults syn_flood says what fw4 applies', () => {
 		t.assert_deep_equal(stored(c), [ null, null ]);
 	});
 
-	// false keeps a stored false, so it leaves synflood_protect, and true over a synflood_protect
-	// that reads true leaves syn_flood.
-	t.it('a write that leaves a refused option in place is refused', () => {
-		t.assert_deep_equal(codes(dh.patch(box({ synflood_protect: 'maybe' }), ctx, { syn_flood: false })), [ "invalid_format" ]);
-		t.assert_deep_equal(codes(dh.patch(box({ synflood_protect: '1', syn_flood: 'maybe' }), ctx, { syn_flood: true })), [ "invalid_format" ]);
-		let c = box({ synflood_protect: '1', syn_flood: 'maybe' });
+	t.it('a write of either value over a refused option replaces both', () => {
+		let c = box({ synflood_protect: 'maybe' });
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: false }).status, 200);
+		t.assert_deep_equal(stored(c), [ null, '0' ]);
+		c = box({ synflood_protect: '1', syn_flood: 'maybe' });
+		t.assert_equal(dh.patch(c, ctx, { syn_flood: true }).status, 200);
+		t.assert_deep_equal(stored(c), [ '1', null ]);
+		c = box({ synflood_protect: '1', syn_flood: 'maybe' });
 		t.assert_equal(dh.patch(c, ctx, { syn_flood: false }).status, 200);
 		t.assert_deep_equal(stored(c), [ null, '0' ]);
 	});
