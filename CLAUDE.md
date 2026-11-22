@@ -94,7 +94,7 @@ semver impact of a change. These rules decide what the change must carry.
   the reason. Write in the migration doc what an upgraded router sees change:
   ETags, stored tokens and their scopes, defaults, ids. Open an issue on each
   downstream consumer that uses the name (`terraform-provider-uapi`, `uapi-mcp`,
-  the Pulumi provider, the org site), and change none of their code.
+  the org site), and change none of their code.
 - **A pagination cursor uses a key that every item has and no two items share.**
   A test reads the second page.
 - **An anonymous uci section has a positional name.** libuci names it at each
