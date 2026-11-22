@@ -280,7 +280,7 @@ unbound.
 | Path | Source of truth | Notes |
 |---|---|---|
 | `packages/installed` | apk DB | `GET` lists, `POST {name}` installs (`apk add`), `DELETE /<name>` removes. |
-| `packages/feeds` | `/etc/apk/repositories.d/*.list` | `POST {name, url}` creates a feed file + `apk update`. |
+| `packages/feeds` | `/etc/apk/repositories.d/*.list` | `GET` lists the feed files and `GET /<id>` reads one. `POST {name, url}` creates a feed file + `apk update`, and `DELETE /<id>` removes one + `apk update`. |
 
 ## Anonymous sections and adoption
 
@@ -356,7 +356,7 @@ composition rules, and stability caveat.
 | `GET /openapi.json` | none | The OpenAPI 3.1 spec. |
 | `GET /schema/<package>/<resource>` | none | One resource's `schema_properties`. `GET /schema` lists all keys. |
 | `GET /uapi/whoami` | any token | Token introspection: token_id, scopes, source_ip, expires_at, allowed_cidrs, last_used_at, last_used_ip. |
-| `GET /uapi/tokens`, `POST /uapi/tokens`, `DELETE /uapi/tokens/<id>` | `uapi:tokens:rw` (or `*:rw`) | HTTP token rotation. POST refuses a scope outside the scope tree with 422, and requires the caller's scopes to cover the requested scopes, equal or narrower. |
+| `GET /uapi/tokens`, `GET /uapi/tokens/<id>`, `POST /uapi/tokens`, `DELETE /uapi/tokens/<id>` | `uapi:tokens:ro` for a GET, `uapi:tokens:rw` for a write (or `*`) | HTTP token rotation. POST refuses a scope outside the scope tree with 422, and requires the caller's scopes to cover the requested scopes, equal or narrower. |
 | `GET /uapi/metrics` | `uapi:metrics:ro` (or `*:ro`) | Prometheus 0.0.4 text. |
-| `GET /uapi/diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, current lock holders. |
+| `GET /uapi/diagnostics` | `uapi:diagnostics:ro` | Version, uptime, loaded resources, the lock files present, `state_dirs`, `limits`, `interrupted_writes`, `recent_errors` and `management_path`. `?validate=1` adds the validation sweep. `docs/operations.md` § Diagnostics has the fields. |
 | `POST /uapi/batch` | each sub-request scope-checked | Multi-package all-or-nothing transaction (max 50 ops). |

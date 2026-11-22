@@ -9,14 +9,16 @@ installed major, additions are backwards-compatible.
 Package version follows semver, with the major version aligned to the API major:
 
 - **MAJOR (`(x+1).0.0`)**: breaking on-the-wire change. A given uapi
-  installation serves exactly one API major; we do NOT mount `/api/v(x+1)/`
-  alongside `/api/v<x>/` in the same binary. Operators who need to keep an old
-  client working keep the previous package version installed (older APKs remain
-  attached to their GitHub Releases at
-  <https://github.com/openwrt-iac/uapi/releases>, and the signed git tag is the
-  canonical contract document).
+  installation serves exactly one API major. We do NOT mount `/api/v(x+1)/`
+  alongside `/api/v<x>/` in the same binary, because two surfaces cost too much
+  on constrained hardware. Operators who need to keep an old client working
+  keep the previous package version installed (older APKs remain attached to
+  their GitHub Releases at <https://github.com/openwrt-iac/uapi/releases>, and
+  the signed git tag is the canonical contract document). Each major has a
+  migration document, such as `docs/migration-v3-to-v4.md`.
 - **MINOR (`x.(y+1).0`)**: backwards-compatible additions only (see below).
-- **PATCH (`x.y.(z+1)`)**: bug fixes only. No surface change.
+- **PATCH (`x.y.(z+1)`)**: bug fixes only, with no surface change, except a
+  tightening that the carve-out under "Breaking changes" allows.
 
 A client tested against `x.y.z` works against every future `x.y'.z'` with `y' >=
 y`.
@@ -50,7 +52,7 @@ Two things follow.
 
 **Minors stay strict, and that is the trade.** Being permissive in a major is
 what lets a
-minor refuse. The carve-outs above are deliberately narrow and their tests are
+minor refuse. The carve-outs below are deliberately narrow and their tests are
 meant to be
 applied literally; when a change does not qualify, the answer is to queue it for
 the major
@@ -143,14 +145,6 @@ rest.
   says which payloads it now refuses, and says why. Unlike the carve-out above,
   it also covers a payload whose state a caller could rely on. 3.2.0's check of
   the IPv6 prefix length in a token's `allowed_cidrs` is the precedent.
-
-## One installation, one API major
-
-There is no parallel mount; we don't carry two surface areas in a single binary
-on resource-constrained hardware. Operators who need to keep a v1 client working
-keep the v1 package installed (the v1.2.1 APK stays available on the feed; the
-signed `v1.2.1` git tag is the canonical v1 contract). The migration table for
-v1 → v2 lives at `docs/migration-v1-to-v2.md`.
 
 ## `/raw/` stability
 
