@@ -1,6 +1,7 @@
 # Curl examples
 
-One script per resource, demonstrating CRUD against a running uapi instance.
+Scripts that call a running uapi instance. Most show one curated resource.
+`adopt.sh` shows adoption of an unmanaged section, and `raw.sh` shows `/raw/`.
 
 Each script requires `UAPI_BASE` and `UAPI_TOKEN` in the environment and fails
 closed if either is unset. They make their requests with `curl -k` so a
@@ -17,6 +18,5 @@ export UAPI_TOKEN=<bearer printed by 'uapi-token create' on the router>
 ./system.sh
 ```
 
-The scripts intentionally do not clean up after themselves on the happy path so
-you can inspect the result in LuCI; each ends with a "to delete: curl ..."
-reminder.
+The scripts do not remove what they create, so you can look at the result in
+LuCI. A script that creates something ends with the command that deletes it.
