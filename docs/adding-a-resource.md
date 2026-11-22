@@ -482,11 +482,12 @@ consumer. The other hooks have more users: `openvpn/instances` declares
   stored value with `fw_refused_bools`. Picking the wide one where the reader
   is narrow reports a section as configured when the daemon ignored the value,
   which is the read-honesty failure principle 4 exists to prevent.
-  `network/interfaces.disabled` and `network/routes.disabled` are the same
-  option name on the same package needing two different helpers, with the
-  measurement in the module comments. Integers and lists that netifd reads go
-  through the same converter: read them with `netifd_int` and
-  `as_word_list_or_null`, as the table in `docs/ucode-quirks.md` says.
+  The netifd of 25.12 compares `disabled` on an interface against `1` only and
+  reads it on a route through the converter, so 3.x read the two with two
+  helpers. netifd `e97e36f` made them agree, and 4.x reads both with
+  `platform_bool`. Integers and lists that netifd reads go through the same
+  converter: read them with `netifd_int` and `as_word_list_or_null`, as the
+  table in `docs/ucode-quirks.md` says.
 - Lift single-value uci list options to JSON arrays (a uci list with one element
   comes through as a string from `cursor.get`; coerce to an array).
 - Nest related fields where it improves readability. `firewall.rules` uses

@@ -1344,7 +1344,7 @@ t.describe('wg names a stored peer that keeps its interface down', () => {
 	});
 	t.it('names no peer that is disabled or has no key, and none of a disabled interface', () => {
 		for (let network in [ { wg1: WG1, mine, bad: { ...bad, disabled: '1' } }, { wg1: WG1, mine, bad: { ...bad, public_key: null } },
-		                      { wg1: { ...WG1, disabled: '1' }, mine, bad } ])
+		                      { wg1: { ...WG1, disabled: '1' }, mine, bad }, { wg1: { ...WG1, disabled: 'true' }, mine, bad } ])
 			t.assert_deep_equal(apply(network, [ set ], UP).result[2], [], network);
 	});
 	t.it('applies one interface of a batch and names the peer that keeps the other down', () => {

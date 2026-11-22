@@ -41,6 +41,24 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING: 4.x needs OpenWrt main or the next release, and 25.12 stays on
+  3.5.0.** 4.x reads `network/interfaces.disabled` as the netifd of OpenWrt
+  main reads it, and the netifd of 25.12 reads it another way. The package
+  depends on a netifd that 25.12 does not have, so apk does not install 4.x on
+  a 25.12 router, and such a router stays on 3.5.0. Move the router to OpenWrt
+  main, or to the next release cut from it, before you install 4.x. Migration
+  note in `docs/migration-v3-to-v4.md`. (#463)
+- **BREAKING: `network/interfaces.disabled` reads a stored `true` as true.**
+  netifd takes `disabled 'true'` on an interface since `e97e36f` (2026-07-16),
+  and does not register the interface. The read took only `1`, so such an
+  interface read `disabled: false` while netifd ignored it. The read now takes
+  `1` and `true`, as for `network/routes` and `network/rules`, and any other
+  value reads false. A write still stores `1` or `0`. A section that stores
+  `true` gets a new ETag once at the upgrade, and a plan that sets `false` for
+  it shows a diff. The kernel apply and `GET /uapi/diagnostics?validate=1` also
+  take such a wireguard interface as disabled, so its peers no longer make a
+  write answer `X-Kernel-Status: blocked`. Migration note in
+  `docs/migration-v3-to-v4.md`. (#463)
 - **BREAKING: a write to a WireGuard interface that a stored peer keeps down
   keeps its commit and answers `X-Kernel-Status: blocked`.** Both proto
   handlers give wg every enabled peer of an interface at once, and wg refuses

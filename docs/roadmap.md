@@ -46,11 +46,12 @@ The section of each release in `CHANGELOG.md` is the full record.
   writer keeps down keeps its commit and answers `X-Kernel-Status: blocked`,
   with the peer in `X-Kernel-Blocked`.
 
-  25.12 keeps `wireguard.sh`, where the half that matters to us remains: the
-  `wg set` apply protects the *write*, not the *boot*. A peer whose endpoint
-  resolves when written and stops resolving later sits in uci, and the next
-  reboot runs it through the proto handler and drops the tunnel. No amount of
-  local code fixes that, because the platform owns the boot path.
+  25.12, which 4.x does not support, keeps `wireguard.sh`, where the half that
+  matters to 3.x remains: the `wg set` apply protects the *write*, not the
+  *boot*. A peer whose endpoint resolves when written and stops resolving later
+  sits in uci, and the next reboot runs it through the proto handler and drops
+  the tunnel. No amount of local code fixes that, because the platform owns the
+  boot path.
 
   The **peer change detection** half needs nothing from us. It was reported
   twice, on the devel list in 2023 and as
@@ -67,18 +68,6 @@ The section of each release in `CHANGELOG.md` is the full record.
   reached the kernel, which is what the transaction contract needs. Retiring the
   local code would take netifd applying peer deltas synchronously, which is not
   on anyone's roadmap.
-
-- **Upstream: widen the interface `disabled` reader once 25.12 carries netifd
-  `e97e36f`.**
-  netifd accepts `disabled 'true'` on an interface since that commit,
-  2026-07-16, so
-  `network/interfaces` can then read the flag with `platform_bool` like routes
-  and rules.
-  As of 2026-10-28, OpenWrt `main` pins a netifd from 2026-10-28, which carries
-  it, but
-  `openwrt-25.12` still pins 2026-02-26, and so does 25.12.6. The unit test that
-  pins the
-  per-type difference is what will say when the widening is right.
 
 - **Upstream: uhttpd serves its request queue last-in first-out.** When every
   `max_requests` handler slot is taken, uhttpd queues a new request and serves
@@ -295,10 +284,6 @@ live in the issues.
 
 **Left the milestone:**
 
-- [Widen `network/interfaces.disabled` to the platform
-  boolean](https://github.com/openwrt-iac/uapi/issues/311): OpenWrt 25.12,
-  which 4.x supports, does not carry netifd `e97e36f`, and the widening is
-  breaking, so it waits for the major after v4.
 - [Ship the standalone confirm
   arm](https://github.com/openwrt-iac/uapi/issues/324): additive, so a 4.x
   minor can ship it, as `POST /uapi/confirm` with the scope `uapi:confirm:rw`.
@@ -361,6 +346,10 @@ live in the issues.
 - [The HTTP token mint takes a scope that the server does not
   know](https://github.com/openwrt-iac/uapi/issues/415): it answers 422, as
   `uapi-token create` refuses it, announced in 3.5.0.
+- [Widen `network/interfaces.disabled` to the platform
+  boolean](https://github.com/openwrt-iac/uapi/issues/311): 4.x needs OpenWrt
+  main or the next release, whose netifd takes `disabled 'true'` on an
+  interface since `e97e36f`, and 25.12 stays on 3.5.0.
 - The mount moves to `/api/v4` and the install hook strips every older prefix,
   as each major moved it before. The v3-to-v4 migration document rides the
   release.
