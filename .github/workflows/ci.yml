@@ -37,9 +37,9 @@ permissions:
 # job used to sit until something else killed it and then report a duration that read like a
 # hang in our own code: the 2026-08-06 Actions incident produced 15 and 45 minute failures
 # with no logs retained, and hours were spent proving the branches were fine. These budgets
-# are roughly 2-3x the observed maxima (lint 0.5m, unit 1.5m, integration 9.3m,
-# verify-arch-build 9.6m), with extra room for a cold SDK cache. Integration on the
-# OpenWrt main snapshot takes about 30m: every peer write restarts the
+# are roughly 2-3x the observed maxima (lint 0.5m, unit 1.5m), with extra room for a cold
+# SDK cache. The VM and SDK jobs run OpenWrt main, the only OpenWrt that 4.x supports.
+# Integration on its snapshot takes about 30m: every peer write restarts the
 # wireguard interface there, and the wireguard tests wait each restart out. Package
 # there takes about 60m on a cold cache: the snapshot SDK download alone took 27m,
 # and the build of the dependencies about 30m. A PR to main restores the SDK that the
@@ -47,10 +47,6 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  OPENWRT_VERSION: 25.12.6
-  OPENWRT_IMAGE_CACHE_KEY: openwrt-25.12.6-x86-64-ext4-combined
 
 jobs:
   unit:
@@ -80,19 +76,7 @@ jobs:
       image: alpine:3.24
     outputs:
       package_changed: ${{ steps.package.outputs.changed }}
-      series: ${{ steps.series.outputs.list }}
     steps:
-      # The OpenWrt series that the VM and SDK jobs run on. main, the 4.x line, runs on both the
-      # stable release and the main snapshot, because it ships on both. Only #311 depends on the
-      # netifd of main, and it is conditional. Every other ref, tags and v3 included, runs on
-      # stable. The stable SDK is
-      # pinned by checksum in build/sdk.sha256. A snapshot has no filename to pin (the gcc
-      # version is part of it), so the main series verifies against the sha256sums published
-      # beside the tarball. Both paths live in tools/openwrt-sdk.sh.
-      - name: Which OpenWrt series?
-        id: series
-        run: |
-          echo 'list=${{ (github.ref_name == 'main' || github.base_ref == 'main') && '["stable","main"]' || '["stable"]' }}' >> "$GITHUB_OUTPUT"
       - name: Install ucode and tooling
         run: apk add --no-cache ucode make grep findutils python3 py3-pip git
       - name: Install the OpenAPI conformance validator
@@ -111,7 +95,7 @@ jobs:
         id: package
         if: github.event_name == 'pull_request'
         run: |
-          if git diff --quiet HEAD^ HEAD -- src build/openapi.json build/openwrt build/sdk.sha256 \
+          if git diff --quiet HEAD^ HEAD -- src build/openapi.json build/openwrt build/openwrt-snapshot-usign.pub \
               files cli/uapi-token Makefile VERSION tools tests/vm \
               tests/integration/release_apk_smoke.sh .github/workflows/ci.yml; then
             echo changed=false >> "$GITHUB_OUTPUT"
@@ -130,17 +114,9 @@ jobs:
         run: make stage
 
   integration:
-    # The stable leg keeps the plain name, which the rulesets require.
-    name: ${{ matrix.series == 'stable' && 'integration' || format('integration ({0})', matrix.series) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [unit, lint]
-    strategy:
-      fail-fast: false
-      matrix:
-        series: ${{ fromJSON(needs.lint.outputs.series) }}
-    env:
-      OPENWRT_SERIES: ${{ matrix.series }}
     steps:
       - uses: actions/checkout@v7
 
@@ -157,15 +133,8 @@ jobs:
         # reports "already satisfied" and never pulls `referencing`, which 4.18+ needs.
         run: pip install --break-system-packages --quiet --upgrade jsonschema
 
-      # The snapshot changes daily, so a cached copy would be stale under a
-      # fresh key; the 15 MB download from the CDN costs less than the doubt.
-      - name: Cache OpenWrt image (stable series)
-        if: env.OPENWRT_SERIES == 'stable'
-        uses: actions/cache@v6
-        with:
-          path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
-          key: ${{ env.OPENWRT_IMAGE_CACHE_KEY }}
-
+      # No cache: the snapshot changes daily, so a cached copy would be stale under a
+      # fresh key, and the 15 MB download from the CDN costs less than the doubt.
       - name: Setup VM image
         run: tests/vm/setup.sh
 
@@ -191,7 +160,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.series == 'stable' && 'bench-run' || format('bench-run-{0}', matrix.series) }}
+          name: bench-run
           path: bench/run-*.json
           if-no-files-found: ignore
 
@@ -224,12 +193,6 @@ jobs:
     # PR downloaded the snapshot SDK, which the CDN cuts a dozen times on the way.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3')
     needs: lint
-    strategy:
-      fail-fast: false
-      matrix:
-        series: ${{ fromJSON(needs.lint.outputs.series) }}
-    env:
-      OPENWRT_SERIES: ${{ matrix.series }}
     steps:
       - uses: actions/checkout@v7
 
@@ -246,8 +209,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: build/sdk
-          # The tarball name and the start of its sha256: a stable bump, a snapshot toolchain
-          # bump and a daily snapshot rebuild each rotate the entry.
+          # The tarball name and the start of its sha256: a toolchain bump and a daily snapshot
+          # rebuild each rotate the entry.
           key: ${{ steps.sdk.outputs.key }}
 
       - name: Install tooling
@@ -256,9 +219,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             curl zstd build-essential libncurses-dev libssl-dev python3 \
-            unzip gawk gettext xsltproc rsync wget
+            unzip gawk gettext xsltproc rsync wget signify-openbsd
 
-      - name: Download SDK (verified by sha256)
+      - name: Download SDK (verified by sha256 and the snapshot key)
         if: steps.sdkcache.outputs.cache-hit != 'true'
         run: tools/openwrt-sdk.sh fetch x86/64 build/sdk
 
@@ -280,18 +243,13 @@ jobs:
 
   # A job apart from release-apk so that a pull request builds under the read-only token.
   package:
-    name: ${{ matrix.series == 'stable' && 'package' || format('package ({0})', matrix.series) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     needs: [unit, lint]
-    strategy:
-      fail-fast: false
-      matrix:
-        series: ${{ fromJSON(needs.lint.outputs.series) }}
-    # The job always runs and each step checks BUILD. A matrix job that its `if` skips keeps its
-    # name unevaluated, so the required `package` check never reported and blocked the PR.
+    # The job always runs and each step checks BUILD. When it was a matrix job, its `if` skipped
+    # it with its name unevaluated, so the required `package` check never reported and blocked
+    # the PR (#406).
     env:
-      OPENWRT_SERIES: ${{ matrix.series }}
       BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || needs.lint.outputs.package_changed == 'true' }}
     steps:
       # verify-tag needs the tag object, which a checkout of depth 1 does not bring. The '0' is a
@@ -325,11 +283,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             qemu-system-x86 qemu-utils openssh-client curl zstd \
             build-essential libncurses-dev libssl-dev python3 \
-            unzip gawk gettext xsltproc rsync wget
+            unzip gawk gettext xsltproc rsync wget signify-openbsd
 
-      # The pin check lives in tools/openwrt-sdk.sh: the stable series fails this step when
-      # build/sdk.sha256 does not pin the resolved tarball. The assignments carry that failure,
-      # where an echo of the command substitution would exit 0 and hand the cache an empty key.
+      # The assignments carry a failure of tools/openwrt-sdk.sh, where an echo of the command
+      # substitution would exit 0 and hand the cache an empty key.
       - name: Resolve the SDK tarball
         if: env.BUILD == 'true'
         id: sdk
@@ -351,19 +308,12 @@ jobs:
           # warm: uapi is arch-all, and an older SDK beats a download that the CDN cuts.
           restore-keys: ${{ steps.sdk.outputs.tarball }}-
 
-      - name: Download SDK if cache miss (verified by sha256)
+      - name: Download SDK if cache miss (verified by sha256 and the snapshot key)
         if: env.BUILD == 'true'
         run: |
           if [ ! -d build/sdk/staging_dir ]; then
             tools/openwrt-sdk.sh fetch x86/64 build/sdk
           fi
-
-      - name: Cache OpenWrt VM image (stable series)
-        if: env.BUILD == 'true' && env.OPENWRT_SERIES == 'stable'
-        uses: actions/cache@v6
-        with:
-          path: tests/vm/openwrt-${{ env.OPENWRT_VERSION }}.img.gz
-          key: ${{ env.OPENWRT_IMAGE_CACHE_KEY }}
 
       - name: Stage package (uses checked-in build/openapi.json)
         if: env.BUILD == 'true'
@@ -392,7 +342,7 @@ jobs:
         if: env.BUILD == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.series == 'stable' && 'uapi-apk' || format('uapi-apk-{0}', matrix.series) }}
+          name: uapi-apk
           path: ${{ steps.find_apk.outputs.apk }}
 
       # SBOM (SPDX 2.3). Generated against the staged tree, with the built
@@ -407,7 +357,7 @@ jobs:
         if: env.BUILD == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.series == 'stable' && 'uapi-sbom' || format('uapi-sbom-{0}', matrix.series) }}
+          name: uapi-sbom
           path: build/sbom.spdx.json
 
       # Smoke test the built APK in a fresh VM before publishing anywhere.
@@ -530,30 +480,29 @@ jobs:
   # compare against, so there is no reference build here. `sha256sum` in the
   # find-APK step prints a digest for a human to read; nothing enforces it.
   #
-  # What it does enforce, by hard-failing, is what the 2.4.1 release actually
-  # relied on: every arch in the matrix has its SDK tarball pinned by checksum,
-  # in build/sdk.sha256 for the stable series or in the sha256sums published
-  # beside the snapshot for the main series (see tools/openwrt-sdk.sh), the
-  # downloaded tarball matches that pin, the package cross-builds under all
-  # three SDKs, and each build yields an .apk. That is worth keeping on its
-  # own; a build that breaks under one arch's SDK fails here rather than at an
-  # operator's `apk add`.
+  # What it does enforce, by hard-failing, is that at a download the sha256sums
+  # published beside each snapshot SDK carry a signature of the OpenWrt snapshot
+  # key that build/openwrt-snapshot-usign.pub pins, the downloaded tarball
+  # matches those sums (see tools/openwrt-sdk.sh), the package cross-builds
+  # under all three SDKs, and each build yields an .apk. That is worth keeping
+  # on its own; a build that breaks under one arch's SDK fails here rather than
+  # at an operator's `apk add`.
   #
   # Making it prove arch-independence would mean adding an x86_64 leg and
   # comparing digests across legs. Runs on tag push in parallel with release-apk
   # so neither blocks the other.
   #
-  # To enable additional arches: add an entry to the matrix below and a
-  # corresponding sha256 line to build/sdk.sha256 (per-arch SDK tarball
-  # checksum; the main series needs no repo pin, see tools/openwrt-sdk.sh).
+  # To enable additional arches: add an entry to the matrix below. The one
+  # snapshot key covers every target.
   # The fail-fast: false flag lets the operator see all arch results in one CI
   # run instead of stopping at the first failure.
   verify-arch-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # A snapshot SDK download took 27 to 46m with the CDN cutting it, as in warm-sdk-cache.
+    timeout-minutes: 120
     needs: [unit, lint, integration]
     # Tag pushes auto-fire. Manual workflow_dispatch also fires so operators
-    # can validate the per-arch SDK pins against a candidate before tagging.
+    # can validate the per-arch SDKs against a candidate before tagging.
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
@@ -573,7 +522,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             curl zstd build-essential libncurses-dev libssl-dev python3 \
-            unzip gawk gettext xsltproc rsync wget
+            unzip gawk gettext xsltproc rsync wget signify-openbsd
 
       - name: Resolve the SDK tarball
         id: sdk

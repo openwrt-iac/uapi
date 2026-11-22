@@ -11,6 +11,9 @@ PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
 include $(INCLUDE_DIR)/package.mk
 
+# uapi 4.x supports OpenWrt main and the release cut from it, and not 25.12. netifd e97e36f
+# (committed 2026-07-17) is in main and not in 25.12, whose netifd is 2026.02.26~cbb83a18, so apk
+# refuses this package on 25.12, and an upgrade there keeps 3.x.
 define Package/uapi
   SECTION:=admin
   CATEGORY:=Administration
@@ -19,6 +22,7 @@ define Package/uapi
   PKGARCH:=all
   DEPENDS:=+uhttpd +uhttpd-mod-ucode +ucode +ucode-mod-ubus +ucode-mod-uci \
            +ucode-mod-fs +ucode-mod-digest +ucode-mod-log +ucode-mod-io +rpcd-mod-iwinfo
+  EXTRA_DEPENDS:=netifd (>=2026.07.17)
 endef
 
 define Package/uapi/description

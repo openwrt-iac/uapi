@@ -59,6 +59,16 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   take such a wireguard interface as disabled, so its peers no longer make a
   write answer `X-Kernel-Status: blocked`. Migration note in
   `docs/migration-v3-to-v4.md`. (#463)
+- **BREAKING: the package refuses OpenWrt 25.12.** uapi 4.x supports OpenWrt
+  main and the release cut from it. Routers on 25.12 stay on 3.5.0. The package
+  now depends on `netifd>=2026.07.17`, the commit date of netifd e97e36f, which
+  OpenWrt main has since its netifd `2026.09.11~06d06c86`. 25.12.6 has netifd
+  `2026.02.26~cbb83a18-r2`. On 25.12, `apk add` of a 4.x APK stops with
+  `unable to select packages` and changes nothing, and `apk upgrade` keeps 3.x.
+  CI builds, tests and releases 4.x with the snapshot SDK and image of OpenWrt
+  main only. It checks the snapshot SDK against the usign key of the OpenWrt
+  snapshot builds in `build/openwrt-snapshot-usign.pub`, which replaces the
+  25.12 checksums of `build/sdk.sha256`. (#465)
 - **BREAKING: a write to a WireGuard interface that a stored peer keeps down
   keeps its commit and answers `X-Kernel-Status: blocked`.** Both proto
   handlers give wg every enabled peer of an interface at once, and wg refuses
@@ -412,6 +422,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The SBOM lists every dependency of the package.** `tools/gen_sbom.sh` read
+  only the first line of `DEPENDS`, so the SBOM of 3.5.0 left out
+  `ucode-mod-fs`, `ucode-mod-digest`, `ucode-mod-log`, `ucode-mod-io` and
+  `rpcd-mod-iwinfo`. It now reads the whole list, and the `netifd` of
+  `EXTRA_DEPENDS`. (#465)
 - **`POST /system/password` answers 422 for a user that does not exist.** uapi
   checked only the shape of `user`, so for an unknown user busybox passwd
   exited 1, and uapi answered 500 `internal_error` and logged it at

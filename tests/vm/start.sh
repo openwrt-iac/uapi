@@ -2,7 +2,7 @@
 set -eu
 cd "$(dirname "$0")"
 
-IMAGE=openwrt-${OPENWRT_SERIES:-stable}.img
+IMAGE=openwrt-main.img
 PIDFILE=qemu.pid
 LOGFILE=qemu.log
 

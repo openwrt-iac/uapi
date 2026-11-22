@@ -43,16 +43,17 @@ trap 'rm -f "$TMP"' EXIT
 
 DOC_NAMESPACE="https://github.com/openwrt-iac/uapi/sbom/${VERSION}"
 
-# Extract dependencies from the package Makefile DEPENDS line.
-# Strip leading + and the line-continuation backslashes; produce one dep per line.
+# The dependencies of the package Makefile, one per line: DEPENDS with its continuation lines,
+# and the package that EXTRA_DEPENDS names, without its version constraint.
 MAKEFILE="build/openwrt/uapi/Makefile"
 DEPS=""
 if [ -r "$MAKEFILE" ]; then
     DEPS=$(awk '
-        /DEPENDS:=/ { in_d=1; sub(/.*DEPENDS:=/, ""); }
+        /^[ \t]*(EXTRA_)?DEPENDS:=/ { in_d=1; sub(/.*DEPENDS:=/, ""); }
         in_d {
-            gsub(/\\$/, ""); gsub(/\+/, ""); print;
-            if (!match($0, /\\$/)) in_d=0;
+            more = /\\$/;
+            gsub(/\\$/, ""); gsub(/\+/, ""); gsub(/\([^)]*\)/, ""); print;
+            if (!more) in_d=0;
         }
     ' "$MAKEFILE" | tr ' ' '\n' | grep -v '^$' | sort -u)
 fi

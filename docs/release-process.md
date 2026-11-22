@@ -12,10 +12,13 @@ architecture (x86_64, aarch64, arm, mips, etc.) at the same OpenWrt major
 version. We do NOT build a separate APK per arch; the OpenWrt apk-tools
 install handles arch-neutral packages directly.
 
-The `package` job builds a single APK (against the x86_64 SDK because
-that's the simplest to host on GitHub runners) and smoke-tests it in an x86
-QEMU VM, and the `release-apk` job attaches that one artifact to the GitHub
-Release. The apk feed itself is rebuilt by
+The `package` job builds a single APK (against the x86_64 snapshot SDK of
+OpenWrt main, because x86_64 is the simplest to host on GitHub runners) and
+smoke-tests it in an x86 QEMU VM that boots the snapshot image of OpenWrt main,
+and the `release-apk` job attaches that one artifact to the GitHub Release.
+uapi 4.x supports OpenWrt main and the release cut from it, and not 25.12, so
+no job of the 4.x line uses a 25.12 SDK or image. The `v3` branch keeps its own
+`ci.yml`, which builds and tests 3.x on 25.12. The apk feed itself is rebuilt by
 `openwrt-iac/openwrt-iac.github.io`'s `publish.yml` workflow, which
 pulls the asset of the Release that GitHub marks Latest from each source
 repo listed in its `feed.yml`. uapi no longer owns a gh-pages feed of its own.
@@ -23,19 +26,19 @@ repo listed in its `feed.yml`. uapi no longer owns a gh-pages feed of its own.
 The `verify-arch-build` matrix job cross-compiles against the SDKs for
 `aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` on tag push. It does
 not prove arch-neutrality, despite what this said until 2.5.0: it
-compares no digests and has no x86_64 leg to compare against. It fails
-the release on a missing per-arch SDK pin, a tarball that does not match
-its pin, a cross-build that breaks under any of the three, or a build
-that produces no `.apk` - which is what 2.4.1 actually relied on. Per-arch SDK
-tarball sha256 lives in
-`build/sdk.sha256`; refresh those lines whenever `OPENWRT_VERSION` bumps
-(the matrix in `.github/workflows/ci.yml` names the targets, and
-`tools/openwrt-sdk.sh` resolves each URL from the pin).
+compares no digests and has no x86_64 leg to compare against. It uses
+the snapshot SDKs of OpenWrt main, and fails the release, at an SDK
+download, on `sha256sums` without a valid signature of the OpenWrt
+snapshot key that `build/openwrt-snapshot-usign.pub` pins, on a tarball
+that does not match those sums, on a cross-build that breaks under any
+of the three, or on a build that produces no `.apk`. The matrix in
+`.github/workflows/ci.yml` names the targets, and `tools/openwrt-sdk.sh`
+resolves each SDK from the `sha256sums` of its target.
 
 ### Pre-tag arch validation
 
 `verify-arch-build` also accepts `workflow_dispatch`, so you can validate
-the SDK pins against a candidate without tagging:
+the snapshot SDKs against a candidate without tagging:
 
 ```
 gh workflow run ci.yml --ref main
@@ -45,10 +48,10 @@ Use `--ref v3` before a 3.x release. This fires the
 `unit + lint + integration + package + verify-arch-build`
 chain of a tag push, minus `release-apk`, which publishes, and minus the
 signature check of `package`, which runs only on a tag ref.
-Useful right after bumping `OPENWRT_VERSION` to confirm the new
-per-arch sha256 lines actually match upstream. A run on `main` also saves
-the three SDKs in the cache, which a tag can restore. A tag saves none,
-because no other ref can read a cache that a tag saves.
+The snapshot SDKs change daily, so run it on the day of the tag. A run
+on `main` also saves the three SDKs in the cache, which a tag can restore
+while the snapshot is the same. A tag saves none, because no other ref
+can read a cache that a tag saves.
 
 Operators who want a runtime per-arch smoke test (the CI matrix only
 verifies compile) can run
@@ -216,13 +219,16 @@ that names `main` names `v3` for it.
    `verify-arch-build` still uploads its per-arch APKs as workflow artifacts.
 8. **Watch the tag's CI run.** The `package` job runs (in order):
    - tag signature verification
-   - reproducible-SDK pin check (against `build/sdk.sha256`)
-   - SDK download + sha256 verify, on a miss of the SDK cache
+   - resolution of the x86_64 snapshot SDK of OpenWrt main from its
+     `sha256sums`
+   - on a miss of the SDK cache, SDK download, with the signature of the
+     `sha256sums` checked against `build/openwrt-snapshot-usign.pub` and the
+     tarball checked against the sums
    - `make stage` (populate `build/openwrt/uapi/files`)
    - `make package/uapi/compile` in the SDK
    - APK and SBOM upload as workflow artifacts
-   - VM smoke test (`tests/integration/release_apk_smoke.sh`), including the
-     upgrade from the 3.2.0 APK
+   - VM smoke test (`tests/integration/release_apk_smoke.sh`) on the snapshot
+     image of OpenWrt main, including the upgrade from the 3.2.0 APK
 
    Once `package` and `integration` pass, `release-apk` creates the GitHub
    Release and attaches the APK and the SBOM (always; RCs get `--prerelease`).
@@ -240,21 +246,26 @@ that names `main` names `v3` for it.
 
 ## Reproducible builds
 
-The SDK pin in `build/sdk.sha256` records the exact OpenWrt SDK tarball
-URL + sha256 used for the release. CI verifies the checksum before
-unpacking. An independent verifier can:
+A release builds with the snapshot SDK of OpenWrt main of its day, or an
+older one from the SDK cache. OpenWrt rebuilds the snapshot SDK daily
+under the same name and deletes the previous one, so nobody can download
+the SDK of a release again, and the APK bytes cannot be rebuilt from the
+same SDK later. `build/openwrt-snapshot-usign.pub` pins the key that signs
+the checksums of every snapshot SDK: CI checks that OpenWrt built the SDK,
+not which build it was.
+
+What a verifier can rebuild is the content of the package. The SBOM of a
+release lists the sha256 of each file that the APK installs:
 
 ```
-sha256sum -c build/sdk.sha256             # verify the SDK was the expected one
+git checkout v<version>
 make stage                                # populate files/
-( cd build/sdk && make package/uapi/compile )
-sha256sum build/sdk/bin/packages/*/base/uapi-*.apk   # compare against the released APK
+make sbom                                 # build/sbom.spdx.json, without the APK hash
 ```
 
-The build is deterministic: file ordering in the APK is sorted; the
-package Makefile sets `PKG_RELEASE` so the version string doesn't change
-between local and CI builds; `BUILD_DATE` can be overridden in CI if
-needed for fully byte-identical builds.
+The `files` of that SBOM must match the `files` of the SBOM attached to
+the release. Only the creation time and the hash and size of the APK
+differ: for 3.5.0, all 80 files match.
 
 ## SBOM
 
@@ -362,10 +373,11 @@ Before tagging:
   `main` for 4.x, `v3` for 3.x, `release/<major>.<minor>.x` for a patch on an
   older major. All three are built on push.
 - [ ] `.github/release-signers.asc` contains your GPG public key block.
-- [ ] `build/sdk.sha256` pins ALL four arch SDKs at the right
-  `OPENWRT_VERSION` (x86_64 + aarch64_generic + arm_cortex-a7 + mips_24kc).
+- [ ] For 4.x: the netifd floor in `build/openwrt/uapi/Makefile` is above
+  the netifd of the `openwrt-25.12` branch of OpenWrt (`docs/packaging.md`,
+  The netifd floor).
 - [ ] `gh workflow run ci.yml --ref main` green (`--ref v3` for 3.x) -
-  validates the per-arch SDK pins via `verify-arch-build` without consuming a
+  validates the per-arch SDKs via `verify-arch-build` without consuming a
   tag.
 
 After tagging, before announcing:

@@ -75,17 +75,19 @@ investigate before pushing.
    from remote → 403 `tls_required`.
 6. **Adoption flow.** Pre-existing anonymous section → `managed: false` → PUT
    denied with `unmanaged_resource` → `POST .../adopt` → writable.
-7. **APK install smoke test.** Fresh OpenWrt 25.12 → align the uhttpd packages
-   on the feed, as `docs/installation.md` asks → `apk add uapi` → the
+7. **APK install smoke test.** Fresh OpenWrt main snapshot → align the uhttpd
+   packages on the feed, as `docs/installation.md` asks → `apk add uapi` → the
+   package depends on a netifd version, which keeps it off 25.12 → the
    uci-defaults hook wires uhttpd and creates the token store → curl works. It
    also upgrades from 3.2.0, the last release whose package shipped
    `/etc/config/uapi`: with tokens, which the store keeps, with the store as
    shipped, which the hook creates again, and with `--purge`, which loses the
    tokens. Each time it checks that no `.apk-new` is left and that `sysupgrade
    -l` lists the store. CI runs it in the `package` job, on the APK that the job
-   builds with the pinned SDK: on a release tag, on `workflow_dispatch`, and on
-   a pull request that changes what goes into the APK, how it is built, or this
-   test, by the list of paths in the `lint` job of `.github/workflows/ci.yml`.
+   builds with the snapshot SDK of OpenWrt main: on a release tag, on
+   `workflow_dispatch`, and on a pull request that changes what goes into the
+   APK, how it is built, or this test, by the list of paths in the `lint` job of
+   `.github/workflows/ci.yml`.
    The list holds `src/`, because the test runs `uapi-token` and the API from
    the APK, and both load the modules of `src/lib`. A pull request that changes
    none of these paths, such as one of docs only, runs none of this, because the
@@ -628,14 +630,17 @@ bodies failed.
 ## CI shape
 
 - Every commit/PR: unit suite + lint.
-- The OpenWrt that the VM and SDK jobs use follows the ref: `main` (the branch
-  or a PR base), the 4.x line, runs them on both the stable release and the
-  OpenWrt main snapshot, and every other ref, `v3` and tags included, on the
-  stable release alone.
-  The stable release is pinned by checksum in `build/sdk.sha256`. The snapshot
-  is verified against the `sha256sums` published beside each artifact, because
-  a moving target has no filename to pin. `tools/openwrt-sdk.sh`
-  resolves both, and `tests/vm/setup.sh` picks the image the same way.
+- The VM and SDK jobs run OpenWrt main: the daily snapshot image and the
+  snapshot SDK. uapi 4.x supports OpenWrt main and the release cut from it, and
+  not 25.12, and its package refuses a 25.12 router (see `docs/packaging.md`,
+  The netifd floor). The `v3` branch has its own `ci.yml`, which runs 25.12.
+  OpenWrt rebuilds a snapshot SDK daily under the same name and deletes the
+  previous one, so the repository cannot pin its checksum. It pins the key:
+  `tools/openwrt-sdk.sh` checks the signature of the `sha256sums` published
+  beside the SDK against `build/openwrt-snapshot-usign.pub`, the usign key of
+  the OpenWrt snapshot builds, and then the tarball against those sums.
+  `tests/vm/setup.sh` downloads the image again when the server holds a newer
+  one.
 - Every PR: the changelog check (`.github/workflows/changelog.yml`), which fails
   when `## [Unreleased]` in `CHANGELOG.md` has no entry ending in the PR's
   number and the PR has no `changelog-not-needed` label.
@@ -645,23 +650,25 @@ bodies failed.
   `package` job, which builds the APK and runs the APK install smoke test above
   on it, the upgrades from 3.2.0 included. That is most code PRs: 211 of the 259
   commits on main between 1 August and 1 November 2026 touched one of the paths.
-  The job runs beside `integration`, and on a hit of the SDK cache it took 10 to
-  12 minutes at the last release tags, so it adds little to the wait. On any
-  other PR the job runs too, but each of its steps checks `BUILD` and skips, so
-  it builds nothing.
+  The job runs beside `integration`, and on a hit of the SDK cache it took 3 to
+  4 minutes on the pull requests of November 2026, so it adds little to the
+  wait. On any other PR the job runs too, but each of its steps checks `BUILD`
+  and skips, so it builds nothing.
 - `package` is a required check: the `main` and `v3` rulesets require `unit`,
   `lint`, `integration`, `entry` and `package`, with the branch up to date, so a
   red `package` blocks a merge. A PR that does not change the APK still merges,
   because its `package` job runs with no build and passes. The job has no
-  job-level `if`. Its name is an expression of the matrix, and GitHub does not
-  evaluate the name of a job that its `if` skips, so the required `package`
-  check never reported and the PR could not merge (#406). The `lint` job decides
+  job-level `if`. When it ran a matrix of two OpenWrt series, its name was an
+  expression of the matrix, and GitHub does not evaluate the name of a job that
+  its `if` skips, so the required `package` check never reported and the PR
+  could not merge (#406). The `lint` job decides
   whether `package` builds. An error of `git diff` there counts as a change and
   builds the package, and a failure of that step or of the checkout fails
   `lint`, which is required.
-- Release tag: + multi-arch verify-build (cross-compile sanity) + `package` job
-  + release-apk job (publishes the APK that `package` tested to the GitHub
-  Release, with CHANGELOG-extracted notes).
+- Release tag: + multi-arch verify-build (cross-compile sanity against the
+  snapshot SDKs of three targets) + `package` job + release-apk job (publishes
+  the APK that `package` built with the snapshot SDK and tested on the snapshot
+  image to the GitHub Release, with CHANGELOG-extracted notes).
 
 ## OpenAPI emission
 
