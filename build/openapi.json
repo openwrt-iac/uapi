@@ -28810,7 +28810,7 @@
 					"syn_flood": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable SYN flood protection. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
+						"description": "Enable SYN flood protection. fw4 applies `synflood_protect`, which LuCI writes, and `syn_flood` only when uci holds no `synflood_protect`, and a read gives the value that fw4 applies. A write of true stores `synflood_protect` 1 and removes `syn_flood`, as LuCI does. A write of false removes `synflood_protect` and stores `syn_flood` 0, where LuCI removes both. A null removes both. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, in either option is an error of the section: fw4 stops while it reads the defaults and applies no ruleset. The read gives false when such a value is in the option that fw4 applies."
 					},
 					"drop_invalid": {
 						"type": "boolean",
@@ -28911,7 +28911,7 @@
 					"syn_flood": {
 						"type": "boolean",
 						"default": false,
-						"description": "Enable SYN flood protection. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, reads false and is an error of the section: fw4 stops while it reads the defaults and applies no ruleset."
+						"description": "Enable SYN flood protection. fw4 applies `synflood_protect`, which LuCI writes, and `syn_flood` only when uci holds no `synflood_protect`, and a read gives the value that fw4 applies. A write of true stores `synflood_protect` 1 and removes `syn_flood`, as LuCI does. A write of false removes `synflood_protect` and stores `syn_flood` 0, where LuCI removes both. A null removes both. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, in either option is an error of the section: fw4 stops while it reads the defaults and applies no ruleset. The read gives false when such a value is in the option that fw4 applies."
 					},
 					"drop_invalid": {
 						"type": "boolean",

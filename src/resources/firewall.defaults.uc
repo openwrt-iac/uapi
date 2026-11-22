@@ -39,8 +39,24 @@ function fw_burst(v) {
 // value that parse_bool, parse_int or parse_limit refuses.
 function fw4_refuses(opt, v) {
 	if (type(v) != "string") return v != null;
-	if (index(BOOLS, opt) >= 0) return normalize_bool(v, null) == null;
-	return (opt == "synflood_burst") ? +v != +v : fw_limit(v) == null;
+	if (opt == "synflood_burst") return +v != +v;
+	if (opt == "synflood_rate") return fw_limit(v) == null;
+	return normalize_bool(v, null) == null;
+}
+
+// fw4 applies synflood_protect, which LuCI writes, and reads syn_flood only when uci holds no
+// synflood_protect.
+function syn_flood_of(section) {
+	return normalize_bool(section.synflood_protect ?? section.syn_flood, false);
+}
+
+// LuCI sets synflood_protect and removes syn_flood for true, as this does, and removes both for false.
+// The handler removes an option on each write where toUci gives it as [], so a false that gave both
+// as [] would remove a stored syn_flood '0', such as 3.x wrote, on each write of another field. So
+// false stores syn_flood '0', and the handler removes it on a change to true, which does not give it.
+function syn_flood_opts(v) {
+	if (v == null) return { synflood_protect: [], syn_flood: [] };
+	return v ? { synflood_protect: "1" } : { syn_flood: "0" };
 }
 
 function fromUci(section) {
@@ -51,7 +67,7 @@ function fromUci(section) {
 		input: values.fw_enum(section.input, POLICIES) ?? null,
 		output_policy: values.fw_enum(section.output, POLICIES) ?? null,
 		forward: values.fw_enum(section.forward, POLICIES) ?? null,
-		syn_flood: normalize_bool(section.syn_flood, false),
+		syn_flood: syn_flood_of(section),
 		drop_invalid: normalize_bool(section.drop_invalid, false),
 		synflood_burst: fw_burst(section.synflood_burst),
 		synflood_rate: (rate != null) ? sprintf("%s/%s", rate.rate, rate.unit) : null,
@@ -63,11 +79,10 @@ function fromUci(section) {
 }
 
 function toUci(json) {
-	let out = {};
+	let out = syn_flood_opts(json.syn_flood);
 	if (json.input != null)    out.input = json.input;
 	if (json.output_policy != null) out.output = json.output_policy;
 	if (json.forward != null)  out.forward = json.forward;
-	if (json.syn_flood != null)    out.syn_flood = json.syn_flood ? "1" : "0";
 	if (json.drop_invalid != null) out.drop_invalid = json.drop_invalid ? "1" : "0";
 	// A read gives null for these only where uci holds nothing or a value that validate() refuses
 	// unless the request names the field, so the empty list, which the handler removes, removes a
@@ -89,13 +104,23 @@ function validate(json, conn, id, delta) {
 		             message: "overflows 64 bits in the kernel with the burst, so nft refuses the limit and fw4 applies no ruleset while syn_flood is on: send another rate or a smaller burst" });
 	if (conn == null || id == null) return errs;
 	// The read cannot show a value that fw4 refuses in the type of its field, so this judges what
-	// uci holds for each option that the request does not name. A request that names one replaces
-	// it, or removes it with a null.
+	// uci holds for each option that the request does not replace. A request that names a field
+	// replaces its option, or removes it with a null. A write of syn_flood replaces only the options
+	// that toUci gives for the stored value or for the new one, so true over a stored
+	// synflood_protect '1' leaves syn_flood as it is.
 	let stored = conn.uci_get("firewall", id) ?? {};
-	for (let opt in [ ...BOOLS, "synflood_burst", "synflood_rate" ]) {
+	let replaced = { ...(delta ?? {}) };
+	if (exists(replaced, "syn_flood")) {
+		delete replaced.syn_flood;
+		replaced = { ...replaced, ...syn_flood_opts(syn_flood_of(stored)), ...syn_flood_opts(json.syn_flood) };
+	}
+	for (let opt in [ ...BOOLS, "synflood_protect", "synflood_burst", "synflood_rate" ]) {
 		let v = stored[opt];
-		if (v == null || exists(delta ?? {}, opt)) continue;
-		if (fw4_refuses(opt, v))
+		if (v == null || exists(replaced, opt)) continue;
+		if (opt == "synflood_protect" && fw4_refuses(opt, v))
+			push(errs, { field: "syn_flood", code: "invalid_format", live: true,
+			             message: "synflood_protect, which fw4 reads before syn_flood, holds a value that fw4 refuses, so fw4 stops while it reads the defaults and applies no ruleset: send true or null" });
+		else if (fw4_refuses(opt, v))
 			push(errs, { field: opt, code: "invalid_format", live: true,
 			             message: "holds a value that fw4 refuses, so fw4 stops while it reads the defaults and applies no ruleset: send a valid value or null" });
 		else if (opt == "synflood_burst" && fw_burst(v) == null)
@@ -128,7 +153,7 @@ return {
 		forward:            { "x-uapi-read-nullable": true, type: "string", enum: POLICIES,
 		                      description: "Unset, fw4 applies DROP, here and in each firewall/zones section without its own `forward`." },
 		syn_flood:          { type: "boolean", default: false,
-		                      description: "Enable SYN flood protection." + BOOL_REFUSED },
+		                      description: "Enable SYN flood protection. fw4 applies `synflood_protect`, which LuCI writes, and `syn_flood` only when uci holds no `synflood_protect`, and a read gives the value that fw4 applies. A write of true stores `synflood_protect` 1 and removes `syn_flood`, as LuCI does. A write of false removes `synflood_protect` and stores `syn_flood` 0, where LuCI removes both. A null removes both. A stored list, or a value other than 1, on, true, yes, 0, off, false or no, in either option is an error of the section: fw4 stops while it reads the defaults and applies no ruleset. The read gives false when such a value is in the option that fw4 applies." },
 		drop_invalid:       { type: "boolean", default: false,
 		                      description: "Drop packets with invalid conntrack state." + BOOL_REFUSED },
 		synflood_burst:     { "x-uapi-read-nullable": true, type: "integer", minimum: 0, maximum: 4294967295,

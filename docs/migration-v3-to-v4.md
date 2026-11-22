@@ -368,6 +368,23 @@ that refuses a payload that produced broken state.
 A `firewall/defaults.synflood_burst` reads as fw4 parses it, so `0x10` reads 16
 and `1e3` reads 1000, where 3.x read null.
 
+LuCI's zones form writes `synflood_protect` and removes `syn_flood`. fw4 applies
+`synflood_protect`, and reads `syn_flood` only when uci holds no
+`synflood_protect`. 3.x read only `syn_flood`, so after LuCI turned the
+protection on, `firewall/defaults.syn_flood` read `false` while fw4 protected.
+v4 reads the value that fw4 applies. The 3.5.0 notice did not cover this read.
+A plan that holds `false` from a 3.x read of such a section shows a diff, and
+its apply turns the protection off. Set it to `true` in the plan to keep the
+protection.
+
+A write of true now stores `synflood_protect '1'` and removes `syn_flood`, as
+LuCI does. A write of false removes `synflood_protect` and stores `syn_flood
+'0'`, where LuCI removes both. A null removes both. In 3.x, a write over a
+stored `synflood_protect` changed only `syn_flood`, so it answered 200 and fw4
+kept the value of `synflood_protect`. A `synflood_protect` that fw4 refuses,
+such as `maybe` or a list, is an error of `syn_flood` that blocks every write
+of the section that does not replace it.
+
 ## Curated string fields refuse newlines and carriage returns
 
 One check in the type gate now refuses `\n` and `\r` in every curated string on
@@ -536,6 +553,7 @@ daemon does:
 | `firewall/zones` | `input`, `output_policy`, `forward` | absent |
 | `firewall/defaults` | `synflood_rate` | any rate: a number, such as `25`, reads as the string `25/second` instead of an integer, and a rate with a unit, such as `25/s`, or after spaces or a `!`, reads with the whole unit instead of null |
 | `firewall/defaults` | `synflood_burst` | a number that fw4 reads in another form, such as `0x10`, ` 16` or `1e3` |
+| `firewall/defaults` | `syn_flood` | `synflood_protect`, which LuCI writes, is set, and `syn_flood` does not read the same value |
 | `firewall/rules`, `firewall/nat`, `firewall/redirects` | `target` | a target in another case or a prefix of one, or for nat and redirects a target that fw4 replaces with its default |
 | `firewall/redirects` | `reflection_src` | a choice in another case or a prefix of one |
 | `firewall/zones`, `firewall/forwardings` | `family` | `all`, `*`, `inet`, or a word with 4 or 6 |
