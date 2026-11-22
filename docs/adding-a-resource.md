@@ -506,8 +506,8 @@ Smushed uci names (`dynamicdhcp`, `commonname`, `expandhosts`,
    mental model between the API surface and what an operator sees on
    the router.
 2. **The rename cost is real.** Every wire-surface rename takes a
-   migration-guide entry, breaks downstream clients, and forces an
-   RC cycle. The consistency gain doesn't pay for the disruption when
+   migration-guide entry, breaks downstream clients, and waits for the
+   next major. The consistency gain doesn't pay for the disruption when
    the existing name is already canonical to uci.
 
 Three name shapes WILL be renamed:
