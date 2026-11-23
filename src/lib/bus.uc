@@ -240,8 +240,8 @@ function connect(opts) {
 			if (!load(pkg)) return null;
 			return cursor.foreach(pkg, sec_type, fn);
 		},
-		// The ucode wifi-scripts, which OpenWrt 25.12 and main build by default, give the daemon no WEP
-		// key, so the SSID runs open whatever the daemon supports. The shell scripts set WEP up when the
+		// The ucode wifi-scripts, which OpenWrt builds by default, give the daemon no WEP key, so the
+		// SSID runs open whatever the daemon supports. The shell scripts set WEP up when the
 		// daemon has it, which the -vwep probe of LuCI's getFeatures finds. A request probes each once.
 		wep_support: function(daemon) {
 			if (!exists(wep, daemon))

@@ -170,8 +170,8 @@ const CASES = [
 		           preshared_key: WG_KEY, endpoint_host: '198.51.100.7', endpoint_port: '51820' },
 	},
 	{
-		// The forms netifd and wireguard.sh read beyond plain decimals and lists: a table alias,
-		// hex integers, and scalars holding several words.
+		// The forms netifd reads beyond plain decimals and lists: a table alias, hex integers, and
+		// scalars holding several words.
 		file: "network.routes.uc", id: "rt2", pkg: "network",
 		section: { type: 'blackhole', '.type': 'route', interface: 'lan', target: '10.8.0.0/24', table: 'local',
 		           metric: '0x10', mtu: '0x5dc', disabled: '1' },

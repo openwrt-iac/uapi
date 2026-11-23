@@ -811,6 +811,18 @@ another value for the same stored option, to follow what the daemon does:
 | `uhttpd/instances` | `listen_http`, `listen_https` | an option or an entry of several words |
 | `network/routes` | `type` | a number from 1 to 9, in decimal, hex or octal as strtoul reads it, such as `6` or `010` |
 | `network/interfaces` | `disabled` | `true`, which reads true: netifd `e97e36f` disables the interface for it, and the netifd of 25.12 did not |
+| `network/interfaces` | `listen_port` | a service name, such as `openvpn`, which reads null instead of its port from `/etc/services` or -1, or a number that ucode's `int()` reads in another way than 3.x, such as `0x10`, which reads 0, or `1194x`, which reads 1194, both -1 in 3.x |
+
+`network/interfaces.listen_port` follows the wireguard handler of OpenWrt main.
+netifd parses no listen port, and the handler gives wg the number that ucode's
+`int()` reads from the stored value, so for a service name wg gets no port and
+listens on a port that the kernel picks. Such a name no longer reads -1, and a
+write of the interface, or a PATCH that switches it to wireguard, no longer
+answers 422 for it. A PUT of the read removes the name, with no change for wg. A
+stored number outside 0 to 65535 still reads -1 and blocks every write of the
+interface, since wg refuses the whole config for it. A PATCH that switches to
+wireguard over such a hidden number now also answers 422 when it sends null:
+send a port, or switch with a PUT, which removes it (#471).
 
 A section whose read changes gets a new ETag once, at the upgrade. A write that
 sends an `If-Match` from before the upgrade answers 412 `precondition_failed`.

@@ -298,8 +298,8 @@ config token 'ci_bot'
 - Salt is 64 random bits (16 hex chars); hash is `sha256(salt || ":" || token)`.
 - `/etc/config/uapi` has mode 0600, which the install hook sets, and is no
   file of the package, so apk keeps it across upgrades and removal.
-  sysupgrade keeps it because base-files of OpenWrt 25.12.5 lists all of
-  `/etc/config/` in its keep.d, and `/lib/upgrade/keep.d/uapi` names it
+  sysupgrade keeps it because base-files lists all of `/etc/config/` in its
+  keep.d, and `/lib/upgrade/keep.d/uapi` names it
   while the package is installed.
 - last-used tracking is throttled to ~1 write/minute per token via a tmpfs
   sentinel (`/var/run/uapi-token-update/<token-id>`, or the sha256 of a

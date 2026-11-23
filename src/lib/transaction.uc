@@ -282,12 +282,11 @@ function given_up(i) {
 }
 
 // The services that POST /uapi/services/{name}/recover takes: the ones that uapi reloads and whose
-// init script sets respawn on every instance that it starts, on OpenWrt 25.12 and main. network,
-// uhttpd and dropbear qualify too, but the stop acts on the whole service: it cuts off the request
-// that asked for it, or stops the dropbear that serves the management SSH session, which a start
-// that fails leaves down. `service list` shows an instance that procd gave up on as it shows one
-// without respawn that ended, since instance_dump() writes no `halt`, so only these services tell
-// the two apart.
+// init script sets respawn on every instance that it starts. network, uhttpd and dropbear qualify
+// too, but the stop acts on the whole service: it cuts off the request that asked for it, or stops
+// the dropbear that serves the management SSH session, which a start that fails leaves down.
+// `service list` shows an instance that procd gave up on as it shows one without respawn that ended,
+// since instance_dump() writes no `halt`, so only these services tell the two apart.
 const RECOVERABLE = [ "dnsmasq", "lldpd", "mwan3", "odhcpd", "prometheus-node-exporter-lua", "snmpd", "sysntpd",
                       "unbound", "vnstat" ];
 
@@ -543,16 +542,13 @@ function recover_service(conn, svc, params) {
 // interface whose kernel did not get an endpoint that the write stored, which an
 // `ok` would hide. It wins over `partial` too, because a skip still shows: the
 // skipped interface is a target of the write that X-Kernel-Applied does not name.
-// An interface that a stored peer keeps down is `blocked` even where 25.12 applied
-// the write to it, since it does not come up at its next start.
 function _kernel_status(ops, kernel) {
 	let held = uniq(map(kernel.blocked, (b) => split(b, "/")[0]));
 	let targets = uniq([ ...wg.interfaces_of(ops), ...held ]);
-	let landed = filter(kernel.applied, (i) => index(held, i) < 0);
 	if (length(targets) == 0) return "no_kernel";
-	if (length(landed) == 0) return (length(held) > 0) ? "blocked" : "skipped";
+	if (length(kernel.applied) == 0) return (length(held) > 0) ? "blocked" : "skipped";
 	if (length(kernel.omitted) > 0) return "omitted";
-	return (length(landed) == length(targets)) ? "ok" : "partial";
+	return (length(kernel.applied) == length(targets)) ? "ok" : "partial";
 }
 
 function _finalize_after_reload(reload_err, restore_fn, body, services, ops, kernel) {
@@ -676,7 +672,7 @@ function _make_restore(conn, reload, services, wg_reconcile, ops, watch) {
 		let r = reload(services, watch.budget);
 		if (type(r) == "string") return r;
 		let err = (r == null) ? run_check(watch, services) : null;
-		return err ?? wg_reconcile(conn, wg.interfaces_of(ops), ops) ?? r;
+		return err ?? wg_reconcile(conn, wg.interfaces_of(ops)) ?? r;
 	};
 }
 

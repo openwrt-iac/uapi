@@ -411,6 +411,33 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   section no longer blocks a `wireless/devices` write that turns its radio on,
   and the validation sweep marks its errors `live: false`. A write to it is
   still checked as mode `ap`. (#404)
+- **The code and the spec texts for OpenWrt 25.12 are removed.** 4.x does not
+  install on 25.12, so uapi no longer looks for the WireGuard handler that
+  netifd runs, and drops the rules of `wireguard.sh`: the nslookup check of an
+  endpoint name before the commit, the `wg set` apply and the reads of that
+  handler, and the parts of `X-Kernel-Status: blocked` that only 25.12
+  answered. The descriptions of `X-Kernel-Status`, `X-Kernel-Applied`,
+  `dhcp/servers.dhcpv4`, `network/interfaces.mtu` and the fields of
+  `network/wireguard_peers` lose their 25.12 sentences. No answer changes on an
+  OpenWrt main router that has wireguard-tools. On one without it, uapi read
+  and checked the peers by the rules of `wireguard.sh`, which main does not
+  ship, and now uses those of the handler that wireguard-tools installs.
+  (#470)
+- **BREAKING: `network/interfaces.listen_port` reads as the wireguard handler
+  gives it to wg.** netifd parses no listen port, and the handler of OpenWrt
+  main gives wg the number that ucode's `int()` reads from the stored value. A
+  service name, such as `openvpn`, gives wg no port, so wg listens on a port
+  that the kernel picks. The read gave the port of the name from
+  `/etc/services`, such as 1194, or -1 for a name that does not resolve, and
+  now gives null. A write of the interface no longer answers 422
+  `out_of_range` while uci holds such a name, and a PATCH that switches to
+  wireguard no longer answers 422 `conflict` for it. A PUT of the read removes
+  the name, with no change for wg. A value that `int()` reads as a number, such
+  as `0x10` or `1194x`, read -1 and now reads that number, 0 and 1194. A stored
+  number outside 0 to 65535 still reads -1 and keeps both 422s, since wg refuses
+  the whole config for it, and a PATCH that switches to wireguard over such a
+  hidden number now answers 422 for a null too: send a port, or switch with a
+  PUT. Migration note in `docs/migration-v3-to-v4.md`. (#471) (#470)
 
 ### Removed
 

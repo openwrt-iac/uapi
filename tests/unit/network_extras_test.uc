@@ -261,8 +261,7 @@ t.describe('network.interfaces dns items stay type-checked centrally', () => {
 });
 
 // netifd compares the interface flag against "1" and "true" (e97e36f, 2026-07-16), and route
-// and rule go through the boolean blob converter, which takes the same two. The netifd of 25.12
-// compares the interface flag against "1" only, so this test pins the reader of OpenWrt main.
+// and rule go through the boolean blob converter, which takes the same two.
 t.describe('disabled reads "1" and "true" as netifd does, on interfaces, routes and rules', () => {
 	let ifaces = loadfile('src/resources/network.interfaces.uc')();
 	let conn = ubus.stub({ uci: {} });

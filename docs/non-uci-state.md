@@ -133,8 +133,8 @@ read-only collection, and a writable one puts it in its item view.
   rpcd-mod-luci reads it for LuCI.
 - **Lock.** None; reads only.
 - **Format.** odhcpd writes one line for each lease: `# <device> <duid> <iaid>
-  <hostname> <valid until> <id> <length> <address>/<length> [...]`, the same in
-  25.12 and on OpenWrt main. A length of 128 is an address (`IA_NA`), any other
+  <hostname> <valid until> <id> <length> <address>/<length> [...]`. A length of
+  128 is an address (`IA_NA`), any other
   a delegated prefix (`IA_PD`). The read gives one entry for each address or
   prefix. It skips the line of a DHCPv4 lease that odhcpd serves, which has
   `ipv4` for the iaid, the hosts lines, and any line whose fields do not parse,

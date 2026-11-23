@@ -257,7 +257,7 @@ qualify:
 
 - a value that the daemon refuses or cannot use, such as a stored `mtu` below
   68, a route `table` of 0, or the `listen_port` -1 that a read gives for a
-  service name that /etc/services does not know,
+  stored number outside 0 to 65535,
 - a value that LuCI or the daemon takes and uapi does not write, such as a
   `network/interfaces.proto` that uapi does not model, the list that uci holds
   for a `wireless/interfaces` text option, or a `mwan3/interfaces.probe_count`

@@ -108,10 +108,10 @@ r=$(send PUT network/devices/uapi55p "$r")
 	|| fail "PUT of the read did not write two ports: $r $(uci_show uapi55p.ports)"
 wait_for "the bridge lost a member after the PUT" '[ "$(members)" = "[\"uapi55a\",\"uapi55b\"]" ]'
 
-echo "--- a scalar allowed_ips reads as the prefixes wireguard.sh makes of it ---"
+echo "--- a scalar allowed_ips reads as the prefixes the handler makes of it ---"
 wait_for "wg did not get both prefixes" \
 	'$SSH "wg show uapi55w allowed-ips" | grep -q "10.253.62.0/24 10.253.63.0/24"'
-wait_for "wireguard.sh did not route both prefixes" \
+wait_for "the handler did not route both prefixes" \
 	'[ "$(routes | grep -c "^10.253.6[23].0/24 dev uapi55w")" = 2 ]'
 r=$(read_back network/wireguard_peers/uapi55peer)
 printf '%s' "$r" | jq -e '.allowed_ips == ["10.253.62.0/24","10.253.63.0/24"]' >/dev/null || fail "allowed_ips read wrong: $r"

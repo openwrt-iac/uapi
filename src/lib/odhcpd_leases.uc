@@ -4,8 +4,9 @@ let fs = require('fs');
 // <length>`, then ` <address>/<length>` for each address or prefix, and `ipv4` for the iaid on a
 // DHCPv4 lease that it serves. The length is 128 for an address. rpcd-mod-luci reads the file the
 // same way, from the leasefile of each odhcpd section, else from /tmp/odhcpd.leases. A lease reads as
-// one entry for each of its addresses or prefixes. The hostname is the client's, and odhcpd of 25.12
-// writes it unescaped, so a line whose other fields do not parse is skipped.
+// one entry for each of its addresses or prefixes. The hostname is the client's, and an odhcpd
+// before 68f382690b (2026-06-27) writes it unescaped, so a line whose other fields do not parse is
+// skipped.
 function read(conn) {
 	let paths = [];
 	conn.uci_foreach("dhcp", "odhcpd", (s) => { if (type(s.leasefile) == "string") push(paths, s.leasefile); });

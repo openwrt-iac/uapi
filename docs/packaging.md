@@ -289,8 +289,8 @@ fixed the uhttpd config. Reorder only with care.
 apk keeps the token store at `/etc/config/uapi`, because it is no file of the
 package, and `apk del --purge` keeps it too. To wipe it: `rm /etc/config/uapi`
 after removal. `apk del` also removes `/lib/upgrade/keep.d/uapi`, and a
-sysupgrade still keeps the store, because base-files of OpenWrt 25.12.5 lists
-all of `/etc/config/` in `/lib/upgrade/keep.d/base-files`.
+sysupgrade still keeps the store, because base-files lists all of
+`/etc/config/` in `/lib/upgrade/keep.d/base-files`.
 
 ## Upgrade contract
 
@@ -325,7 +325,7 @@ keeps every file that `/etc/sysupgrade.conf` and `/lib/upgrade/keep.d/*` name.
 `Package/uapi/conffiles` in the OpenWrt Makefile still lists `/etc/config/uapi`:
 for a listed conffile that the package does not ship, the build writes its path
 into `/lib/upgrade/keep.d/uapi`, as it does for the certificate and key of
-uhttpd. base-files of OpenWrt 25.12.5 lists all of `/etc/config/` in
+uhttpd. base-files lists all of `/etc/config/` in
 `/lib/upgrade/keep.d/base-files`, so a sysupgrade keeps the store without that
 entry too. The entry makes the package name its own store, so that its backup
 does not depend on a list of base-files. `tests/unit/package_test.uc` fails when

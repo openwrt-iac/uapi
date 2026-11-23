@@ -1,4 +1,3 @@
-let fs = require('fs');
 let values = require('values');
 let strict_bool = values.strict_bool;
 let ids = require('ids');
@@ -97,9 +96,19 @@ function applies(field, proto) {
 // an option that the handler declares as a list, and it publishes each declaration in
 // get_proto_handlers: 6in4, gre, ipip and vxlan declare ipaddr as a string, and LuCI writes it as an
 // option for them. Every handler that declares one of these as a string reads it from what netifd
-// hands it. wireguard.sh declares addresses as a string and reads the list from uci, so the
-// declaration does not tell for addresses.
+// hands it. The ucode handler of wireguard declares no option and reads addresses from uci, so no
+// declaration tells for addresses.
 const LIST_OPTIONS = { ipaddrs: "ipaddr", ip6addrs: "ip6addr", ip6prefix: "ip6prefix" };
+
+// netifd parses no listen_port: the wireguard handler gets the option as uci holds it and writes
+// `ListenPort=%d` with ucode's int() of it, so `0x10` gives 0, `010` gives 10 and `1194x` gives
+// 1194. A name or a list gives no number and port 0, so wg listens on a port that the kernel picks,
+// as with no option. wg refuses a port outside 0 to 65535, with the whole config, which reads -1.
+function listen_port(v) {
+	let n = (type(v) == "string") ? int(v) : null;
+	if (type(n) != "int") return null;
+	return (n >= 0 && n <= 65535) ? n : -1;
+}
 
 const OVPN_BOOL = " Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag.";
 const OVPN_FILE = " The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists.";
@@ -210,8 +219,7 @@ function fromUci(section, conn) {
 		// active config, which is the one thing a read must never do.
 		//
 		// netifd compares the option against "1" and, since e97e36f (2026-07-16), "true", and
-		// takes anything else as enabled. The netifd of 25.12 compares against "1" only, and
-		// left an interface with `disabled 'true'` registered and running.
+		// takes anything else as enabled.
 		disabled: platform_bool(section.disabled, false),
 		ip4table: section.ip4table ?? null,
 		ip6table: section.ip6table ?? null,
@@ -231,7 +239,7 @@ function fromUci(section, conn) {
 		reqprefix: section.reqprefix ?? null,
 		reqaddress: section.reqaddress ?? null,
 		sourcefilter: (section.sourcefilter != null) ? platform_bool(section.sourcefilter, true) : null,
-		listen_port: values.service_port(section.listen_port, () => fs.readfile("/etc/services"), -1),
+		listen_port: listen_port(section.listen_port),
 		addresses: as_word_list_or_null(section.addresses),
 		nohostroute: strict_bool(section.nohostroute),
 		has_private_key: (section.private_key != null && section.private_key != ""),
@@ -343,9 +351,6 @@ function toUci(body) {
 	if (json.sourcefilter != null) out.sourcefilter = json.sourcefilter ? "1" : "0";
 	if (json.private_key != null) out.private_key = json.private_key;
 	if (json.listen_port != null) out.listen_port = "" + json.listen_port;
-	// A PATCH deletes only what the read of the old proto shows, so a switch from static could not
-	// remove a hand-written listen_port without this clear.
-	else if (exists(json, "listen_port")) out.listen_port = [];
 	if (type(json.addresses) == "array" && length(json.addresses) > 0)
 		out.addresses = json.addresses;
 	if (json.nohostroute != null) out.nohostroute = json.nohostroute ? "1" : "0";
@@ -532,18 +537,18 @@ function validate(json, conn, id, delta, partial) {
 	// A name that the server generates has no stored options.
 	let name = id ?? json.id;
 	let old = (json.proto == "wireguard" && conn != null && name != null) ? conn.uci_get(PKG, name) : null;
-	// The schema allows -1 because a read reports a port name that /etc/services does not resolve
-	// as -1.
+	// The schema allows -1 because a read reports a stored port outside 0 to 65535 as -1.
 	if (ok("listen_port") && json.listen_port === -1)
 		push(errs, { field: "listen_port", code: "out_of_range",
-		             message: "must be from 0 to 65535: -1 is how a port name that /etc/services does not resolve reads, and wg cannot bring the interface up with it" });
-	// A PATCH keeps an option that it leaves out, and the read of a proto without listen_port hides
-	// it, so the check above cannot see a hand-written value that a switch to wireguard keeps. LuCI
-	// saves such a switch and refuses the value at the next save of its wireguard form.
-	if (partial && old != null && !exists(json, "listen_port") && !exists(named, "listen_port")
-	    && values.service_port(old.listen_port, () => fs.readfile("/etc/services"), -1) === -1)
+		             message: "must be from 0 to 65535: -1 is how a stored port outside that range reads, and wg cannot bring the interface up with it" });
+	// A PATCH keeps an option that it leaves out, and deletes only what the read of the old proto
+	// shows. That read hides listen_port, so the check above cannot see a hand-written value that a
+	// switch to wireguard keeps, and a null in the switch cannot remove it. LuCI saves such a switch
+	// and refuses the value at the next save of its wireguard form.
+	if (partial && old != null && !applies("listen_port", old.proto) && json.listen_port == null
+	    && listen_port(old.listen_port) === -1)
 		push(errs, { field: "listen_port", code: "conflict",
-		             message: "must be sent in a PATCH that switches to wireguard: uci holds a listen_port that /etc/services does not resolve, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535 or null" });
+		             message: "must be sent as a port in a PATCH that switches to wireguard: uci holds a listen_port outside 0 to 65535, which the read of the old proto does not show, and wg cannot bring the interface up with it. Send a port from 0 to 65535, or switch with a PUT, which removes it" });
 	// odhcp6c takes -P<len> or -P<prefix>/<len>, and LuCI documents both forms.
 	let prefix = (type(json.reqprefix) == "string") ? replace(json.reqprefix, /(\/[0-9]+):[0-9A-Fa-f]{1,8}$/, "$1") : null;
 	if (ok("reqprefix") && prefix != null && index(prefix, "/") != -1 && !is_valid_ipv6_cidr(prefix))
@@ -551,8 +556,8 @@ function validate(json, conn, id, delta, partial) {
 		             message: "must be auto, no, a prefix length, or an IPv6 prefix such as 2001:db8::/56" });
 	// The schema allows the whole range so that a stored value reads as it is. ppp.sh hands the
 	// mtu to pppd, which exits outside 128..16384 and leaves the interface down. Elsewhere netifd
-	// applies a device mtu only from 68 up, and wireguard.sh applies a smaller one, which leaves
-	// the device with no IPv4 address while netifd reports the interface up.
+	// applies a device mtu only from 68 up, and the wireguard handler applies a smaller one, which
+	// leaves the device with no IPv4 address while netifd reports the interface up.
 	if (type(json.mtu) == "int") {
 		if (json.proto == "ppp" || json.proto == "pppoe") {
 			if (json.mtu < 128 || json.mtu > 16384)
@@ -680,7 +685,7 @@ return {
 		ip6weight: { type: ["integer", "null"], minimum: -2147483648, maximum: 2147483647, "x-uapi-write": { minimum: 0 },
 		             description: "Assignment preference: when several interfaces share a prefix, the ones with a higher weight get their subnet first." },
 		mtu:       { type: ["integer", "null"], minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 68 },
-		             description: "MTU that netifd applies to the interface's devices, from 68 up: the device named by `device` when it has no `config device` section of its own (a dotted VLAN such as `br-lan.10` included), and every device that joins the interface later, such as a Wi-Fi netdev, which then lowers a bridge it joins. A device with its own section keeps its own settings: set its MTU on network/devices, after adopting an anonymous section. On ppp and pppoe the value also goes to pppd, which takes 128 to 16384. wireguard.sh applies it to the tunnel itself. A stored value outside these ranges reads as it is, and a write outside them answers 422." },
+		             description: "MTU that netifd applies to the interface's devices, from 68 up: the device named by `device` when it has no `config device` section of its own (a dotted VLAN such as `br-lan.10` included), and every device that joins the interface later, such as a Wi-Fi netdev, which then lowers a bridge it joins. A device with its own section keeps its own settings: set its MTU on network/devices, after adopting an anonymous section. On ppp and pppoe the value also goes to pppd, which takes 128 to 16384. The wireguard handler applies it to the tunnel itself. A stored value outside these ranges reads as it is, and a write outside them answers 422." },
 		auto:      { type: "boolean", default: true,
 		             description: "Bring this interface up at boot" },
 		disabled:  { type: "boolean", default: false,
@@ -691,7 +696,7 @@ return {
 		               description: "WireGuard private key; accepted on write, masked on read. A PATCH or PUT that switches the interface to another proto removes it." },
 		has_private_key: { type: "boolean", readOnly: true },
 		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
-		                description: "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write answers 422 while the interface holds -1. A PATCH that switches to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it." },
+		                description: "WireGuard listen port. 0 or unset lets the kernel pick one. netifd parses no listen_port, and the proto handler gives wg the number that ucode's int() reads from the stored value, so `0x10` reads 0 and `010` reads 10. A service name that uci stores, such as `openvpn`, reads null: the handler gives wg no port for it, and wg listens on a port that the kernel picks. A PUT of the read removes the name, with no change for wg. -1 reads for a stored number outside 0 to 65535, for which wg refuses the config of the whole interface, so the interface does not come up. A write answers 422 while the interface holds -1. A PATCH that switches to wireguard and does not send a port also answers 422 while uci holds such a number, which the read of the old proto does not show: send a port, or switch with a PUT, which removes it." },
 		nohostroute:  { type: "boolean",
 		                description: "Suppress the host route that wireguard adds to a peer endpoint and openvpn to its remote server. Only a stored `1` reads true, which is the value that openvpn-hotplug compares it with." },
 		ip4table:     { type: ["string", "null"],

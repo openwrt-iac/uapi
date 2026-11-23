@@ -121,12 +121,11 @@ report.
 A small write only fills the stdio buffer, so `write()` answers its full length,
 and a file's `close()` ignores the result of `fclose`. Neither reports a write
 that the filesystem cannot hold. A `flush()` before the close does, but which
-way round depends on the ucode. On OpenWrt 25.12, with ucode 2026.01.16, a flush
-answers `true` when it works and `null` when it fails, with the error in
+way round depends on the ucode. ucode fixed it on 2025-11-27, and since then a
+flush answers `true` when it works and `null` when it fails, with the error in
 `fs.error()`. ucode 0.0.20250529, which Alpine 3.24 ships and the unit job of CI
 runs, answers `null` from a flush that worked and `true` from one that failed,
-measured on `/dev/full`. ucode fixed this on 2025-11-27, before OpenWrt
-25.12.0-rc1.
+measured on `/dev/full`.
 
 uapi therefore checks no `flush()` result. A write that must catch a full
 filesystem compares the size of the file on disk with the length of what it
@@ -266,13 +265,8 @@ daemons agree.
 **Pick the row, do not pick a default.** This table previously said
 "`platform_bool`
 for netifd-owned fields and `normalize_bool` for the rest", and that "the rest"
-produced a bug in roughly forty places at once. The worst was `disabled` on a
-wireguard peer: `wireguard.sh` reads it with `config_get_bool`, so
-`option disabled 'yes'` means disabled, while `platform_bool` reported enabled
-and
-the next write pushed `disabled='0'` to uci and the peer into the kernel. Find
-the
-reader before choosing, and cite it in a comment when it is not obvious.
+produced a bug in roughly forty places at once. Find the reader before
+choosing, and cite it in a comment when it is not obvious.
 
 The libvalidate row is now read, not guessed, in ubox `6f78fa4` (2025-10-30, the
 25.12.5 SDK). It has two steps. First, `dt_type_bool()` in `validate/validate.c`
@@ -345,23 +339,17 @@ with spaces, so it splits a list entry that holds several words, where
 value as the shell gets it, split at a tab and a newline too, and
 `lldpd/config.interface`, `dhcp/hosts.macs` and `dhcp/hosts.tag` use it, where
 LuCI's `L.toArray` keeps the entry whole. `config_get` leaves out an empty list
-entry, as `append` adds nothing for it. `wireguard.sh` does not split a peer's
-`allowed_ips` for wg: it turns each space into a comma, printf %b expands the
-line, and wg cuts it at a NUL byte and at `#`, splits it at commas and strips
-the
-rest of the whitespace, so `\054` separates two prefixes, a tab joins two
-prefixes into one entry, and a second space adds an empty one, which wg refuses.
+entry, as `append` adds nothing for it. The ucode proto handler of wireguard
+reads a peer's `allowed_ips` without `config_get`: it takes a list as its
+entries and an option as its words, and joins them with commas for wg, which
+cuts the line at `#`, splits it at commas and strips the whitespace, so a list
+entry that holds two prefixes and a space is one entry, which wg refuses.
 `wg.allowed_ips` reads it that way, and keeps the whitespace in an entry so that
-a tab shows. The routes of `route_allowed_ips` go to each word of the shell's
-split, which printf %b never sees, so the route side reads with
-`config_get_words`, and takes the address before the first `/` of a word and the
-length after its last, as the `case` of wireguard.sh does, and reads the length
-as netifd does, with strtoul in base 0 or as an IPv4 mask. `config_get_bool`
-gets
-a list joined the same way, so `list disabled '1'` disables a wireguard peer:
-read
-such a value with `config_get` before `shell_bool`. `config_list_foreach` is the
-opposite case: it walks the entries of a list and skips an option, so
+it shows. The routes of `route_allowed_ips` go to each entry, with the length
+that ucode's `int()` reads. `config_get_bool` gets a list joined the same way as
+`config_get`: read such a value with `config_get` before `shell_bool`.
+`config_list_foreach` is the opposite case: it walks the entries of a list and
+skips an option, so
 `dhcp/hosts.match_tag` and the `server` and `address` of `dhcp/dnsmasq` read an
 option as null.
 

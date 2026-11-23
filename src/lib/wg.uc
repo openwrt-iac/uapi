@@ -39,54 +39,47 @@ function run(argv) {
 	return { ok: code == 0, code: code, output: trim(output) };
 }
 
-// netifd of OpenWrt main replaced wireguard.sh with a ucode proto handler. It gives wg each value as
-// uci holds it, with no printf %b, takes a list of allowed IPs as its entries and an option as its
-// words, routes each of them, leaves out a peer without a key with its routes, and reads disabled
-// and route_allowed_ips as on only when they hold "1". Since openwrt ecd9120f04 it also checks a
-// value against wg's grammar as uci holds it, and leaves out what wg would refuse: the peer for a
-// public key, and the line for a preshared key, an endpoint or a keepalive. wg refused the whole
-// config before, so one such value kept the interface down. It still does for an allowed IP, for a
-// host of digits and dots that inet_aton does not read, which the handler gives wg as an address,
-// and for an IPv6 host that musl refuses. uapi reads, sets and routes a peer as the handler that
-// netifd runs, and apply() names such a peer instead of waiting for an interface that it keeps down.
-const UCODE_HANDLER = "/lib/netifd/proto/wireguard.uc";
+// netifd runs the ucode proto handler of wireguard-tools. It gives wg each value as uci holds it,
+// takes a list of allowed IPs as its entries and an option as its words, routes each of them, leaves
+// out a peer without a key with its routes, and reads disabled and route_allowed_ips as on only when
+// they hold "1". Since openwrt ecd9120f04 it also checks a value against wg's grammar as uci holds
+// it, and leaves out what wg would refuse: the peer for a public key, and the line for a preshared
+// key, an endpoint or a keepalive. wg still refuses the whole config, and so keeps the interface
+// down, for an allowed IP that it cannot read, for a host of digits and dots that inet_aton does not
+// read, which the handler gives wg as an address, and for an IPv6 host that musl refuses. uapi reads,
+// sets and routes a peer as the handler does, and apply() names such a peer instead of waiting for
+// an interface that it keeps down.
 const SETTLE_S = 8;
 
-function ucode_handler() {
-	return fs.access(UCODE_HANDLER) === true;
-}
-
 function peer_flag(v) {
-	return ucode_handler() ? v === "1" : values.shell_bool(values.config_get(v), false);
+	return v === "1";
 }
 
-function handler_key(v) {
+// A stored key as the handler gives it to wg: the whole value. null when that is not a WireGuard
+// key, so the kernel can hold no such peer.
+function kernel_key(v) {
 	return (type(v) == "string" && match(v, WG_KEY_RE)) ? v : null;
 }
 
-// The ucode handler skips a peer, or leaves out its preshared key, when the value does not match
-// its own pattern, so wg never reads it. A value that matches and is not a key that wg reads still
-// reaches wg, which refuses the whole config.
+// The handler skips a peer, or leaves out its preshared key, when the value does not match its own
+// pattern, so wg never reads it. A value that matches and is not a key that wg reads still reaches
+// wg, which refuses the whole config.
 function handler_drops_key(v) {
-	return ucode_handler() && !(type(v) == "string" && match(v, /^[A-Za-z0-9+\/]{43}=$/));
+	return !(type(v) == "string" && match(v, /^[A-Za-z0-9+\/]{43}=$/));
 }
 
-// The keepalive that the ucode handler gives wg: off in any case, or 0 to 65535 in at most five
-// digits, as uci holds it. -1 for any other value, which the handler leaves out, as it reads for a
-// value that wg refuses under wireguard.sh.
+// The keepalive that the handler gives wg: off in any case, or 0 to 65535 in at most five digits, as
+// uci holds it. -1 for any other value, which the handler leaves out.
 function keepalive(v) {
-	if (!ucode_handler()) return values.wg_keepalive(v);
 	if (v == null || v == "") return null;
 	if (type(v) == "string" && lc(v) == "off") return 0;
 	return (type(v) == "string" && match(v, /^[0-9]{1,5}$/) && int(v) <= 65535) ? int(v) : -1;
 }
 
-// The endpoint port that the ucode handler gives wg: 1 to 65535 in digits, or the first field of a
-// /udp line of /etc/services, as uci holds it. 0 for any other value, for which the handler leaves
-// the endpoint out, as a port that wireguard.sh cannot resolve reads. null without a value, for
-// which both handlers give wg 51820.
+// The endpoint port that the handler gives wg: 1 to 65535 in digits, or the first field of a /udp
+// line of /etc/services, as uci holds it. 0 for any other value, for which the handler leaves the
+// endpoint out. null without a value, for which the handler gives wg 51820.
 function endpoint_port(v) {
-	if (!ucode_handler()) return values.service_port(v, () => fs.readfile("/etc/services"));
 	if (v == null || v == "") return null;
 	if (type(v) != "string") return 0;
 	if (match(v, /^[0-9]+$/)) return (int(v) >= 1 && int(v) <= 65535) ? int(v) : 0;
@@ -116,49 +109,17 @@ function inet_aton(s) {
 	return n;
 }
 
-// What busybox's nslookup reads for a name: "address" when it prints one, as a `Name:` line, "none"
-// when the replies say that the name does not exist or has no address, and null when it cannot
-// tell. It exits 1 for an NXDOMAIN, a SERVFAIL, a REFUSED and a timeout alike, so the lines decide:
-// an NXDOMAIN prints `** server can't find <name>: NXDOMAIN`, another reply code its name there,
-// and a timeout of every query `;; connection timed out; no servers could be reached`. A reply with
-// no address prints at most its header, and one that holds only a CNAME, whose target has no
-// address, its `canonical name =` lines too: getaddrinfo answers EAI_NODATA for both. A query that
-// got no reply while another did prints `*** Can't find <name>: No answer`, which does not change
-// the exit code: getaddrinfo answers EAI_AGAIN for it, which wg retries.
-function lookup(host) {
-	let r = run([ "nslookup", host ]);
-	if (index(r.output, "Name:") >= 0) return "address";
-	let nxdomain = false;
-	for (let l in split(r.output, "\n")) {
-		if (match(l, /^\*\* server can't find .*: NXDOMAIN$/)) nxdomain = true;
-		else if (l != "" && l != "Non-authoritative answer:" && !match(l, /^(Server|Address):/)
-		         && !match(l, /^[^\t]+\tcanonical name = [^\t]+$/))
-			return null;
-	}
-	return (r.ok || nxdomain) ? "none" : null;
-}
-
-// The ucode handler gives wg the endpoint of a host that resolves as it reads it: an address as it
-// stands, or a name for which nslookup prints an address. It leaves out the endpoint of any other
-// host and keeps the peer.
+// The handler gives wg the endpoint of a host that resolves as it reads it: an address as it stands,
+// or a name for which busybox's nslookup prints an address, as a `Name:` line. It leaves out the
+// endpoint of any other host and keeps the peer.
 function resolves(host) {
-	return !!match(host, /^[0-9.]+$/) || index(host, ":") >= 0 || lookup(host) == "address";
-}
-
-// wireguard.sh gives wg every host, and wg refuses the whole config for a name that does not exist
-// or has no address, as getaddrinfo answers EAI_NONAME or EAI_NODATA for it, so the interface stays
-// down from its next start. wg retries a name whose lookup failed for a time, such as on a timeout or
-// a SERVFAIL, and the interface comes up once it resolves, so such a name is no missing host. An
-// IPv4 address that wg reads, or a host with a colon, which a write takes only as an IPv6 address,
-// asks no resolver.
-function missing_host(host) {
-	return inet_aton(host) == null && index(host, ":") < 0 && lookup(host) == "none";
+	return !!match(host, /^[0-9.]+$/) || index(host, ":") >= 0 || index(run([ "nslookup", host ]).output, "Name:") >= 0;
 }
 
 // The zone of an IPv6 address as musl's getaddrinfo reads it in lookup_ipliteral.c, after the first
 // `%`: digits up to UINT_MAX are an index, which it takes on any address. Any other zone has to be
 // the name of an interface that if_nametoindex finds, on a link-local or multicast link-local address.
-// musl answers EAI_NONAME otherwise, which wg does not retry, and both proto handlers give wg an IPv6
+// musl answers EAI_NONAME otherwise, which wg does not retry, and the handler gives wg an IPv6
 // address as it stands, so wg refuses the config of the whole interface. The kernel reads 15 bytes of
 // the name and cuts it at a `:`, as for the alias `eth0:1`. The index or that name, false for a zone
 // that musl refuses on any router, or null for a host that is not an IPv6 address with a zone.
@@ -180,119 +141,19 @@ function missing_zone(host) {
 	return type(zone) == "string" && fs.access("/sys/class/net/" + zone) !== true;
 }
 
+// The entries that the handler reads from a stored allowed_ips and routes: a list as its entries and
+// an option as its words.
 function handler_entries(v) {
 	if (v == null || v == "") return null;
 	return (type(v) == "array") ? v : split(trim(v), /[[:space:]]+/);
 }
 
-const ESCAPES = { a: 7, b: 8, e: 27, f: 12, n: 10, r: 13, t: 9, v: 11, "\\": 92 };
-
-// printf_b() walks a value byte by byte under the lock of `network`. A key line that escapes each of
-// its 44 characters as `\0ooo` is 220 bytes long. A value with a backslash that is longer than this
-// bound is not expanded, and uapi then does not say which key or allowed IPs wg reads from it.
-const ESCAPED_MAX = 512;
-
-// wireguard.sh hands its config to wg through busybox's `printf %b`, which expands the escapes of
-// every value in it as coreutils/printf.c and libbb/process_escape_sequence.c do: `\c` ends the
-// output, a 0 right after the backslash is skipped when an octal digit follows it, up to three
-// octal digits up to 255 or `\x` and up to two hex digits give one byte, the letters of ESCAPES and
-// a second backslash give their character, and a backslash before anything else stays.
-function printf_b(s) {
-	let out = [];
-	for (let i = 0; i < length(s); ) {
-		let c = substr(s, i++, 1);
-		if (c != "\\") {
-			push(out, c);
-			continue;
-		}
-		let next = substr(s, i, 1);
-		if (next == "c") return { text: join("", out), stopped: true };
-		if (next == "0" && match(substr(s, i + 1, 1), /^[0-7]$/)) i++;
-		let oct = match(substr(s, i, 3), /^[0-7]+/)?.[0];
-		let hexd = (next == "x") ? match(substr(s, i + 1, 2), /^[0-9A-Fa-f]+/)?.[0] : null;
-		if (oct != null) {
-			if (int(oct, 8) > 255) oct = substr(oct, 0, 2);
-			push(out, chr(int(oct, 8)));
-			i += length(oct);
-		}
-		else if (hexd != null) {
-			push(out, chr(hex(hexd)));
-			i += 1 + length(hexd);
-		}
-		else if (ESCAPES[next] != null) {
-			push(out, chr(ESCAPES[next]));
-			i++;
-		}
-		else
-			push(out, "\\");
-	}
-	return { text: join("", out), stopped: false };
-}
-
-// The lines that wg reads for a stored value from the config of the handler, each cut at `#` and
-// without whitespace: wireguard.sh joins a list with spaces and expands the escapes, and the ucode
-// handler expands none. wg_line() also ends a line at a NUL byte, as wg's parser does, because
-// ucode's regex functions stop there. `stopped` when `\c` ended the config in the value. null for a
-// value that is not expanded.
-function config_lines(v) {
-	let s = values.config_get(v);
-	if (type(s) != "string") return { lines: [], stopped: false };
-	let x = (index(s, "\\") < 0) ? { text: s, stopped: false }
-		: (length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
-	if (x == null) return null;
-	return { lines: map(split(x.text, "\n"), (l) => values.wg_line(l)), stopped: x.stopped };
-}
-
-// A stored key as wg reads it: the first line, or under the ucode handler the whole value. null
-// when that is not a WireGuard key, so the kernel can hold no such peer. false when the value gives wg more config than the key, in a later
-// line or by ending the config with `\c`, or is not expanded: `wg set` cannot give the kernel what
-// ifup gave it then.
-function kernel_key(v) {
-	if (ucode_handler()) return handler_key(v);
-	let c = config_lines(v);
-	if (c == null) return false;
-	let first = c.lines[0];
-	if (first == null || !match(first, WG_KEY_RE)) return null;
-	return (c.stopped || length(filter(slice(c.lines, 1), (l) => l != "")) > 0) ? false : first;
-}
-
-// Each later line of a stored public_key is a line of the config, so one that reads `PublicKey=`
-// sets a key too, of this peer or of a peer that a `[Peer]` line before it adds. false for a value
-// that is not expanded.
-function kernel_keys(v) {
-	if (ucode_handler()) return filter([ handler_key(v) ], (k) => k != null);
-	let c = config_lines(v);
-	if (c == null) return false;
-	let out = [];
-	for (let i = 0; i < length(c.lines); i++) {
-		let l = c.lines[i];
-		let key = (i == 0) ? l : (lc(substr(l, 0, 10)) == "publickey=") ? substr(l, 10) : null;
-		if (key != null && match(key, WG_KEY_RE)) push(out, key);
-	}
-	return out;
-}
-
-// The allowed IPs that wg reads from a stored value: config_get joins a list with spaces,
-// wireguard.sh makes each space a comma, printf %b expands the line, so `\054` separates two entries
-// and `\040` does not, and wg cuts the line at a NUL byte and at `#` and splits it at commas. wg also
-// strips the whitespace, which an entry keeps here so that a tab between two prefixes shows.
-// wireguard.sh writes the line for any value that is not empty, and wg refuses the line when nothing
-// is left of it, so that reads as one empty entry, which a write refuses too. A value that the
-// expansion would give a second line, the end of the config or a byte that is not printable ASCII,
-// none of which an address holds, or that is too long to expand, reads unexpanded, so that its
-// backslash shows in an entry and the response stays valid UTF-8. The ucode handler joins its
-// entries with commas and expands nothing, so a list entry that holds a space is one entry.
+// The allowed IPs that wg reads from a stored value: the handler joins its entries with commas and
+// expands nothing, so a list entry that holds a space is one entry, and wg cuts the line at `#` and
+// splits it at commas. wg also strips the whitespace, which an entry keeps here so that it shows.
 function allowed_ips(v) {
-	if (ucode_handler()) {
-		let e = handler_entries(v);
-		return (e == null) ? null : split(split(join(",", e), "#")[0], ",");
-	}
-	let s = values.config_get(v);
-	if (type(s) != "string" || s == "") return null;
-	s = replace(s, " ", ",");
-	let x = (index(s, "\\") >= 0 && length(s) <= ESCAPED_MAX) ? printf_b(s) : null;
-	let t = (x != null && !x.stopped && index(x.text, "\n") < 0) ? split(split(x.text, chr(0))[0], "#")[0] : null;
-	return split((t != null && match(t, /^[ -~]*$/)) ? t : split(s, "#")[0], ",");
+	let e = handler_entries(v);
+	return (e == null) ? null : split(split(join(",", e), "#")[0], ",");
 }
 
 function to_peer(section) {
@@ -300,9 +161,9 @@ function to_peer(section) {
 		public_key: section.public_key,
 		allowed_ips: allowed_ips(section.allowed_ips) ?? [],
 		endpoint_host: values.config_get(section.endpoint_host),
-		// The ucode handler leaves out the endpoint of an empty port, which only a hand edit stores and
-		// which the read gives as no port, as config_get gives wireguard.sh its default of 51820.
-		endpoint_port: (ucode_handler() && section.endpoint_port == "") ? 0 : endpoint_port(section.endpoint_port),
+		// The handler leaves out the endpoint of an empty port, which only a hand edit stores and which
+		// the read gives as no port.
+		endpoint_port: (section.endpoint_port == "") ? 0 : endpoint_port(section.endpoint_port),
 		// Read as wg reads it, since a stored value reaches here from uci without passing through
 		// validate(), and set_peer_argv() gives it to `wg set` with %d.
 		persistent_keepalive: keepalive(section.persistent_keepalive),
@@ -323,7 +184,7 @@ function peer_sections(conn, iface) {
 	return out;
 }
 
-// dump_print() in src/show.c of wireguard-tools, 1.0.20250521 in OpenWrt 25.12, prints the
+// dump_print() in src/show.c of wireguard-tools, 1.0.20260223 in OpenWrt main, prints the
 // interface on the first line in 4 tab-separated fields, its private key first, then a line per peer
 // of 8: public key, preshared key, endpoint, allowed IPs joined with commas, latest handshake in
 // epoch seconds or 0, rx bytes, tx bytes and keepalive. An unset key, endpoint or allowed IPs prints
@@ -431,8 +292,8 @@ function netmask_len(s, v6) {
 
 // `route_allowed_ips` asks netifd to install a route per allowed IP, which it
 // does from the proto handler, so a peer-level apply has to install them too or
-// the peer is present in the kernel with no path to it. Mirrors the mapping in
-// wireguard.sh: a bare address becomes a host route.
+// the peer is present in the kernel with no path to it. Mirrors the mapping of
+// the handler: a bare address becomes a host route.
 //
 // `prefix` is one spelling of the route that netifd installs: the length as netifd reads it, and the
 // address masked to it, because `ip route` refuses an IPv4 prefix with host bits. Routes are
@@ -462,23 +323,7 @@ function route_prefix(allowed_ip) {
 	         v6: false };
 }
 
-// wireguard.sh routes each word of the option as uci holds it, which printf %b never sees, through a
-// case: a `:` before the last `/` makes the word an IPv6 prefix, else a `.` before it an IPv4 one,
-// else a `:` or a `.` makes it a host. The address is what precedes the first `/` and the length
-// what follows the last, so `10.0.0.0/8\054192.168.0.0/16`, which gives wg two prefixes, routes
-// 10.0.0.0/16.
-function word_route(w) {
-	let slash = rindex(w, "/"), colon = index(w, ":"), dot = index(w, ".");
-	let v6 = colon >= 0 && colon < slash, len;
-	if (v6 || (dot >= 0 && dot < slash)) len = substr(w, slash + 1);
-	else if (colon >= 0) { v6 = true; len = "128"; }
-	else if (dot >= 0) len = "32";
-	else return null;
-	let r = route_prefix(split(w, "/")[0] + "/" + len);
-	return (r?.v6 === v6) ? r : null;
-}
-
-// The ucode handler routes an entry as IPv6 when it holds a colon anywhere, with the address before
+// The handler routes an entry as IPv6 when it holds a colon anywhere, with the address before
 // the first `/` and the length that ucode's int() reads from what follows it, its leading decimal
 // digits, so `/0x10` routes /0 and `/24#x` routes /24.
 function entry_route(e) {
@@ -489,24 +334,17 @@ function entry_route(e) {
 
 function routes_from(entries, enabled) {
 	if (!enabled) return [];
-	let route = ucode_handler() ? entry_route : word_route;
 	let out = [];
 	for (let e in (type(entries) == "array" ? entries : [])) {
-		let r = route(e);
+		let r = entry_route(e);
 		if (r != null) push(out, r);
 	}
 	return out;
 }
 
-// What the handler routes from a stored allowed_ips: wireguard.sh each word of
-// `for allowed_ip in $peer_a_ips`, the ucode handler each entry.
-function route_entries(v) {
-	return ucode_handler() ? handler_entries(v) : values.config_get_words(v);
-}
-
 function peer_routes(section) {
-	if (ucode_handler() && !kernel_key(section.public_key)) return [];
-	return routes_from(route_entries(section.allowed_ips) ?? [], peer_flag(section.route_allowed_ips));
+	if (!kernel_key(section.public_key)) return [];
+	return routes_from(handler_entries(section.allowed_ips) ?? [], peer_flag(section.route_allowed_ips));
 }
 
 // netifd puts an interface's routes in ip4table / ip6table when those are set,
@@ -599,15 +437,12 @@ function apply_routes(conn, iface, wanted, previous) {
 // it.
 function check_peer(iface, peer) {
 	let key = kernel_key(peer.public_key);
-	// The ucode handler leaves out such a peer, and its restart left the kernel without it.
-	if (key === null && ucode_handler())
+	// The handler leaves out such a peer, and its restart left the kernel without it.
+	if (key === null)
 		return { key };
-	if (!key)
-		return { error: sprintf("refusing to apply a peer with a malformed public key on %s", iface) };
-	// The ucode handler runs such a peer without its preshared key, which the /dev/null set gives.
+	// The handler runs a peer without a preshared key that is not a WireGuard key, which the /dev/null
+	// set gives.
 	let psk = kernel_key(peer.preshared_key);
-	if (!psk && peer.preshared_key != null && peer.preshared_key != "" && !ucode_handler())
-		return { error: sprintf("refusing to apply a peer with a malformed preshared key on %s", iface) };
 	// A marker entry makes the whole list an incremental update to wg, which adds its prefixes to
 	// what the peer already holds, or refuses the command for one marked -. Stored values reach
 	// here with no validate() in front of them: the restore, and the peer sections that a remove
@@ -618,21 +453,21 @@ function check_peer(iface, peer) {
 	return { key, psk };
 }
 
-// `omitted` collects the interface when the ucode handler leaves out the endpoint that uci holds,
+// `omitted` collects the interface when the handler leaves out the endpoint that uci holds,
 // and the apply with it.
 function apply_peer(iface, peer, omitted) {
 	let checked = check_peer(iface, peer);
 	if (checked.error != null) return checked.error;
 	let key = checked.key, psk = checked.psk;
 	if (!key) return null;
-	// wg strips the whitespace from the config line that wireguard.sh writes, and `wg set` does not.
+	// wg strips the whitespace from the config line that the handler writes, and `wg set` does not.
 	let host = replace(peer.endpoint_host ?? "", /[[:space:]]/g, "");
-	// A port that reads 0 is a stored 0 or a name that does not resolve, which a write refuses, as
-	// for the keepalive above. The restore, and a remove that sets such a peer again, set the rest
-	// of the peer, and the kernel keeps its endpoint. The ucode handler also leaves out the endpoint
-	// of a host that does not resolve, which a write takes there, so the kernel keeps the endpoint
-	// that it holds: none after the restart of the handler, or the one that it learnt from the peer.
-	let keep_endpoint = host != "" && (peer.endpoint_port === 0 || (ucode_handler() && !resolves(peer.endpoint_host)));
+	// A port that reads 0 is a stored 0 or one that the handler cannot read, which a write refuses, as
+	// for the keepalive above, and the handler leaves out the endpoint for it. It also leaves out the
+	// endpoint of a host that does not resolve, which a write takes. The restore, and a remove that
+	// sets such a peer again, set the rest of the peer, and the kernel keeps the endpoint that it
+	// holds: none after the restart of the handler, or the one that it learnt from the peer.
+	let keep_endpoint = host != "" && (peer.endpoint_port === 0 || !resolves(peer.endpoint_host));
 
 	// The key is staged before anything changes in the kernel. Staged after the remove below, a key
 	// that the tmpfs could not hold left the peer removed and not set again, and the restore did the
@@ -655,7 +490,7 @@ function apply_peer(iface, peer, omitted) {
 	if (psk_path != null) fs.unlink(psk_path);
 	if (!r.ok)
 		return sprintf("wg set on %s failed: %s", iface, r.output);
-	if (keep_endpoint && ucode_handler() && omitted != null) push(omitted, iface);
+	if (keep_endpoint && omitted != null) push(omitted, iface);
 	return null;
 }
 
@@ -675,18 +510,14 @@ function is_up(conn, iface) {
 	return iface_status(conn, iface)?.up === true;
 }
 
-// The ucode handler of OpenWrt main restarts a wireguard interface on every peer
-// change, and the kernel apply runs right after the write's reload, so the
-// interface can be mid-cycle here. A one-shot up check would skip the apply and
-// leave netifd to re-apply the peers from uci, which turns a peer that wg refuses
-// into a committed section and a setup_failed interface instead of this
-// transaction's 500. A setup that never settles reads null. wireguard.sh restarts
-// nothing on a peer change, and its failed setup retries with pending set for as
-// long as the stored config stays refused, so there the one-shot check stays.
-// `until` is shared by the interfaces of one apply or one reconcile, so their
-// waits do not add up with the number of interfaces.
+// The handler restarts a wireguard interface on every peer change, and the kernel
+// apply runs right after the write's reload, so the interface can be mid-cycle
+// here. A one-shot up check would skip the apply and leave netifd to re-apply the
+// peers from uci, which turns a peer that wg refuses into a committed section and
+// a setup_failed interface instead of this transaction's 500. A setup that never
+// settles reads null. `until` is shared by the interfaces of one apply or one
+// reconcile, so their waits do not add up with the number of interfaces.
 function settled_up(conn, iface, until) {
-	if (!ucode_handler()) return is_up(conn, iface);
 	let quiet = 0;
 	for (;;) {
 		let status = iface_status(conn, iface);
@@ -722,26 +553,24 @@ function kernel_dump(conn, iface) {
 	return conn.wg_peers[iface];
 }
 
-// What the kernel holds under the key that wg reads from a stored public_key. Empty when uapi did not
-// read the kernel, so that a failed read never looks like a missing peer: the interface is not up,
-// wg fails, or the value gives wg more than a key or is too long to expand, so that uapi cannot tell
-// which peer wg set for it.
+// What the kernel holds under a stored public_key. Empty when uapi did not read the kernel, so that a
+// failed read never looks like a missing peer: the interface is not up, or wg fails.
 function runtime(conn, iface, public_key) {
-	let key = kernel_key(public_key);
-	if (conn == null || key === false) return {};
+	if (conn == null) return {};
 	let peers = kernel_dump(conn, iface);
 	if (peers == null) return {};
+	let key = kernel_key(public_key);
 	let held = key ? peers[key] : null;
 	return { in_kernel: held != null, ...(held ?? NOT_HELD) };
 }
 
 // One entry per peer that the kernel holds on an up interface with proto=wireguard and that no
-// section of that interface claims, keyed as wg reads the stored key, its later PublicKey lines
-// included. runtime() reports the kernel beside each section, so a peer with no section was the
-// only wireguard state that no read showed. A down interface holds no peer. An up interface whose
-// dump failed is named in `unread` and lists nothing, so that a failed read never reads as a kernel
-// that holds no drift. The sections are walked as they are, disabled ones included, because the
-// runtime of a disabled section already reports a peer that the kernel holds under its key.
+// section of that interface claims. runtime() reports the kernel beside each section, so a peer
+// with no section was the only wireguard state that no read showed. A down interface holds no peer.
+// An up interface whose dump failed is named in `unread` and lists nothing, so that a failed read
+// never reads as a kernel that holds no drift. The sections are walked as they are, disabled ones
+// included, because the runtime of a disabled section already reports a peer that the kernel holds
+// under its key.
 function unclaimed(conn) {
 	let out = [], unread = [];
 	if (conn == null) return { peers: out, unread };
@@ -757,7 +586,8 @@ function unclaimed(conn) {
 		let claimed = {};
 		conn.uci_foreach('network', null, function(p) {
 			if (p['.type'] != "wireguard_" + iface) return;
-			for (let k in kernel_keys(p.public_key) || []) claimed[k] = true;
+			let k = kernel_key(p.public_key);
+			if (k) claimed[k] = true;
 		});
 		for (let key, v in held)
 			if (!claimed[key]) push(out, { interface: iface, public_key: key, ...v });
@@ -769,12 +599,8 @@ function unclaimed(conn) {
 // peers uci no longer lists, then apply every peer it does. Used on the rollback
 // path, where a batch may have applied some peers before failing on a later one,
 // so replaying the request's own operations would not undo the applied ones.
-// `ops` are those operations, which name the peers that the request may have changed in the kernel.
-function reconcile(conn, interfaces, ops) {
-	let seen = {}, missing = null, named = {}, until = time() + SETTLE_S;
-	for (let op in ops ?? [])
-		for (let k in ((op.action == "remove") ? kernel_keys(op.public_key) : [ kernel_key(op.public_key) ]) || [])
-			if (k) named[op.iface + "|" + k] = true;
+function reconcile(conn, interfaces) {
+	let seen = {}, until = time() + SETTLE_S;
 	for (let iface in interfaces) {
 		if (type(iface) != "string" || !match(iface, SAFE_IFACE_RE)) continue;
 		if (seen[iface]) continue;
@@ -786,10 +612,6 @@ function reconcile(conn, interfaces, ops) {
 		for (let s in sections) {
 			let key = kernel_key(s.public_key);
 			// Refused before anything changes in the kernel, as apply_peer() refuses it.
-			if (key === false)
-				return sprintf("refusing to apply a peer with a malformed public key on %s", iface);
-			if (key && kernel_key(s.preshared_key) === false)
-				return sprintf("refusing to apply a peer with a malformed preshared key on %s", iface);
 			if (key && length(filter(allowed_ips(s.allowed_ips) ?? [], (ip) => match(ip, /^[[:space:]]*[+-]/))) > 0)
 				return sprintf("refusing to apply a peer with an allowed_ips entry marked + or - on %s", iface);
 			if (key) wanted[key] = true;
@@ -803,21 +625,7 @@ function reconcile(conn, interfaces, ops) {
 		for (let s in sections)
 			for (let r in peer_routes(s)) push(wanted_routes, r);
 
-		// wireguard.sh writes no [Peer] for a section without a key, so ifup sets no peer for it, and
-		// the kernel holds no peer under a key that wg cannot read. A preshared key that wg cannot read
-		// makes wg refuse the whole config of wireguard.sh at ifup, so wg never sets that peer without
-		// it: set with /dev/null here, the peer would lose the key that the kernel holds. So the peer
-		// stays as the kernel holds it, which restores it only when the request did not set or remove
-		// it and the kernel holds it. Otherwise it fails the restore, once the other peers are set. The
-		// ucode handler runs the peer without the key, so apply_peer() sets it so.
 		for (let s in sections) {
-			let key = kernel_key(s.public_key);
-			if (!key) continue;
-			if (kernel_key(s.preshared_key) === null && (s.preshared_key ?? "") != "" && !ucode_handler()) {
-				if (named[iface + "|" + key] || current?.[key] == null)
-					missing = sprintf("not restoring a peer with a malformed preshared key on %s", iface);
-				continue;
-			}
 			let err = apply_peer(iface, to_peer(s));
 			if (err != null) return err;
 		}
@@ -829,7 +637,7 @@ function reconcile(conn, interfaces, ops) {
 		let err = apply_routes(conn, iface, wanted_routes, installed_routes(conn, iface));
 		if (err != null) return err;
 	}
-	return missing;
+	return null;
 }
 
 // The rules of a peer live in its resource, which requires this module, so an apply loads it only
@@ -854,13 +662,12 @@ function peer_rules() {
 //
 // `blocked` collects `<interface>/<peer id>` for each peer that the write committed and that keeps
 // its interface down, because wg refuses the config of the whole interface for one of its values.
-// The ucode handler sets every peer or none, so the restart of such an interface never ends, and a
-// wait for it cannot tell a restart that the write broke from one that was broken before it. On
-// main the apply skips such an interface with no wait: its next setup reads uci. wireguard.sh
-// restarts nothing on a peer change, so on 25.12 an interface that is still up takes the write.
-// A restart that does not end in time fails a write that sets a peer, and the restore takes the
-// peer back out. It does not fail one whose ops on the interface only remove peers: the next setup
-// reads uci, which no longer gives them access.
+// The handler sets every peer or none, so the restart of such an interface never ends, and a wait
+// for it cannot tell a restart that the write broke from one that was broken before it. So the
+// apply skips such an interface with no wait: its next setup reads uci. A restart that does not end
+// in time fails a write that sets a peer, and the restore takes the peer back out. It does not fail
+// one whose ops on the interface only remove peers: the next setup reads uci, which no longer gives
+// them access.
 function apply(conn, ops, applied, omitted, blocked) {
 	let up = {}, until = time() + SETTLE_S, rules = null, removes_only = {};
 	for (let op in ops)
@@ -875,7 +682,7 @@ function apply(conn, ops, applied, omitted, blocked) {
 			let held = rules.blockers(conn, iface);
 			if (type(blocked) == "array")
 				for (let id in held) push(blocked, iface + "/" + id);
-			if (!exists(removes_only, iface) || (length(held) > 0 && ucode_handler()))
+			if (!exists(removes_only, iface) || length(held) > 0)
 				up[iface] = false;
 			else {
 				let settled = settled_up(conn, iface, until);
@@ -891,22 +698,17 @@ function apply(conn, ops, applied, omitted, blocked) {
 		let previous = routes_from(op.prev_allowed_ips, op.prev_route_allowed_ips);
 
 		if (op.action == "remove") {
-			let keys = kernel_keys(op.public_key);
-			if (keys === false)
-				return sprintf("refusing to remove a public key of more than %d characters with a backslash on %s", ESCAPED_MAX, iface);
+			let key = kernel_key(op.public_key);
 			// The kernel holds one peer per key, so another section that holds the key is set again,
 			// in uci order as ifup sets them, and the last wins. apply_peer() sets it over the peer
 			// that the kernel holds, so the key is not removed here: a remove here dropped the peer
 			// when that section's preshared key could not be staged.
-			let again = map(filter(peer_sections(conn, iface), (s) => index(keys, kernel_key(s.public_key)) >= 0), to_peer);
-			let held = {};
+			let again = key ? map(filter(peer_sections(conn, iface), (s) => kernel_key(s.public_key) == key), to_peer) : [];
 			for (let p in again) {
 				let checked = check_peer(iface, p);
 				if (checked.error != null) return checked.error;
-				held[checked.key] = true;
 			}
-			for (let key in keys) {
-				if (held[key]) continue;
+			if (key && length(again) == 0) {
 				let r = remove_peer(iface, key);
 				if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
 			}
@@ -940,6 +742,6 @@ function interfaces_of(ops) {
 	return out;
 }
 
-return { apply, reconcile, runtime, interfaces_of, settled_up, shellquote, to_peer, endpoint_arg, kernel_key, kernel_keys, allowed_ips,
-         keepalive, endpoint_port, handler_drops_key, resolves, missing_host, inet_aton, ipv6_zone, missing_zone,
-         peer_flag, route_entries, ucode_handler, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };
+return { apply, reconcile, runtime, interfaces_of, settled_up, shellquote, to_peer, endpoint_arg, kernel_key, allowed_ips,
+         keepalive, endpoint_port, handler_drops_key, resolves, inet_aton, ipv6_zone, missing_zone,
+         peer_flag, route_entries: handler_entries, route_prefixes: routes_from, route_table, route_cmd, set_peer_argv, command_line, unclaimed };

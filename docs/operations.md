@@ -102,8 +102,8 @@ A write to one package that fails and restores takes at most 20 s of reloads,
 1 s of the dnsmasq respawn check after the reloads of the write and again after
 those of the restore, and up to 5 s of the restore waiting for libuci's flock:
 51 s with one dnsmasq instance,
-inside uhttpd's default `script_timeout` of 60 s. On OpenWrt main, the kernel
-apply and the reconcile of the restore also wait for netifd
+inside uhttpd's default `script_timeout` of 60 s. The kernel apply and the
+reconcile of the restore also wait for netifd
 to restart a wireguard interface, 8 s each: a write of the network package
 stays inside 60 s, and a batch that also writes dhcp, with every reload at its
 bound, can pass it. The stop and the start of dnsmasq add nothing to these
@@ -111,16 +111,15 @@ bounds. They run only when 10 s of the 20 s are left, each step ends within the
 20 s, and a check that ran before them ran inside the 20 s too. A write of one
 package that runs them answers within 20 s of its first reload, since nothing
 after them can fail and restore. With the default `config limits`, the worst
-write that runs them is a batch that also writes network on OpenWrt main: 20 s
+write that runs them is a batch that also writes network: 20 s
 of reloads, checks and recovery, 8 s of the kernel apply, and when that fails,
 13 s of the checks after the restore and 8 s of the reconcile, 49 s. A `POST
 /uapi/batch` restore adds
 up to 5 s of flock wait for each further package that it writes back, and the
-`wg set` of a kernel apply or reconcile has no time bound: on 25.12 it retries
-an endpoint name whose lookup fails for a time. busybox's `nslookup` runs under
+`wg set` of a kernel apply or reconcile has no time bound: wg retries an
+endpoint name whose lookup fails for a time. busybox's `nslookup` runs under
 the lock of `network` too, about 5 s at most for each name server of
-`/etc/resolv.conf`: on 25.12 once for an endpoint name that a peer write sends,
-and on OpenWrt main once for each peer with an endpoint name in the kernel apply
+`/etc/resolv.conf`, once for each peer with an endpoint name in the kernel apply
 and in the reconcile of the restore. A feed write waits for `apk update` up to
 `reload_budget_s`, but `apk add` and `apk del` have no total bound
 (`docs/non-uci-state.md`). uapi does not read

@@ -490,9 +490,8 @@ the 15 chars that LuCI takes. This section is the recipe, and
   stored value with `fw_refused_bools`. Picking the wide one where the reader
   is narrow reports a section as configured when the daemon ignored the value,
   which is the read-honesty failure principle 4 exists to prevent.
-  The netifd of 25.12 compares `disabled` on an interface against `1` only and
-  reads it on a route through the converter, so 3.x read the two with two
-  helpers. netifd `e97e36f` made them agree, and 4.x reads both with
+  netifd compares `disabled` on an interface against `1` and, since `e97e36f`,
+  `true`, as the converter reads it on a route, so both read with
   `platform_bool`. Integers and lists that netifd reads go through the same
   converter: read them with `netifd_int` and `as_word_list_or_null`, as the
   table in `docs/ucode-quirks.md` says.

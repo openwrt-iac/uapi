@@ -77,16 +77,12 @@ r=$(call -X POST -H 'Content-Type: application/json' "$URL/dhcp/servers" \
 [ "$(echo "$r" | tail -1)" = "200" ] || fail "POST expected 200: $r"
 assert_dnsmasq_emits "dhcp-range=set:tdhcp,10.99.0.100,10.99.0.149,255.255.255.0,12h"
 
-# The dnsmasq of OpenWrt main reads an unset dhcpv4 as disabled, and the one of 25.12 serves it.
-echo "--- an unset dhcpv4 serves on OpenWrt 25.12 and not on OpenWrt main ---"
+# dnsmasq reads an unset dhcpv4 as disabled.
+echo "--- an unset dhcpv4 serves nothing ---"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/servers/tdhcp" -d '{"dhcpv4":null}')
 [ "$(echo "$r" | tail -1)" = "200" ] || fail "PATCH dhcpv4 null expected 200: $r"
 [ -z "$($SSH 'uci -q get dhcp.tdhcp.dhcpv4')" ] || fail "dhcpv4 null did not remove the option"
-if $SSH 'grep -q "config_get dhcpv4 \"\$cfg\" dhcpv4 disabled" /etc/init.d/dnsmasq'; then
-	assert_dnsmasq_omits "dhcp-range=set:tdhcp,"
-else
-	assert_dnsmasq_emits "dhcp-range=set:tdhcp,10.99.0.100,10.99.0.149,255.255.255.0,12h"
-fi
+assert_dnsmasq_omits "dhcp-range=set:tdhcp,"
 r=$(call -X PATCH -H 'Content-Type: application/json' "$URL/dhcp/servers/tdhcp" -d '{"dhcpv4":"server"}')
 [ "$(echo "$r" | tail -1)" = "200" ] || fail "PATCH dhcpv4 server expected 200: $r"
 assert_dnsmasq_emits "dhcp-range=set:tdhcp,10.99.0.100,10.99.0.149,255.255.255.0,12h"

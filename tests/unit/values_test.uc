@@ -311,32 +311,10 @@ t.describe('values.config_get', () => {
 	});
 });
 
-t.describe('values.wg_line', () => {
-	t.it('cuts at the first # and removes every whitespace character, as wg does', () => {
-		t.assert_equal(v.wg_line(' a b\t# c # d'), 'ab');
-		t.assert_equal(v.wg_line('#x'), '');
-	});
-});
-
 t.describe('values.ipv4_to_int', () => {
 	t.it('reads the octets as one number', () => {
 		t.assert_equal(v.ipv4_to_int('10.0.0.1'), 167772161);
 		t.assert_equal(v.ipv4_to_int('255.255.255.255'), 4294967295);
-	});
-});
-
-t.describe('values.wg_keepalive', () => {
-	t.it('reads the value as wg reads its config line', () => {
-		for (let c in [ [ ' 25 ', 25 ], [ '0025', 25 ], [ '25 # nat', 25 ], [ '25\n# nat', 25 ], [ [ '2', '5' ], 25 ],
-		                [ 'off', 0 ], [ 'OFF', 0 ], [ '0', 0 ], [ '65535', 65535 ] ])
-			t.assert_equal(v.wg_keepalive(c[0]), c[1], c[0]);
-		t.assert_equal(v.wg_keepalive(''), null);
-		t.assert_equal(v.wg_keepalive(null), null);
-	});
-	t.it('reads -1 for what wg refuses', () => {
-		for (let s in [ '25x', '-1', '+25', '65536', '999999999999999999999', ' ', '#25', '0;touch /tmp/x', '2\\x35',
-		                '25\nPublicKey=x', '25 #\n[Peer]' ])
-			t.assert_equal(v.wg_keepalive(s), -1, s);
 	});
 });
 
@@ -360,41 +338,6 @@ t.describe('values.ucode_int', () => {
 		                [ '500x', 0 ], [ 'abc', 0 ], [ [ '1' ], 0 ] ])
 			t.assert_equal(v.ucode_int(c[0]), c[1], c[0]);
 		t.assert_equal(v.ucode_int(null), null);
-	});
-});
-
-t.describe('values.service_port', () => {
-	let file = (text) => () => text;
-	let untouched = () => die("the reader ran for a value that needs no file");
-	t.it('reads a decimal from 0 to 65535 after stripping whitespace, without the file', () => {
-		t.assert_equal(v.service_port('51820', untouched), 51820);
-		t.assert_equal(v.service_port(' 51820 ', untouched), 51820);
-		t.assert_equal(v.service_port('+443', untouched), 443);
-		t.assert_equal(v.service_port('0443', untouched), 443);
-		t.assert_equal(v.service_port('65536', untouched), 0);
-		t.assert_equal(v.service_port('-1', untouched), 0);
-	});
-	t.it('looks a name up on a /udp line of /etc/services, as any token of it', () => {
-		let svc = file('# comment\nhttps\t443/tcp\nhttps\t443/udp\t# HTTP over TLS\nsyslog\t514/udp\tlogger\nwg 51820/udp #wg\n');
-		t.assert_equal(v.service_port('https', svc), 443);
-		t.assert_equal(v.service_port('logger', svc), 514);
-		t.assert_equal(v.service_port('wg', svc), 51820);
-		t.assert_equal(v.service_port('HTTP', svc), 0);
-		t.assert_equal(v.service_port('nosuch', svc), 0);
-		t.assert_equal(v.service_port('https', file(null)), 0);
-	});
-	t.it('reads the unresolved value it is given, for a listen port where 0 is valid', () => {
-		let svc = file('openvpn\t1194/udp\n');
-		for (let s in [ '65536', '-1', 'nosuch', '   ' ])
-			t.assert_equal(v.service_port(s, svc, -1), -1, s);
-		t.assert_equal(v.service_port('0', svc, -1), 0);
-		t.assert_equal(v.service_port('openvpn', svc, -1), 1194);
-		t.assert_equal(v.service_port('', svc, -1), null);
-	});
-	t.it('reads null for nothing set, and 0 for whitespace that wg cannot use', () => {
-		t.assert_equal(v.service_port(null, untouched), null);
-		t.assert_equal(v.service_port('', untouched), null);
-		t.assert_equal(v.service_port('   ', untouched), 0);
 	});
 });
 
