@@ -186,10 +186,13 @@ Every response carries:
 | `X-Kernel-Unread`            | `GET /network/wireguard_kernel_peers` and a read of one of its entries, when an up wireguard interface could not be read | Comma-separated up interfaces with proto=wireguard whose kernel peers uapi could not read, because `wg show <interface> dump` failed or printed a shape that uapi does not read. The list holds no entry for them. Absent when every up interface was read. |
 | `X-Mgmt-Path-Warning`        | 200/204 on a `network/interfaces`, `network/devices` or `network/bridge_vlans` write that moved the caller's own path | `interface=<id> changed=<fields>`, e.g. `interface=wan changed=proto,ipaddrs`. Advisory: the write already happened and was not refused. On `network/interfaces`, present only when the written interface is the one this request arrived through and the write moved `disabled`, `proto`, `ipaddrs` or `netmask` (or deleted the section, reported as `changed=removed`). `network/devices` and `network/bridge_vlans` are matched by device instead, and report `device=<name> changed=created` or `changed=removed` when a create or delete names the caller's device or a bridge that device is a port of. Absent otherwise. If the write genuinely severs the path this response never arrives, so `GET /uapi/diagnostics` reports the same interface ahead of a write. See `docs/operations.md` "Management-path warning". |
 
-uapi uses the `X-Reload-*` and `X-Kernel-*` prefixes for advisory headers
-only. Each such header reports what the request did or found, and none of them
-changes what the status code means, so a client can pass on every header with
-these prefixes as it is, as uapi-mcp gives each one to its agent.
+uapi uses the `X-Reload-*` and `X-Kernel-*` prefixes, and
+`X-Mgmt-Path-Warning`, for advisory headers only. Each such header reports what
+the request did or found after uapi completed it. None of them changes what the
+status code means, or what a client must send or retry, so a client can pass on
+each of them as it is, as uapi-mcp gives each one to its agent.
+`docs/versioning.md` makes a new such header, or a new value of one, an
+additive change.
 
 The six transaction-header rows above (`X-Reload-Status`, `X-Reload-Services`,
 `X-Reload-Stopped`, `X-Kernel-Status`, `X-Kernel-Applied`, `X-Kernel-Blocked`)
