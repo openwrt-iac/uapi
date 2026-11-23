@@ -72,6 +72,7 @@ return {
     singleton_section_name: "main",    // singletons only; default "main". Override only when the underlying uci convention names the section differently.
     unique_field: "name",              // optional. Value of this field must be unique among same-type sections in this package. See "Cross-section reference fields" below.
     rewrite_when_named: { "<field>": "<option>" }, // optional. Options that a PATCH writes whenever the request names their field, even when uci holds another spelling or form of the value that the read gives. For an option that two daemons read differently, such as `maindhcp` of dhcp/odhcpd, so that a write makes them agree. A function of the section after the write and of the section that uci holds that returns the map limits it, as network/interfaces rewrites the list form of `ipaddr` only on a proto that uapi does not model.
+    clear_on_switch: { "<field>": [ "<field>", ... ] }, // optional. A PATCH or PUT that changes the key field, against the read of the section that uci holds, sets each listed field to null unless the request sends it with a value, so carry_write_only does not put a secret back. toUci must write a clear (`[]`) for such a null, because a PATCH deletes only what the read of the old value shows. Only network/interfaces declares it, as `{ proto: [ "username", "password" ] }`: each proto sends the login to another party.
     reload_if_running: ["<service>"], // optional. A daemon that also reads these fields but that an image can lack or the operator can stop, as dnsmasq, odhcpd and unbound read dhcp/servers. It is reloaded after `reload` when /etc/init.d/<service> exists and procd holds a `config.change` trigger for the service, and skipped without a 503 otherwise. The write asks procd under its locks, and when the list names an installed unbound, those include the lock of `unbound`, whether unbound runs or not. A LuCI save reloads a daemon whose trigger is on the package that it commits, or on one that the package affects in LuCI's ucitrack, as `system` affects `dhcp`. uapi takes any `config.change` trigger instead: the list here already names the daemons that read the package, and a `system` write reaches unbound only through that `affects`. LuCI's ucitrack also has `network` affect `dhcp`, and a `network` resource lists only `odhcpd` here, for the reason that `docs/raw.md` gives. For dnsmasq, odhcpd and unbound, which each register one on `dhcp`, the two rules agree. A resource whose every daemon is such a daemon lists them all here and declares no `reload`. A POST /uapi/batch reloads and lists its services sorted.
 };
 ```
@@ -555,7 +556,8 @@ Examples:
 - `wireless.interfaces.key` / `has_key`
 - `network.interfaces.private_key` / `has_private_key` (proto=wireguard)
 - `network.interfaces.key`, `tls_auth`, `pkcs12`, `password` and
-  `cert_password`, each with its `has_<field>` (proto=openvpn)
+  `cert_password`, each with its `has_<field>` (proto=openvpn, and
+  `password` on proto pppoe, ppp and wwan too)
 - `network.wireguard_peers.preshared_key` / `has_preshared_key`
 
 Implementation: `fromUci` masks the field (`key: null` or omit) and
@@ -568,7 +570,9 @@ from the request body. That is `carry_write_only` in `handler.uc`, not
 is why the hook takes no uci section. The footprint that a PATCH deletes
 within holds the stored secret too, so a PATCH removes it when `toUci`
 drops it, as a PUT does: `network.interfaces` drops `private_key` on a
-switch away from wireguard.
+switch away from wireguard. A secret that the next proto also reads, such
+as `password`, goes through `clear_on_switch` instead, so the framework
+does not carry it across a switch that does not send it.
 
 Mark the field `writeOnly: true` and the companion `readOnly: true` in
 `schema_properties` so a generator can distinguish them statically.

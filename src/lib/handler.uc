@@ -735,6 +735,23 @@ function carry_write_only(resource, body, existing) {
 	return out;
 }
 
+// A write that changes a key of `clear_on_switch`, against the read of the section that uci holds,
+// sets each field that the key lists to null unless the request names it with a value. Without
+// this, carry_write_only puts a secret back, and a PATCH keeps a field that the read of the old
+// value hides. toUci then writes a clear for each null. The section is read only for a resource
+// that declares the key, so another one still reports a validation error before that read.
+function clear_on_switch(resource, body, named, read_old) {
+	if (type(resource.clear_on_switch) != "object" || type(body) != "object" || read_old == null)
+		return body;
+	let old_view = read_old();
+	let out = { ...body };
+	for (let key, fields in resource.clear_on_switch)
+		if (out[key] != old_view[key])
+			for (let f in fields)
+				if (named[f] == null) out[f] = null;
+	return out;
+}
+
 // The top-level fields a JSON Patch names, taken from the first segment of each op path. A
 // `merge_for_patch` hook needs to know which fields the caller actually named, and under
 // merge-patch that is simply the body's keys; JSON Patch has to be told. The mirrored-name
@@ -976,7 +993,8 @@ function make(resource, opts) {
 				let found = existing != null && type_predicate(existing['.type']);
 				let existing_view = null;
 				let read_existing = () => (existing_view ??= resource.fromUci(existing, conn));
-				let write_body = carry_write_only(resource, body, existing);
+				let write_body = clear_on_switch(resource, carry_write_only(resource, body, existing), body,
+				                                 found ? read_existing : null);
 				let errs = _validate_with_schema(resource, body, write_body, c, id, body, false,
 				                                 found ? read_existing : null);
 				if (length(errs) > 0)
@@ -1040,6 +1058,7 @@ function make(resource, opts) {
 				let merge_fn = resource.merge_for_patch ?? default_merge_for_patch;
 				let r = apply_patch_body(existing, existing_view, body, ctx, merge_fn, resource);
 				if (!r.ok) return r;
+				r.merged = clear_on_switch(resource, r.merged, r.delta, () => existing_view);
 
 				let errs = _validate_with_schema(resource, r.schema_body, r.merged, c, id, r.delta, true, () => existing_view);
 				if (length(errs) > 0)

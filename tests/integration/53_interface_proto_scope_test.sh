@@ -197,10 +197,28 @@ r=$(send PUT /uapi53o "$(printf '%s' "$read_back" | jq -c 'del(.id, .managed, .r
 r=$(send PATCH /uapi53o '{"data_ciphers":["AES-256-GCM","AES-128-GCM"]}')
 [ "$(status "$r")" = 422 ] && [ "$(codes "$r" data_ciphers)" = conflict ] || fail "two data_ciphers entries expected 422 conflict: $r"
 
-echo "--- every read validates against the published Response schema ---"
+echo "--- proto pppoe stores the login, masks the password, keeps it across a PUT and loses it on a switch that does not send it ---"
 r=$(send POST "" "{\"id\":\"uapi53p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\",\"auto\":false,
-	\"peerdns\":false,\"reqprefix\":\"56\",\"sourcefilter\":false}")
+	\"peerdns\":false,\"reqprefix\":\"56\",\"sourcefilter\":false,\"username\":\"isp53\",\"password\":\"pw53p\"}")
 [ "$(status "$r")" = 200 ] || fail "create pppoe expected 200: $r"
+[ "$(uci_get uapi53p.username)/$(uci_get uapi53p.password)" = isp53/pw53p ] || fail "pppoe did not store username and password"
+read_back=$(body "$(call "$URL/network/interfaces/uapi53p")")
+printf '%s' "$read_back" | jq -e '.username == "isp53" and .has_password and (has("password") | not)' >/dev/null \
+	|| fail "the pppoe read is wrong: $read_back"
+r=$(send PUT /uapi53p "$(printf '%s' "$read_back" | jq -c 'del(.id, .managed, .runtime, .username)')")
+[ "$(status "$r")" = 200 ] && [ -z "$(uci_get uapi53p.username)" ] && [ "$(uci_get uapi53p.password)" = pw53p ] \
+	|| fail "a PUT that left out username and password did not remove the username and keep the password: $r"
+r=$(send PATCH /uapi53p '{"proto":"wwan","username":"apn53","password":"pw53w"}')
+[ "$(status "$r")" = 200 ] && [ "$(uci_get uapi53p.username)/$(uci_get uapi53p.password)" = apn53/pw53w ] \
+	|| fail "a switch to wwan did not store the login that it sent: $r"
+r=$(send PATCH /uapi53p '{"proto":"pppoe"}')
+[ "$(status "$r")" = 200 ] && [ -z "$(uci_get uapi53p.username)" ] && [ -z "$(uci_get uapi53p.password)" ] \
+	&& body "$r" | jq -e '.username == null and .has_password == false' >/dev/null \
+	|| fail "the switch back to pppoe kept the wwan login: $r"
+r=$(send PATCH /uapi53d '{"username":"isp53"}')
+[ "$(status "$r")" = 422 ] && [ "$(codes "$r" username)" = conflict ] || fail "username on dhcp expected 422 conflict: $r"
+
+echo "--- every read validates against the published Response schema ---"
 r=$(send POST "" "{\"id\":\"uapi53w\",\"proto\":\"wireguard\",\"auto\":false,\"private_key\":\"$WG_KEY\",
 	\"addresses\":[\"10.253.8.1/24\"],\"ip6prefix\":[\"fd00:53::/48\",\"fd00:54::/48\"]}")
 [ "$(status "$r")" = 200 ] || fail "create wireguard without listen_port expected 200: $r"
