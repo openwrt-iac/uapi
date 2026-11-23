@@ -19,7 +19,7 @@ is client-agnostic.
   request.
 - Bearer tokens with hierarchical scopes, expiry, source-IP scoping, HTTP-side
   rotation (`POST /uapi/tokens`).
-- 44 curated resources plus a generic `/raw/<package>/<id>` passthrough for the
+- 43 curated resources plus a generic `/raw/<package>/<id>` passthrough for the
   long tail.
 - Conditional GET (304), idempotency keys, cursor pagination, per-resource ETags
   + `If-Match`, JSON Patch (RFC 6902), Prometheus `/uapi/metrics`,

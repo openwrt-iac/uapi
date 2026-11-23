@@ -1276,7 +1276,8 @@ t.describe('network.interfaces proto scope', () => {
 			broadcast: '1', gateway: '10.0.0.254', ip6gw: 'fd00::fe', ip6prefix: 'fd00:1::/48', hostname: 'h',
 			clientid: '01aa', reqprefix: 'auto', reqaddress: 'try', sourcefilter: '0', peerdns: '0',
 			private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', listen_port: '51820',
-			addresses: [ '10.9.0.1/24' ], nohostroute: '1' };
+			addresses: [ '10.9.0.1/24' ], nohostroute: '1', client: '1', ovpnproto: 'udp', remote: [ 'a.example' ],
+			ca: '/etc/openvpn/ca.pem', key: '/etc/openvpn/k.pem', password: 'pw' };
 		let checked = 0;
 		for (let proto in interfaces.schema_properties.proto["x-uapi-write"].enum) {
 			let view = interfaces.fromUci({ ...full, proto }, null);

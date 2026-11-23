@@ -46,7 +46,16 @@ import * as fs from 'fs';
 // the module hides it outside some protos. docs/adding-a-resource.md leaves such a default
 // un-annotated: a client that filled it in would send `false` where the field is refused.
 const ALLOWLIST = {
-	"network.interfaces.uc:nohostroute": "wireguard only",
+	"network.interfaces.uc:nohostroute": "wireguard and openvpn only",
+	"network.interfaces.uc:client": "openvpn only",
+	"network.interfaces.uc:nobind": "openvpn only",
+	"network.interfaces.uc:float": "openvpn only",
+	"network.interfaces.uc:client_to_client": "openvpn only",
+	"network.interfaces.uc:duplicate_cn": "openvpn only",
+	"network.interfaces.uc:persist_key": "openvpn only",
+	"network.interfaces.uc:persist_tun": "openvpn only",
+	"network.interfaces.uc:tls_server": "openvpn only",
+	"network.interfaces.uc:tls_client": "openvpn only",
 };
 
 function read_file(path) {
@@ -140,15 +149,16 @@ function find_clear_on_omit_fields(content) {
 function check_clear_on_omit_shape(content, fields) {
 	let errors = [];
 	for (let field in fields) {
-		// Four shapes read back null for an absent key, which is what a plain-Optional
-		// attribute requires: fw_enum returns a value that is not a string as it is. `as_list`
-		// is still excluded: it returns `[]`, which is the inconsistent-result trap this rule
-		// exists for.
+		// Six shapes read back null for an absent key, which is what a plain-Optional
+		// attribute requires: fw_enum returns a value that is not a string as it is, and the
+		// netifd readers return null for anything but a string. `as_list` is still excluded: it
+		// returns `[]`, which is the inconsistent-result trap this rule exists for.
 		let scalar_re = regexp(sprintf('\\b%s:\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\?\\?\\s*null', field));
 		let list_re = regexp(sprintf('\\b%s:\\s*as_(word_)?list_or_null\\(', field));
 		let enum_re = regexp(sprintf('\\b%s:\\s*values\\.fw_enum\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,', field));
-		if (!match(content, scalar_re) && !match(content, list_re) && !match(content, enum_re))
-			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is not `section.X ?? null`, `as_list_or_null(...)`, `as_word_list_or_null(...)` or `values.fw_enum(section.X, ...)`; each reads absent as null, which is what a plain-Optional attribute needs. Plain `as_list` returns [] and trips 'Provider produced inconsistent result'", field));
+		let netifd_re = regexp(sprintf('\\b%s:\\s*(values\\.)?netifd_(int|string)\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*\\)', field));
+		if (!match(content, scalar_re) && !match(content, list_re) && !match(content, enum_re) && !match(content, netifd_re))
+			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is not `section.X ?? null`, `as_list_or_null(...)`, `as_word_list_or_null(...)`, `values.fw_enum(section.X, ...)`, `netifd_int(section.X)` or `netifd_string(section.X)`, and each of those reads absent as null, which is what a plain-Optional attribute needs. Plain `as_list` returns [] and trips 'Provider produced inconsistent result'", field));
 	}
 	return errors;
 }

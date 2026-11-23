@@ -1,10 +1,11 @@
 # Migration v3 to v4
 
 What changes between the v3 and v4 majors of the API, and what a client must do.
-The removals and renames were announced in 3.x. The other changes are listed
-here, and a section names the 3.x release that announced its change when one
-did. The section "Reads that change at the upgrade" lists those reads, and what
-that does to ETags and to a plan made on 3.x.
+The removals and renames were announced in 3.x, apart from `openvpn/instances`,
+whose section says why. The other changes are listed here, and a section names
+the 3.x release that announced its change when one did. The section "Reads
+that change at the upgrade" lists those reads, and what that does to ETags and
+to a plan made on 3.x.
 
 ## 4.x needs OpenWrt main or the next release
 
@@ -91,6 +92,115 @@ token reads both families before and after the upgrade. v4 has no scope for the
 IPv4 leases alone, so a client that must not see the IPv6 leases cannot keep
 `dhcp:leases` or `*:leases`.
 
+## openvpn becomes a proto of `network/interfaces`
+
+`openvpn/instances` is removed (#466). On OpenWrt main, the platform of 4.x,
+the openvpn package runs a tunnel as a netifd protocol. A tunnel is a `config
+interface` section with `option proto 'openvpn'` in `/etc/config/network`,
+which `/lib/netifd/proto/openvpn.sh` runs. The package has no init script and
+no `/etc/config/openvpn` there, so `openvpn/instances` read sections that
+nothing runs, and each write answered 503 `init_script_missing`. LuCI made the
+same move: luci-proto-openvpn shows a tunnel under Network, Interfaces. No 3.x
+release announced this removal. v3 takes no more releases, and the path cannot
+work on the platform of 4.x.
+
+A tunnel is now a `network/interfaces` resource with `proto: "openvpn"`. It
+needs the `openvpn-openssl` package, or its `openvpn-mbedtls` or
+`openvpn-wolfssl` variant. netifd loads its proto handlers when it starts. After
+an `apk add` of the package on a running router, netifd does not know proto
+openvpn: `ubus call network get_proto_handlers` does not list it, `ifstatus`
+says `NO_DEVICE`, and uapi reads `runtime.effective_proto: "none"`. A reboot or
+`/etc/init.d/network restart` loads the handler.
+
+### What an upgraded router holds
+
+At the first boot on OpenWrt main, the uci-defaults script
+`60_openvpn_migrate.sh` of the openvpn package copies each `config openvpn`
+section of `/etc/config/openvpn` into `/etc/config/network`, once. Each copy is
+a `config interface` of the same name with `option proto 'openvpn'`. The script
+renames the option `proto` to `ovpnproto`, copies every other option as it is,
+and skips a section whose name `/etc/config/network` already holds. It leaves
+`/etc/config/openvpn` in place, and nothing reads that file after the upgrade.
+
+So each 3.x instance reads as `GET /network/interfaces/<id>` under the same id,
+with a new ETag. Do not create the tunnels again: a POST with an id that
+`/etc/config/network` holds answers 422 `conflict`. A client that managed an
+instance takes over the interface of the same id, by an import for Terraform. A
+router that had no `/etc/config/openvpn` gets no copy.
+
+**Warning: an instance that was off on 3.x runs after the upgrade.** The
+openvpn init script of 25.12 runs a section only when its `enable` or `enabled`
+option reads true. Every other section is off, a section with neither option
+too. netifd and the openvpn handler read neither option, and the copy adds no
+`disabled`. So at the first boot on OpenWrt main, netifd starts every copied
+tunnel, and uapi reads it with `disabled: false`, `auto: true` and a `runtime`
+that is up. Before the upgrade, add `option disabled '1'` to each instance that
+is off in `/etc/config/openvpn`: the copy carries it, and the init script of
+25.12 does not read it. Or right after the upgrade, send `{"disabled": true}`
+to `network/interfaces` for each such tunnel.
+
+**Warning: an openvpn client can take the default route.** On OpenWrt main,
+openvpn-hotplug adds a default route through the tunnel each time openvpn knows
+a route gateway, also without `redirect-gateway`, and a server with `topology
+subnet` always pushes one. With `defaultroute` unset, which means true, netifd
+then replaces the default route of wan in the main table. When the tunnel goes
+down, netifd removes its route, and the main table has no IPv4 default route
+until wan restarts. A copied 3.x client gets `defaultroute` unset. Before the
+upgrade, add `option defaultroute '0'` to each client in `/etc/config/openvpn`
+that must not carry the default route, or right after the upgrade, send
+`{"defaultroute": false}` for it. The pushed routes of the server still apply.
+
+### Field map
+
+Each field of `openvpn/instances` that is not in this table keeps its name, its
+type and its meaning on `network/interfaces`, and applies to proto openvpn
+only.
+
+| 3.x `openvpn/instances` | 4.x `network/interfaces` |
+|---|---|
+| `proto` | `ovpnproto`, the uci option that the copy renames it to |
+| `enabled` | `disabled`, inverted, and `auto`. The copy keeps `enabled` in uci, which nothing reads. A PATCH keeps it, and a PUT removes it |
+| `status` | gone: the handler gives openvpn `--status /var/run/openvpn.<id>.status` itself |
+| `comp_lzo`, `compress` | gone: the handler passes them only with `allow_deprecated '1'`, which uapi does not model |
+| `ncp_ciphers`, `ncp_disable` | gone: the handler does not read them. Send the ciphers in `data_ciphers` |
+| (none) | `config`, `data_ciphers`, `username`, and the write-only `password` and `cert_password` with `has_password` and `has_cert_password` |
+
+`key`, `tls_auth` and `pkcs12` stay write-only, with `has_key`, `has_tls_auth`
+and `has_pkcs12`. `data_ciphers` takes one entry, the cipher names joined by
+colons: the handler gives openvpn each entry as a `--data-ciphers` of its own,
+and openvpn keeps only the last. Several entries answer 422 `conflict`, on a
+write and while uci holds them. `peerdns` and `nohostroute` of the interface
+apply to openvpn too, and so do the options that netifd reads for every proto,
+such as `metric` and `defaultroute`.
+
+Some reads of the same option differ from 3.x, because netifd hands each option
+to the handler through uci's converter. A boolean reads true for `1` or `true`
+only, where 3.x also took `yes`, `on` and `enabled`. An integer such as `port`
+also reads in hex or octal, so `010` is 8. An option of `remote`, `push`,
+`route` or `data_ciphers` that is not a uci list reads as its words, each a
+flag of its own for openvpn. `local` also takes a host name, as LuCI's form
+does. The booleans carry no `default` in the spec, because they apply to one
+proto only, as `nohostroute` of a wireguard interface. A PUT removes each
+option that uapi does not model, such as `mode` or `script_security`, and a
+PATCH keeps it.
+
+### Tokens and scopes
+
+The upgrade keeps each stored token and its scopes, and such a token still
+authenticates. `/openvpn/instances` answers 404 `not_found` for every token. A
+scope `openvpn`, `openvpn:instances` or `*:instances` grants nothing on the
+tunnels: they need `network:interfaces` or `network`, which also cover every
+other interface, the management one included. With `raw:openvpn`, a scope on
+`openvpn` still grants `/raw/openvpn` on the sections that stay in
+`/etc/config/openvpn`.
+
+`uapi-token create` refuses `openvpn:instances` as an unknown path, and `POST
+/uapi/tokens` answers 422 for it. Both take `openvpn` only while
+`/etc/config/openvpn` exists, as a scope on a package outside the tree, and
+`*:instances`, which now covers `dropbear/instances` and `uhttpd/instances`.
+Mint a token with `network:interfaces` for a client that manages tunnels, and
+revoke its old one.
+
 ## The token mint refuses a scope that the server does not know
 
 `POST /uapi/tokens` now checks each scope as `uapi-token create` does
@@ -101,8 +211,9 @@ answers 422 `validation_failed`, with code `not_in_enum` on its entry of
 `scopes`, such as `scopes[1]`:
 
 - a typo, such as `firewall:rulez:rw` or `firewal:rw`,
-- a scope that v4 removed, such as `dhcp:leases6:ro`, but not `*:leases6:ro`,
-  which passes as `*:<package>` and grants nothing on `/dhcp/leases`,
+- a scope that v4 removed, such as `dhcp:leases6:ro` or `openvpn:instances:rw`,
+  but not `*:leases6:ro`, which passes as `*:<package>` and grants nothing on
+  `/dhcp/leases`,
 - a path below a package outside the tree, such as `ddns:service:rw`,
 - a scope on a package that is not installed,
 - a malformed scope, such as one without a verb.
@@ -662,8 +773,9 @@ A client that sends only the query forms sees no change.
 Apart from the mount in `uhttpd.main`, the upgrade keeps `/etc/config`, the
 token store and every id as they are. Of the stored scopes, only `dhcp:leases`,
 `dhcp:leases6`, `*:leases` and `*:leases6` change what they grant, as the
-`dhcp/leases` section says. Some reads now answer another value for the same
-stored option, to follow what the daemon does:
+`dhcp/leases` section says, and the scopes on `openvpn` and `*:instances` no
+longer reach a tunnel, as the openvpn section says. Some reads now answer
+another value for the same stored option, to follow what the daemon does:
 
 | Resource | Field | The read changes when the option is |
 |---|---|---|

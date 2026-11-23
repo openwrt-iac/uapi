@@ -11,6 +11,7 @@ let is_valid_cidr_any = values.is_valid_cidr_any;
 let is_valid_ipv6 = values.is_valid_ipv6;
 let is_valid_ipv6_cidr = values.is_valid_ipv6_cidr;
 let netifd_int = values.netifd_int;
+let netifd_string = values.netifd_string;
 let ipv6_words = values.ipv6_words;
 
 const PKG = "network";
@@ -22,7 +23,7 @@ const IFNAMSIZ_RE = /^[A-Za-z][A-Za-z0-9_]{0,14}$/;
 
 const VALID_PROTOS = {
 	"static": true, "dhcp": true, "dhcpv6": true, "pppoe": true,
-	"none": true, "ppp": true, "wwan": true, "wireguard": true,
+	"none": true, "ppp": true, "wwan": true, "wireguard": true, "openvpn": true,
 };
 const WG_KEY_RE = regexp("^" + values.WG_KEY_PATTERN + "$");
 const VALID_REQADDRESS = { "try": true, "force": true, "none": true };
@@ -39,18 +40,52 @@ const FIELD_PROTOS = {
 	reqaddress: [ "dhcpv6" ],
 	reqprefix: [ "dhcpv6", "pppoe", "ppp" ],
 	sourcefilter: [ "dhcpv6", "pppoe", "ppp" ],
-	peerdns: [ "dhcp", "dhcpv6", "pppoe", "ppp", "wwan" ],
+	// netifd drops the DNS servers that openvpn-hotplug adds from a pushed dhcp-option when peerdns
+	// is off, and the hotplug skips the host route to the server for nohostroute '1'.
+	peerdns: [ "dhcp", "dhcpv6", "pppoe", "ppp", "wwan", "openvpn" ],
 	private_key: [ "wireguard" ], has_private_key: [ "wireguard" ], listen_port: [ "wireguard" ],
-	addresses: [ "wireguard" ], nohostroute: [ "wireguard" ],
+	addresses: [ "wireguard" ], nohostroute: [ "wireguard", "openvpn" ],
 };
 
+// The options of /lib/netifd/proto/openvpn.sh that uapi models. Each field is the uci option of
+// its name.
+const OPENVPN = {};
+for (let f in [ "client", "dev", "dev_type", "ovpnproto", "port", "lport", "rport", "remote", "local",
+                "nobind", "float", "topology", "server", "server_bridge", "push", "route", "route_gateway",
+                "ifconfig", "ifconfig_pool", "client_to_client", "duplicate_cn", "keepalive", "ping",
+                "ping_restart", "persist_key", "persist_tun", "cipher", "auth", "data_ciphers", "tls_server",
+                "tls_client", "tls_crypt", "ca", "cert", "dh", "crl_verify", "remote_cert_tls",
+                "verify_x509_name", "user", "group", "log", "log_append", "verb", "mute", "config",
+                "username", "key", "tls_auth", "pkcs12", "password", "cert_password",
+                "has_key", "has_tls_auth", "has_pkcs12", "has_password", "has_cert_password" ]) {
+	OPENVPN[f] = true;
+	FIELD_PROTOS[f] = [ "openvpn" ];
+}
+
+// openvpn's --proto takes a family-agnostic form plus explicit v4 and v6 variants, and tcp has
+// separate client and server spellings, which LuCI offers.
+const VALID_OVPNPROTO = {
+	"udp": true,  "tcp": true,  "tcp-client": true,  "tcp-server": true,
+	"udp4": true, "tcp4": true, "tcp4-client": true, "tcp4-server": true,
+	"udp6": true, "tcp6": true, "tcp6-client": true, "tcp6-server": true,
+};
+// The handler writes each value onto a line of openvpn's config, so a path excludes whitespace and
+// shell meta.
+const PATH_RE = /^\/[A-Za-z0-9_.+\/-]+$/;
+const OPENVPN_PATHS = [ "ca", "cert", "key", "dh", "tls_auth", "tls_crypt", "pkcs12", "crl_verify",
+                        "log", "log_append", "config" ];
+// LuCI's `hostname` datatype, which its openvpn form takes for `local` beside an address.
+const HOSTNAME_RE = /^([A-Za-z0-9_]+|[A-Za-z0-9_][A-Za-z0-9_.-]*[A-Za-z0-9]\.?)$/;
+
 // The table judges only the protos uapi models. A handler such as 6in4 reads ipaddr and
-// ip6prefix, and uapi cannot know what else, so on such a proto every field applies except the
-// two that are another reading of an option: uci `broadcast` there is no dhcp flag.
+// ip6prefix, and uapi cannot know what else, so on such a proto every field applies except those
+// that are another reading of an option: uci `broadcast` there is no dhcp flag, and `server` or
+// `password` there is no openvpn option. A has_ twin reads false where uci holds nothing, which
+// on such a proto would show a field for an option that is absent.
 function applies(field, proto) {
 	let protos = FIELD_PROTOS[field];
 	return protos == null || index(protos, proto) != -1
-		|| (!VALID_PROTOS[proto] && field != "broadcast_flag" && field != "has_private_key");
+		|| (!VALID_PROTOS[proto] && field != "broadcast_flag" && !OPENVPN[field] && index(field, "has_") != 0);
 }
 
 // Fields that can hold several values, and their options. netifd hands a list to a handler only for
@@ -60,6 +95,11 @@ function applies(field, proto) {
 // hands it. wireguard.sh declares addresses as a string and reads the list from uci, so the
 // declaration does not tell for addresses.
 const LIST_OPTIONS = { ipaddrs: "ipaddr", ip6addrs: "ip6addr", ip6prefix: "ip6prefix" };
+
+const OVPN_BOOL = " Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag.";
+const OVPN_FILE = " The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists.";
+const OVPN_LIST = " Always an array. netifd splits an option that is not a uci list into its words, and the handler gives openvpn each as an entry of its own, so such an option reads as its words.";
+const OVPN_SECRET = " Write-only: a read gives `has_%s`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it.";
 
 const ONE_VALUE = " On a proto that uapi does not model, such as 6in4, one value is stored as an option, as LuCI writes it, and a write refuses several when the handler reads the option as one value, as netifd publishes it in `get_proto_handlers`: netifd hands such a handler no uci list.";
 
@@ -190,6 +230,60 @@ function fromUci(section, conn) {
 		addresses: as_word_list_or_null(section.addresses),
 		nohostroute: strict_bool(section.nohostroute),
 		has_private_key: (section.private_key != null && section.private_key != ""),
+		// netifd hands the openvpn handler each option through uci's blob converter, as the handler
+		// declares it: a boolean takes 1 or true, an integer reads as strtol in base 0, a string
+		// drops a list, and a list splits an option into words.
+		client: platform_bool(section.client, false),
+		dev: netifd_string(section.dev),
+		dev_type: netifd_string(section.dev_type),
+		ovpnproto: netifd_string(section.ovpnproto),
+		port: netifd_int(section.port),
+		lport: netifd_int(section.lport),
+		rport: netifd_int(section.rport),
+		remote: as_word_list_or_null(section.remote),
+		local: netifd_string(section.local),
+		nobind: platform_bool(section.nobind, false),
+		float: platform_bool(section.float, false),
+		topology: netifd_string(section.topology),
+		server: netifd_string(section.server),
+		server_bridge: netifd_string(section.server_bridge),
+		push: as_word_list_or_null(section.push),
+		route: as_word_list_or_null(section.route),
+		route_gateway: netifd_string(section.route_gateway),
+		ifconfig: netifd_string(section.ifconfig),
+		ifconfig_pool: netifd_string(section.ifconfig_pool),
+		client_to_client: platform_bool(section.client_to_client, false),
+		duplicate_cn: platform_bool(section.duplicate_cn, false),
+		keepalive: netifd_string(section.keepalive),
+		ping: netifd_int(section.ping),
+		ping_restart: netifd_int(section.ping_restart),
+		persist_key: platform_bool(section.persist_key, false),
+		persist_tun: platform_bool(section.persist_tun, false),
+		cipher: netifd_string(section.cipher),
+		auth: netifd_string(section.auth),
+		data_ciphers: as_word_list_or_null(section.data_ciphers),
+		tls_server: platform_bool(section.tls_server, false),
+		tls_client: platform_bool(section.tls_client, false),
+		tls_crypt: netifd_string(section.tls_crypt),
+		ca: netifd_string(section.ca),
+		cert: netifd_string(section.cert),
+		dh: netifd_string(section.dh),
+		crl_verify: netifd_string(section.crl_verify),
+		remote_cert_tls: netifd_string(section.remote_cert_tls),
+		verify_x509_name: netifd_string(section.verify_x509_name),
+		user: netifd_string(section.user),
+		group: netifd_string(section.group),
+		log: netifd_string(section.log),
+		log_append: netifd_string(section.log_append),
+		verb: netifd_int(section.verb),
+		mute: netifd_int(section.mute),
+		config: netifd_string(section.config),
+		username: netifd_string(section.username),
+		has_key: (section.key != null && section.key != ""),
+		has_tls_auth: (section.tls_auth != null && section.tls_auth != ""),
+		has_pkcs12: (section.pkcs12 != null && section.pkcs12 != ""),
+		has_password: (section.password != null && section.password != ""),
+		has_cert_password: (section.cert_password != null && section.cert_password != ""),
 		runtime: fetch_runtime(conn, section['.name']),
 	};
 	for (let field in FIELD_PROTOS)
@@ -250,6 +344,19 @@ function toUci(body) {
 	if (type(json.addresses) == "array" && length(json.addresses) > 0)
 		out.addresses = json.addresses;
 	if (json.nohostroute != null) out.nohostroute = json.nohostroute ? "1" : "0";
+	for (let k in [ "client", "nobind", "float", "client_to_client", "duplicate_cn", "persist_key",
+	                "persist_tun", "tls_server", "tls_client" ])
+		if (json[k] != null) out[k] = json[k] ? "1" : "0";
+	for (let k in [ "port", "lport", "rport", "ping", "ping_restart", "verb", "mute" ])
+		if (json[k] != null) out[k] = "" + json[k];
+	for (let k in [ "remote", "push", "route", "data_ciphers" ])
+		if (type(json[k]) == "array" && length(json[k]) > 0) out[k] = json[k];
+	for (let k in [ "dev", "dev_type", "ovpnproto", "local", "topology", "server", "server_bridge",
+	                "route_gateway", "ifconfig", "ifconfig_pool", "keepalive", "cipher", "auth", "tls_crypt",
+	                "ca", "cert", "dh", "crl_verify", "remote_cert_tls", "verify_x509_name", "user", "group",
+	                "log", "log_append", "config", "username", "key", "tls_auth", "pkcs12", "password",
+	                "cert_password" ])
+		if (json[k] != null) out[k] = json[k];
 	return out;
 }
 
@@ -275,7 +382,7 @@ function validate(json, conn, id, delta, partial) {
 	if (type(json.proto) == "string")
 		for (let field, v in named) {
 			if (v == null || v === "" || (type(v) == "array" && length(v) == 0)
-			    || field == "ipaddr" || field == "has_private_key" || applies(field, json.proto))
+			    || field == "ipaddr" || index(field, "has_") == 0 || applies(field, json.proto))
 				continue;
 			let protos = FIELD_PROTOS[field];
 			push(errs, { field, code: "conflict",
@@ -383,6 +490,19 @@ function validate(json, conn, id, delta, partial) {
 		}
 	}
 
+	for (let field in OPENVPN_PATHS)
+		if (ok(field) && json[field] != null && json[field] != "" && (type(json[field]) != "string" || !match(json[field], PATH_RE)))
+			push(errs, { field, code: "invalid_format",
+			             message: "must be an absolute filesystem path without whitespace or shell meta" });
+	if (ok("local") && type(json.local) == "string" && json.local != "" && !values.is_valid_ip(json.local)
+	    && (length(json.local) > 253 || !match(json.local, HOSTNAME_RE) || !match(json.local, /[^0-9.]/)))
+		push(errs, { field: "local", code: "invalid_format",
+		             message: "must be an IP address or a host name" });
+	// options.c of openvpn 2.7 stores each --data-ciphers over the one before it.
+	if (ok("data_ciphers") && type(json.data_ciphers) == "array" && length(json.data_ciphers) > 1)
+		push(errs, { field: "data_ciphers", code: "conflict",
+		             message: "must hold one entry: the handler gives openvpn each entry as a --data-ciphers of its own, and openvpn keeps only the last. Join the ciphers with colons in one entry, such as AES-256-GCM:CHACHA20-POLY1305" });
+
 	// These follow LuCI. netifd parses ip6hint with strtol(v, NULL, 16), so a prefix such as
 	// 2001:db8::/56 was not ignored: it became subnet 0x2001. An empty string clears the option.
 	if (json.ip6hint != null && json.ip6hint != "") {
@@ -464,11 +584,13 @@ return {
 	// not the same condition, so the framework is told rather than guessing.
 	mgmt_path_guard: true,
 	// Caller-supplied name wins. proto=wireguard falls back to a 14-char
-	// wg_<rand> (netifd's IFNAMSIZ constraint); other protos return null
-	// so handler.create emits the standard 28-char ULID.
+	// wg_<rand> (netifd's IFNAMSIZ constraint), and proto=openvpn to a 15-char
+	// vpn_<rand>, within the 15 chars that LuCI takes for an interface name.
+	// Other protos return null so handler.create emits the standard 28-char ULID.
 	id_for_create: function(body) {
 		if (body == null) return null;
 		if (body.proto == "wireguard") return ids.new_id("wg", 11);
+		if (body.proto == "openvpn") return ids.new_id("vpn", 11);
 		return null;
 	},
 	openapi_singular: "network interface",
@@ -510,9 +632,9 @@ return {
 	},
 	schema_properties: {
 		proto: { type: "string", default: "none", "x-uapi-write": { enum: keys(VALID_PROTOS) },
-		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer." },
+		         description: "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, ppp/pppoe need `ppp`, and openvpn needs `openvpn-openssl`, or its `openvpn-mbedtls` or `openvpn-wolfssl` variant. When the handler is missing, the write still succeeds, the interface is inert, and `runtime.effective_proto` reads `none`. netifd loads its handlers when it starts, so a handler package installed later takes effect after a reboot or `/etc/init.d/network restart`. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer." },
 		id:        { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,31}$",
-		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write." },
+		             description: "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev), a 15-char `vpn_<rand>` for proto=openvpn, or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write." },
 		device:    { type: ["string", "null"],
 		             description: "Physical or logical L2 device this interface binds to" },
 		ipaddr:    { type: ["string", "null"], readOnly: true,
@@ -532,7 +654,8 @@ return {
 		             description: "IPv6 prefixes routed to this device for delegation to clients (static, dhcpv6, wireguard). Always an array in both directions." + ONE_VALUE },
 		gateway:   { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		             description: "IPv4 default gateway (static proto)" },
-		dns:       { type: ["array", "null"], items: { type: "string" } },
+		dns:       { type: ["array", "null"], items: { type: "string" },
+		             description: "DNS servers that netifd sets for this interface. On proto openvpn too, this is netifd's list and not openvpn's own `--dns`, which uapi does not model: a write stores a uci list, which the openvpn handler does not take for its `dns` option." },
 		ip6assign: { type: ["integer", "null"], minimum: 0, maximum: 128,
 		             description: "Prefix length to assign downstream from a delegated prefix" },
 		ip6hint:   { type: ["string", "null"],
@@ -557,15 +680,15 @@ return {
 		listen_port:  { "x-uapi-read-nullable": true, type: "integer", minimum: -1, maximum: 65535, "x-uapi-write": { minimum: 0 },
 		                description: "WireGuard listen port. 0 or unset lets the kernel pick one. A service name that uci stores, such as `openvpn`, reads as its port from /etc/services, as wg resolves it. -1 reads when the name does not resolve, and then wg cannot bring the interface up. A write answers 422 while the interface holds -1. A PATCH that switches to wireguard and leaves listen_port out also answers 422 while uci holds such a name, which the read of the old proto does not show, and null in the switch removes it." },
 		nohostroute:  { type: "boolean",
-		                description: "Suppress the implicit host-route for wireguard endpoint" },
+		                description: "Suppress the host route that wireguard adds to a peer endpoint and openvpn to its remote server. Only a stored `1` reads true, which is the value that openvpn-hotplug compares it with." },
 		ip4table:     { type: ["string", "null"],
 		                description: "Routing table for the IPv4 routes this interface installs: a number or a name from /etc/iproute2/rt_tables" },
 		ip6table:     { type: ["string", "null"],
 		                description: "Routing table for the IPv6 routes this interface installs: a number or a name from /etc/iproute2/rt_tables" },
 		peerdns:      { "x-uapi-read-nullable": true, type: "boolean",
-		                description: "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan). Unset means true." },
+		                description: "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan, openvpn). On openvpn they are the DNS servers of a pushed `dhcp-option`. Unset means true." },
 		defaultroute: { "x-uapi-read-nullable": true, type: "boolean",
-		                description: "Install the default route the protocol provides. Unset means true." },
+		                description: "Install the default route the protocol provides. Unset means true. On openvpn, openvpn-hotplug provides one each time openvpn knows a route gateway, which a `topology subnet` server always pushes, also without `redirect-gateway`. netifd then replaces the default route of wan, and when the tunnel goes down the main table keeps no IPv4 default route until wan restarts. Set false on a client that must not carry the default route." },
 		metric:       { "x-uapi-read-nullable": true, type: "integer", minimum: -2147483648, "x-uapi-write": { minimum: 0 },
 		                description: "Metric of the routes this interface installs without one of their own" },
 		broadcast_flag: { "x-uapi-read-nullable": true, type: "boolean",
@@ -582,5 +705,112 @@ return {
 		                description: "Hand this interface's IPv6 prefixes on to downstream interfaces. Unset means true." },
 		sourcefilter: { "x-uapi-read-nullable": true, type: "boolean",
 		                description: "Source-specific default routes (dhcpv6, ppp, pppoe). Unset means true. False adds the upstream default route without a source, which a routed `ip6prefix` needs: traffic from its downstream subnets matches no source-specific route." },
+		client:           { type: "boolean",
+		                    description: "proto openvpn only. Run in client mode (`--client`), which takes the options that the server pushes." + OVPN_BOOL },
+		dev:              { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. tun or tap device name, such as `tun0`. openvpn needs a device, from this field or from `config`." },
+		dev_type:         { type: ["string", "null"], "x-uapi-clear-on-omit": true, enum: [ "tun", "tap", "null", null ], "x-uapi-write": { enum: [ "tun", "tap", null ] },
+		                    description: "proto openvpn only. `tun` or `tap`. Unset, the handler passes `--dev-type tun`. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses." },
+		ovpnproto:        { type: ["string", "null"], "x-uapi-clear-on-omit": true, enum: [ ...keys(VALID_OVPNPROTO), null ],
+		                    description: "proto openvpn only. Transport protocol, openvpn's `--proto`. uci names it `ovpnproto` because `proto` is the netifd protocol, and it is the `proto` of the openvpn/instances of uapi 3.x. Unset, openvpn uses udp." },
+		port:             { type: ["integer", "null"], "x-uapi-clear-on-omit": true, minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
+		                    description: "proto openvpn only. Local and remote port (`--port`)." },
+		lport:            { type: ["integer", "null"], "x-uapi-clear-on-omit": true, minimum: 0, maximum: 65535,
+		                    description: "proto openvpn only. Local port (`--lport`)." },
+		rport:            { type: ["integer", "null"], "x-uapi-clear-on-omit": true, minimum: 0, maximum: 65535, "x-uapi-write": { minimum: 1 },
+		                    description: "proto openvpn only. Remote port (`--rport`)." },
+		remote:           { type: ["array", "null"], "x-uapi-clear-on-omit": true, items: { type: "string" },
+		                    description: "proto openvpn only. Servers that a client connects to, each `host [port [proto]]`, tried in order." + OVPN_LIST },
+		local:            { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Local IP address or host name to bind to (`--local`), as LuCI's form takes it." },
+		nobind:           { type: "boolean",
+		                    description: "proto openvpn only. Bind to no local address and port (`--nobind`)." + OVPN_BOOL },
+		float:            { type: "boolean",
+		                    description: "proto openvpn only. Let the peer change its address or port (`--float`)." + OVPN_BOOL },
+		topology:         { type: ["string", "null"], "x-uapi-clear-on-omit": true, enum: [ "net30", "p2p", "subnet", null ],
+		                    description: "proto openvpn only. Server-mode topology." },
+		server:           { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Server-mode subnet, such as `10.8.0.0 255.255.255.0`." },
+		server_bridge:    { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Bridged server mode: `gateway netmask pool-start pool-end`." },
+		push:             { type: ["array", "null"], "x-uapi-clear-on-omit": true, items: { type: "string" },
+		                    description: "proto openvpn only. Server-mode directives pushed to clients, such as `route 10.0.0.0 255.255.255.0`." + OVPN_LIST },
+		route:            { type: ["array", "null"], "x-uapi-clear-on-omit": true, items: { type: "string" },
+		                    description: "proto openvpn only. Routes of the tunnel, each `network [netmask [gateway [metric]]]`, which openvpn-hotplug hands to netifd." + OVPN_LIST },
+		route_gateway:    { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Gateway of the `route` entries that name none." },
+		ifconfig:         { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Tunnel addresses: `local remote` on a point-to-point tun, `address netmask` otherwise." },
+		ifconfig_pool:    { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Server-mode address pool: `start end [netmask]`." },
+		client_to_client: { type: "boolean",
+		                    description: "proto openvpn only. Server mode: route traffic between clients inside openvpn (`--client-to-client`)." + OVPN_BOOL },
+		duplicate_cn:     { type: "boolean",
+		                    description: "proto openvpn only. Server mode: let several clients connect with one common name (`--duplicate-cn`)." + OVPN_BOOL },
+		keepalive:        { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. `interval timeout` pair, such as `10 60`." },
+		ping:             { type: ["integer", "null"], "x-uapi-clear-on-omit": true, minimum: 0, maximum: 2147483647,
+		                    description: "proto openvpn only. Seconds between pings when no other traffic passes (`--ping`)." },
+		ping_restart:     { type: ["integer", "null"], "x-uapi-clear-on-omit": true, minimum: 0, maximum: 2147483647,
+		                    description: "proto openvpn only. Seconds without traffic from the peer before openvpn restarts (`--ping-restart`)." },
+		persist_key:      { type: "boolean",
+		                    description: "proto openvpn only. Keep the keys across a restart (`--persist-key`)." + OVPN_BOOL },
+		persist_tun:      { type: "boolean",
+		                    description: "proto openvpn only. Keep the tun or tap device across a restart (`--persist-tun`)." + OVPN_BOOL },
+		cipher:           { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Data cipher for a peer that negotiates none, such as `AES-256-CBC` (`--cipher`)." },
+		auth:             { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. HMAC digest, such as `SHA256` (`--auth`)." },
+		data_ciphers:     { type: ["array", "null"], "x-uapi-clear-on-omit": true, items: { type: "string" },
+		                    description: "proto openvpn only. Ciphers that openvpn negotiates, as one entry of names joined by colons, such as `AES-256-GCM:CHACHA20-POLY1305`. It replaces `ncp_ciphers`. The handler gives openvpn each entry as a `--data-ciphers` of its own, and openvpn keeps only the last, so a write with several entries answers 422 `conflict`. Several stored entries, which LuCI's form can write, are an error of the section, and every write answers 422 until one sends a single entry. Always an array." },
+		tls_server:       { type: "boolean",
+		                    description: "proto openvpn only. Take the TLS server role (`--tls-server`)." + OVPN_BOOL },
+		tls_client:       { type: "boolean",
+		                    description: "proto openvpn only. Take the TLS client role (`--tls-client`)." + OVPN_BOOL },
+		tls_crypt:        { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Absolute path of the tls-crypt key file." + OVPN_FILE },
+		ca:               { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Absolute path of the CA certificate PEM." + OVPN_FILE },
+		cert:             { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Absolute path of the local certificate PEM." + OVPN_FILE },
+		dh:               { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Absolute path of the Diffie-Hellman parameters PEM, for server mode." + OVPN_FILE },
+		crl_verify:       { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Absolute path of the certificate revocation list PEM." + OVPN_FILE },
+		remote_cert_tls:  { type: ["string", "null"], "x-uapi-clear-on-omit": true, enum: [ "client", "server", null ],
+		                    description: "proto openvpn only. Require that the peer certificate carries the key usage of a client or of a server." },
+		verify_x509_name: { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Accept only a peer certificate of this name: `name [type]`." },
+		user:             { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. User that openvpn drops its privileges to." },
+		group:            { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Group that openvpn drops its privileges to." },
+		log:              { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Absolute path of a log file, which openvpn truncates at each start (`--log`)." },
+		log_append:       { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Absolute path of a log file that openvpn appends to (`--log-append`)." },
+		verb:             { type: ["integer", "null"], "x-uapi-clear-on-omit": true, minimum: 0, maximum: 2147483647, "x-uapi-write": { maximum: 11 },
+		                    description: "proto openvpn only. Log verbosity. A write takes 0 to 11." },
+		mute:             { type: ["integer", "null"], "x-uapi-clear-on-omit": true, minimum: 0, maximum: 2147483647,
+		                    description: "proto openvpn only. Log at most this many messages of one category in a row (`--mute`)." },
+		config:           { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. Absolute path of an openvpn config file, which openvpn reads beside these options (`--config`). LuCI's raw config tab stores `/etc/openvpn/<id>/<id>_config.cfg`. The handler runs openvpn in the directory of this file, so a relative path in it resolves there." + OVPN_FILE },
+		username:         { type: ["string", "null"], "x-uapi-clear-on-omit": true,
+		                    description: "proto openvpn only. User name that the client sends. The handler writes it with `password` to a file that it gives openvpn as `--auth-user-pass`." },
+		key:              { type: "string", writeOnly: true,
+		                    description: "proto openvpn only. Absolute path of the private key PEM." + OVPN_FILE + sprintf(OVPN_SECRET, "key") },
+		tls_auth:         { type: "string", writeOnly: true,
+		                    description: "proto openvpn only. Absolute path of the tls-auth key file." + sprintf(OVPN_SECRET, "tls_auth") },
+		pkcs12:           { type: "string", writeOnly: true,
+		                    description: "proto openvpn only. Absolute path of the PKCS#12 bundle." + OVPN_FILE + sprintf(OVPN_SECRET, "pkcs12") },
+		password:         { type: "string", writeOnly: true,
+		                    description: "proto openvpn only. Password that the client sends with `username`." + sprintf(OVPN_SECRET, "password") },
+		cert_password:    { type: "string", writeOnly: true,
+		                    description: "proto openvpn only. Passphrase of the private key, which the handler writes to a file that it gives openvpn as `--askpass`." + sprintf(OVPN_SECRET, "cert_password") },
+		has_key:          { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `key`." },
+		has_tls_auth:     { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `tls_auth`." },
+		has_pkcs12:       { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `pkcs12`." },
+		has_password:     { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `password`." },
+		has_cert_password: { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `cert_password`." },
 	},
 };

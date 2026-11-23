@@ -201,7 +201,7 @@ function fromUci(section, conn) {
 		// Always present, and an empty key is not a key. The published schema declares
 		// a non-nullable boolean, so the previous absent-or-true form meant a keyless
 		// section violated the spec this server ships. Same shape as every sibling
-		// write-only flag (openvpn.instances, network.wireguard_peers).
+		// write-only flag (network.interfaces, network.wireguard_peers).
 		has_key: (section.key != null && section.key != ""),
 	};
 }

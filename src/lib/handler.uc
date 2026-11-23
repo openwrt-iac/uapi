@@ -738,9 +738,8 @@ function carry_write_only(resource, body, existing) {
 // The top-level fields a JSON Patch names, taken from the first segment of each op path. A
 // `merge_for_patch` hook needs to know which fields the caller actually named, and under
 // merge-patch that is simply the body's keys; JSON Patch has to be told. The mirrored-name
-// pairs this was written for are gone as of 3.0.0, but the two hooks that remain, on
-// `openvpn/instances` and `network/wireguard_peers`, carry write-only secrets forward and
-// need the same distinction.
+// pairs this was written for are gone as of 3.0.0, but the hook that remains, on
+// `network/wireguard_peers`, carries write-only secrets forward and needs the same distinction.
 function patch_touched_fields(ops, patched) {
 	if (type(ops) != "array" || type(patched) != "object") return null;
 	let out = {};

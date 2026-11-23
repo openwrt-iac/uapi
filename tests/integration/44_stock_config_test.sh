@@ -38,7 +38,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 #
 # Coverage scope: every curated resource whose package is on the box. lldpd and vnstat are
 # now installed by install_uapi, so both are in the list below. The rest (snmpd, mwan3,
-# sqm, usteer, prometheus_node_exporter_lua, openvpn) remain outside the image and so
+# sqm, usteer, prometheus_node_exporter_lua) remain outside the image and so
 # remain unexercised here; unbound is installed by 40_unbound but only when that test runs,
 # which is not a guarantee this one can lean on. An earlier attempt at installing from
 # inside a test surfaced a QEMU SLIRP "wget EPERM after state churn" pathology, which is
