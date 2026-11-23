@@ -22,6 +22,12 @@ t.describe('dhcp.leases parser', () => {
 		t.assert_equal(out[0].duid, "01:aa:bb:cc:dd:ee:01");
 	});
 
+	// dnsmasq writes 0 for an infinite lease time, and rpcd-mod-luci reads it as no expiry.
+	t.it('reads expires_at null for a lease that does not expire', () => {
+		let out = leases_mod.parse_leases("0 aa:bb:cc:dd:ee:09 192.168.1.59 nas *\n");
+		t.assert_equal(out[0].expires_at, null);
+	});
+
 	t.it('treats "*" hostname as null', () => {
 		let out = leases_mod.parse_leases(SAMPLE);
 		t.assert_equal(out[1].hostname, null);

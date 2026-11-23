@@ -450,6 +450,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lowercase hex digits, as LuCI shows them, for the v4 leases too. `expires_at`
   is the time of the read plus the lifetime that odhcpd gives. Migration note
   in `docs/migration-v3-to-v4.md`. (#472) (#473)
+- **BREAKING: a v4 lease that does not expire reads `expires_at` null.**
+  dnsmasq writes 0 for an infinite lease time, and the read gave that 0, so a
+  client that computed the time left got epoch 0. A v6 lease that does not
+  expire already read null, and rpcd-mod-luci reads both as no expiry. Both
+  families now read null for it. Migration note in
+  `docs/migration-v3-to-v4.md`. (#474)
 
 ### Removed
 
