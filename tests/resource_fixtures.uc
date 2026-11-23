@@ -313,7 +313,12 @@ const CASES = [
 	},
 	{
 		file: "sqm.queues.uc", id: "q1", pkg: "sqm",
-		section: { '.type': 'queue', interface: 'lan', enabled: '1', download: '90000', upload: '10000', qdisc: 'cake', script: 'piece_of_cake.qos' },
+		section: { '.type': 'queue', interface: 'lan', enabled: '1', download: '90000', upload: '10000', qdisc: 'cake',
+		           script: 'piece_of_cake.qos', linklayer: 'ethernet', overhead: '18', qdisc_advanced: '1',
+		           qdisc_really_really_advanced: '1', linklayer_advanced: '1', squash_dscp: '0', squash_ingress: '0',
+		           ingress_ecn: 'NOECN', egress_ecn: 'NOECN', linklayer_adaptation_mechanism: 'cake', tcMTU: '1500',
+		           tcTSIZE: '128', tcMPU: '64', debug_logging: '1', verbosity: '8', use_mq: '1', ilimit: '1000',
+		           itarget: '5ms', iqdisc_opts: 'nat' },
 	},
 	{
 		file: "snmpd.agents.uc", id: "ag1", pkg: "snmpd",

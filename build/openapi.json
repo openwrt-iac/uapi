@@ -39396,14 +39396,18 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": 0,
+						"default": 14698,
+						"description": "Download (ingress) rate in kbit/s, 0 to shape no ingress. sqm-scripts uses 14698 when the option is absent."
 					},
 					"upload": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": 0,
+						"default": 2302,
+						"description": "Upload (egress) rate in kbit/s, 0 to shape no egress. sqm-scripts uses 2302 when the option is absent."
 					},
 					"qdisc": {
 						"type": [
@@ -39421,7 +39425,9 @@
 							"ns2_codel",
 							"pfifo_fast",
 							null
-						]
+						],
+						"default": "fq_codel",
+						"description": "Queueing discipline. sqm-scripts uses fq_codel when the option is absent."
 					},
 					"script": {
 						"type": [
@@ -39440,14 +39446,147 @@
 							"ethernet",
 							"atm",
 							null
-						]
+						],
+						"default": "none",
+						"description": "Link layer that the shaper accounts for."
 					},
 					"overhead": {
 						"type": [
 							"integer",
 							"null"
 						],
+						"default": 0,
 						"description": "Per-packet overhead bytes for link-layer accounting"
+					},
+					"ilimit": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "Hard limit of the ingress queues (LuCI \"Hard queue limit\"). Null uses the default limit of the qdisc."
+					},
+					"elimit": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "Hard limit of the egress queues (LuCI \"Hard queue limit\"). Null uses the default limit of the qdisc."
+					},
+					"itarget": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Latency target of the ingress queues, such as `5ms`, with the unit s, ms or us. `default` uses the default of the qdisc, and null lets sqm-scripts compute one from the rate."
+					},
+					"etarget": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Latency target of the egress queues, such as `5ms`, with the unit s, ms or us. `default` uses the default of the qdisc, and null lets sqm-scripts compute one from the rate."
+					},
+					"iqdisc_opts": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Words that sqm-scripts appends to each tc qdisc command of the ingress. uapi does not check them. When tc refuses them, sqm-scripts logs the error and the queue is not set up, while the write still answers 2xx."
+					},
+					"eqdisc_opts": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Words that sqm-scripts appends to each tc qdisc command of the egress. uapi does not check them. When tc refuses them, sqm-scripts logs the error and the queue is not set up, while the write still answers 2xx."
+					},
+					"qdisc_advanced": {
+						"type": "boolean",
+						"default": false,
+						"description": "LuCI's \"Advanced Configuration\" flag. sqm-scripts does not read it and applies squash_dscp, squash_ingress, ingress_ecn and egress_ecn whatever it holds. LuCI shows those fields only while it is true, so set it with them for a LuCI user to see them."
+					},
+					"qdisc_really_really_advanced": {
+						"type": "boolean",
+						"default": false,
+						"description": "LuCI's \"Dangerous Configuration\" flag. sqm-scripts does not read it and applies ilimit, elimit, itarget, etarget, iqdisc_opts and eqdisc_opts whatever it holds. LuCI shows those fields only while it and qdisc_advanced are true."
+					},
+					"linklayer_advanced": {
+						"type": "boolean",
+						"default": false,
+						"description": "LuCI's \"Advanced Linklayer Options\" flag. sqm-scripts does not read it and applies tc_mtu, tc_tsize, tc_mpu and linklayer_adaptation_mechanism whatever it holds. LuCI shows those fields only while it is true."
+					},
+					"debug_logging": {
+						"type": "boolean",
+						"default": false,
+						"description": "Whether sqm-scripts writes a log file of this queue under /var/run/sqm. It is on when `-eq 1` reads the stored value as 1."
+					},
+					"use_mq": {
+						"type": "boolean",
+						"default": false,
+						"description": "Whether sqm-scripts sets up one queue for each hardware queue of the device, where the device has several. LuCI does not show it. It is on when `-eq 1` reads the stored value as 1."
+					},
+					"squash_dscp": {
+						"type": "boolean",
+						"default": true,
+						"description": "Whether the ingress shaper clears the DSCP marks (LuCI \"Squash DSCP\"). An absent option reads true, as sqm-scripts applies it. The cake scripts take a stored value that `-eq 1` reads as 1, such as `01`, and simple.qos takes only `1`, so the read follows the stored `script`."
+					},
+					"squash_ingress": {
+						"type": "boolean",
+						"default": true,
+						"description": "Whether the ingress shaper ignores the DSCP marks (LuCI \"Ignore DSCP\"). An absent option reads true, as sqm-scripts applies it. The cake scripts take a stored value that `-eq 1` reads as 1, such as `01`, and simple.qos takes only `1`, so the read follows the stored `script`."
+					},
+					"tc_mtu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"default": 2047,
+						"description": "uci option `tcMTU`, LuCI \"Maximum packet size\": the largest size for the size and rate tables, in bytes."
+					},
+					"tc_tsize": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"default": 512,
+						"description": "uci option `tcTSIZE`, LuCI \"Rate table size\": the number of entries of the size and rate tables. LuCI proposes 128, but an absent option applies 512."
+					},
+					"tc_mpu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"default": 0,
+						"description": "uci option `tcMPU`, LuCI \"Minimum packet size\", in bytes."
+					},
+					"verbosity": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"default": 5,
+						"description": "Log level of sqm-scripts in the system log: 0 silent, 1 error, 2 warning, 5 info, 8 debug, 10 trace. A stored integer outside the write enum reads as stored, and sqm-scripts compares it with these levels."
+					},
+					"ingress_ecn": {
+						"type": "string",
+						"default": "ECN",
+						"description": "ECN on the ingress queues of a codel, pie or red qdisc. An absent option applies ECN. Another stored value goes to tc as it is, after a warning of sqm-scripts, and reads as stored."
+					},
+					"egress_ecn": {
+						"type": "string",
+						"default": "ECN",
+						"description": "ECN on the egress queues of a codel, pie or red qdisc. LuCI proposes NOECN, but an absent option applies ECN. Another stored value goes to tc as it is, after a warning of sqm-scripts, and reads as stored."
+					},
+					"linklayer_adaptation_mechanism": {
+						"type": "string",
+						"default": "default",
+						"description": "How the shaper accounts for the link layer. `default` uses cake's own accounting for qdisc cake and tc_stab for the others. A stored value outside the write enum reads as stored."
 					},
 					"runtime": {
 						"type": "object",
@@ -39488,14 +39627,18 @@
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": 0,
+						"default": 14698,
+						"description": "Download (ingress) rate in kbit/s, 0 to shape no ingress. sqm-scripts uses 14698 when the option is absent."
 					},
 					"upload": {
 						"type": [
 							"integer",
 							"null"
 						],
-						"minimum": 0
+						"minimum": 0,
+						"default": 2302,
+						"description": "Upload (egress) rate in kbit/s, 0 to shape no egress. sqm-scripts uses 2302 when the option is absent."
 					},
 					"qdisc": {
 						"type": [
@@ -39513,7 +39656,9 @@
 							"ns2_codel",
 							"pfifo_fast",
 							null
-						]
+						],
+						"default": "fq_codel",
+						"description": "Queueing discipline. sqm-scripts uses fq_codel when the option is absent."
 					},
 					"script": {
 						"type": [
@@ -39533,14 +39678,179 @@
 							"ethernet",
 							"atm",
 							null
-						]
+						],
+						"default": "none",
+						"description": "Link layer that the shaper accounts for."
 					},
 					"overhead": {
 						"type": [
 							"integer",
 							"null"
 						],
+						"default": 0,
 						"description": "Per-packet overhead bytes for link-layer accounting"
+					},
+					"ilimit": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "Hard limit of the ingress queues (LuCI \"Hard queue limit\"). Null uses the default limit of the qdisc.",
+						"minimum": 0
+					},
+					"elimit": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "Hard limit of the egress queues (LuCI \"Hard queue limit\"). Null uses the default limit of the qdisc.",
+						"minimum": 0
+					},
+					"itarget": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$",
+						"description": "Latency target of the ingress queues, such as `5ms`, with the unit s, ms or us. `default` uses the default of the qdisc, and null lets sqm-scripts compute one from the rate."
+					},
+					"etarget": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$",
+						"description": "Latency target of the egress queues, such as `5ms`, with the unit s, ms or us. `default` uses the default of the qdisc, and null lets sqm-scripts compute one from the rate."
+					},
+					"iqdisc_opts": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$",
+						"description": "Words that sqm-scripts appends to each tc qdisc command of the ingress. uapi does not check them. When tc refuses them, sqm-scripts logs the error and the queue is not set up, while the write still answers 2xx."
+					},
+					"eqdisc_opts": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$",
+						"description": "Words that sqm-scripts appends to each tc qdisc command of the egress. uapi does not check them. When tc refuses them, sqm-scripts logs the error and the queue is not set up, while the write still answers 2xx."
+					},
+					"qdisc_advanced": {
+						"type": "boolean",
+						"default": false,
+						"description": "LuCI's \"Advanced Configuration\" flag. sqm-scripts does not read it and applies squash_dscp, squash_ingress, ingress_ecn and egress_ecn whatever it holds. LuCI shows those fields only while it is true, so set it with them for a LuCI user to see them."
+					},
+					"qdisc_really_really_advanced": {
+						"type": "boolean",
+						"default": false,
+						"description": "LuCI's \"Dangerous Configuration\" flag. sqm-scripts does not read it and applies ilimit, elimit, itarget, etarget, iqdisc_opts and eqdisc_opts whatever it holds. LuCI shows those fields only while it and qdisc_advanced are true."
+					},
+					"linklayer_advanced": {
+						"type": "boolean",
+						"default": false,
+						"description": "LuCI's \"Advanced Linklayer Options\" flag. sqm-scripts does not read it and applies tc_mtu, tc_tsize, tc_mpu and linklayer_adaptation_mechanism whatever it holds. LuCI shows those fields only while it is true."
+					},
+					"debug_logging": {
+						"type": "boolean",
+						"default": false,
+						"description": "Whether sqm-scripts writes a log file of this queue under /var/run/sqm. It is on when `-eq 1` reads the stored value as 1."
+					},
+					"use_mq": {
+						"type": "boolean",
+						"default": false,
+						"description": "Whether sqm-scripts sets up one queue for each hardware queue of the device, where the device has several. LuCI does not show it. It is on when `-eq 1` reads the stored value as 1."
+					},
+					"squash_dscp": {
+						"type": "boolean",
+						"default": true,
+						"description": "Whether the ingress shaper clears the DSCP marks (LuCI \"Squash DSCP\"). An absent option reads true, as sqm-scripts applies it. The cake scripts take a stored value that `-eq 1` reads as 1, such as `01`, and simple.qos takes only `1`, so the read follows the stored `script`."
+					},
+					"squash_ingress": {
+						"type": "boolean",
+						"default": true,
+						"description": "Whether the ingress shaper ignores the DSCP marks (LuCI \"Ignore DSCP\"). An absent option reads true, as sqm-scripts applies it. The cake scripts take a stored value that `-eq 1` reads as 1, such as `01`, and simple.qos takes only `1`, so the read follows the stored `script`."
+					},
+					"tc_mtu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"default": 2047,
+						"description": "uci option `tcMTU`, LuCI \"Maximum packet size\": the largest size for the size and rate tables, in bytes.",
+						"minimum": 0
+					},
+					"tc_tsize": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"default": 512,
+						"description": "uci option `tcTSIZE`, LuCI \"Rate table size\": the number of entries of the size and rate tables. LuCI proposes 128, but an absent option applies 512.",
+						"minimum": 0
+					},
+					"tc_mpu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"default": 0,
+						"description": "uci option `tcMPU`, LuCI \"Minimum packet size\", in bytes.",
+						"minimum": 0
+					},
+					"verbosity": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"default": 5,
+						"description": "Log level of sqm-scripts in the system log: 0 silent, 1 error, 2 warning, 5 info, 8 debug, 10 trace. A stored integer outside the write enum reads as stored, and sqm-scripts compares it with these levels.",
+						"enum": [
+							0,
+							1,
+							2,
+							5,
+							8,
+							10,
+							null
+						]
+					},
+					"ingress_ecn": {
+						"type": "string",
+						"default": "ECN",
+						"description": "ECN on the ingress queues of a codel, pie or red qdisc. An absent option applies ECN. Another stored value goes to tc as it is, after a warning of sqm-scripts, and reads as stored.",
+						"enum": [
+							"ECN",
+							"NOECN"
+						]
+					},
+					"egress_ecn": {
+						"type": "string",
+						"default": "ECN",
+						"description": "ECN on the egress queues of a codel, pie or red qdisc. LuCI proposes NOECN, but an absent option applies ECN. Another stored value goes to tc as it is, after a warning of sqm-scripts, and reads as stored.",
+						"enum": [
+							"ECN",
+							"NOECN"
+						]
+					},
+					"linklayer_adaptation_mechanism": {
+						"type": "string",
+						"default": "default",
+						"description": "How the shaper accounts for the link layer. `default` uses cake's own accounting for qdisc cake and tc_stab for the others. A stored value outside the write enum reads as stored.",
+						"enum": [
+							"default",
+							"cake",
+							"htb_private",
+							"tc_stab"
+						]
 					}
 				},
 				"required": [
@@ -39623,6 +39933,167 @@
 						"type": [
 							"integer",
 							"null"
+						]
+					},
+					"ilimit": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"elimit": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"itarget": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					},
+					"etarget": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					},
+					"iqdisc_opts": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					},
+					"eqdisc_opts": {
+						"x-uapi-clear-on-omit": true,
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^[^\n\r]*$"
+					},
+					"qdisc_advanced": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"qdisc_really_really_advanced": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"linklayer_advanced": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"debug_logging": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"use_mq": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"squash_dscp": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"squash_ingress": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"tc_mtu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"tc_tsize": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"tc_mpu": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"minimum": 0
+					},
+					"verbosity": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"enum": [
+							0,
+							1,
+							2,
+							5,
+							8,
+							10,
+							null
+						]
+					},
+					"ingress_ecn": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ECN",
+							"NOECN",
+							null
+						]
+					},
+					"egress_ecn": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"ECN",
+							"NOECN",
+							null
+						]
+					},
+					"linklayer_adaptation_mechanism": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"default",
+							"cake",
+							"htb_private",
+							"tc_stab",
+							null
 						]
 					}
 				}
