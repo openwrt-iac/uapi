@@ -76,7 +76,12 @@ function probes(keyword, bound) {
 	case "minimum":   return { code: "out_of_range", past: [ bound - 1 ], at: [ bound ] };
 	case "maximum":   return { code: "out_of_range", past: [ bound + 1 ], at: [ bound ] };
 	case "maxLength": return { code: "out_of_range", past: [ chars(bound + 1) ], at: [ chars(bound) ] };
-	case "enum":      return { code: "not_in_enum", past: [ "uapi_not_listed" ], at: bound };
+	case "enum": {
+		// An enum of integers, such as sqm's verbosity, refuses a string as invalid_type instead.
+		let top = null;
+		for (let v in bound) if (type(v) == "int" && (top == null || v > top)) top = v;
+		return { code: "not_in_enum", past: [ (top != null) ? top + 1 : "uapi_not_listed" ], at: bound };
+	}
 	// The one type that a request half leaves out today is the array that a read gives for a list.
 	case "type":      return { code: "invalid_type", past: (index(bound, "array") < 0) ? [ [ "x" ] ] : [], at: [] };
 	// No value can be derived from a regex that it accepts, so the module's own tests carry those.

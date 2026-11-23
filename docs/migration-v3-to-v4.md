@@ -473,6 +473,12 @@ check that the device exists. A uci interface name longer than 15 characters
 answers 422. Set the field to the device of the interface, which
 `runtime.l3_device` of `network/interfaces` gives (#477).
 
+`sqm/queues` models the options that LuCI's sqm form writes, so a PUT of the
+read keeps them, where 3.x removed them (#480). An absent option of the queue
+now reads the value that sqm-scripts gives it: `download` 14698, `upload` 2302,
+`qdisc` `fq_codel`, `linklayer` `none` and `overhead` 0, where 3.x read null. A
+queue that LuCI made holds these options and reads the same.
+
 ## A `wireless/interfaces` section with no `mode` reads `null`
 
 wifi-scripts sets up nothing for a section without a `mode` (mac80211.sh skips
@@ -854,6 +860,7 @@ another value for the same stored option, to follow what the daemon does:
 | `network/routes` | `type` | a number from 1 to 9, in decimal, hex or octal as strtoul reads it, such as `6` or `010` |
 | `network/interfaces` | `disabled` | `true`, which reads true: netifd `e97e36f` disables the interface for it, and the netifd of 25.12 did not |
 | `network/interfaces` | `listen_port` | a service name, such as `openvpn`, which reads null instead of its port from `/etc/services` or -1, or a number that ucode's `int()` reads in another way than 3.x, such as `0x10`, which reads 0, or `1194x`, which reads 1194, both -1 in 3.x |
+| `sqm/queues` | `download`, `upload`, `qdisc`, `linklayer`, `overhead` | absent, which reads the value of sqm-scripts instead of null |
 | `dhcp/leases` | `expires_at` | 0 in the lease file of dnsmasq, for a v4 lease that does not expire, which reads null instead of 0 |
 | `dhcp/leases` | `hostname` | on a v6 lease, a name with a byte other than a letter, a digit, `-`, `_` or `.`, which reads as the client sent it instead of as the lease file of odhcpd escapes it |
 

@@ -283,6 +283,61 @@ t.describe('sqm/queues.interface takes a device name', () => {
 	});
 });
 
+// LuCI's sqm form writes options that sqm/queues did not model, so a PUT of the read removed them
+// (#480). sqm-scripts 1.8.0 reads them in run.sh and gives an absent one the value of defaults.sh.
+t.describe('sqm/queues models the options of LuCI as sqm-scripts reads them', () => {
+	let sqm = loadfile('src/resources/sqm.queues.uc')();
+	let h = handler.make(sqm, { tx: {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	} });
+	let ctx = () => ({ request_id: "01hx000000000000000000sqm2" });
+	const STOCK = { '.type': 'queue', '.anonymous': false, enabled: '0', interface: 'eth1', download: '85000',
+	                upload: '10000', qdisc: 'cake', script: 'piece_of_cake.qos', qdisc_advanced: '0',
+	                ingress_ecn: 'ECN', egress_ecn: 'ECN', qdisc_really_really_advanced: '0', itarget: 'auto',
+	                etarget: 'auto', linklayer: 'none', use_mq: '0' };
+	const LUCI = { ...STOCK, qdisc_advanced: '1', qdisc_really_really_advanced: '1', egress_ecn: 'NOECN',
+	               squash_dscp: '0', ilimit: '1000', iqdisc_opts: 'nat dual-dsthost', linklayer: 'ethernet',
+	               overhead: '34', linklayer_advanced: '1', tcMTU: '1600', tcTSIZE: '128', tcMPU: '64',
+	               linklayer_adaptation_mechanism: 'tc_stab', debug_logging: '1', verbosity: '8' };
+	let stored = (sec) => ubus.stub({ uci: { sqm: { eth1: { ...sec } } } });
+	let read_of = (c) => { let b = h.get_one(c, ctx(), 'eth1').body; delete b.runtime; return b; };
+	let options = (c) => { let o = { ...c.uci_get('sqm', 'eth1') }; delete o['.name']; return o; };
+
+	t.it('keeps every option on a PUT of the read, and adds none', () => {
+		for (let sec in [ STOCK, LUCI ]) {
+			let c = stored(sec);
+			t.assert_equal(h.replace(c, ctx(), 'eth1', read_of(c)).status, 200);
+			t.assert_deep_equal(options(c), sec);
+		}
+	});
+
+	t.it('reads an absent option as the default of sqm-scripts, and a stored one as sqm-scripts reads it', () => {
+		let r = read_of(stored({ '.type': 'queue', '.anonymous': false, interface: 'eth1', script: 'simple.qos' }));
+		t.assert_deep_equal([ r.download, r.upload, r.qdisc, r.linklayer, r.overhead, r.egress_ecn, r.tc_tsize,
+		                      r.verbosity, r.squash_dscp, r.itarget ],
+		                    [ 14698, 2302, "fq_codel", "none", 0, "ECN", 512, 5, true, null ]);
+		r = read_of(stored(LUCI));
+		t.assert_deep_equal([ r.tc_mtu, r.tc_tsize, r.tc_mpu, r.squash_dscp, r.egress_ecn, r.ilimit ],
+		                    [ 1600, 128, 64, false, "NOECN", 1000 ]);
+		t.assert_equal(read_of(stored({ ...STOCK, verbosity: '3' })).verbosity, 3);
+	});
+
+	t.it('reads squash_dscp as the stored script tests it', () => {
+		t.assert_equal(read_of(stored({ ...STOCK, squash_dscp: '01' })).squash_dscp, true);
+		t.assert_equal(read_of(stored({ ...STOCK, script: 'simple.qos', squash_dscp: '01' })).squash_dscp, false);
+	});
+
+	t.it('removes a caller-owned option for a null, and refuses a value outside what LuCI writes', () => {
+		let c = stored(LUCI);
+		t.assert_equal(h.patch(c, ctx(), 'eth1', { ilimit: null, iqdisc_opts: null }).status, 200);
+		t.assert_deep_equal([ options(c).ilimit, options(c).iqdisc_opts ], [ null, null ]);
+		for (let body in [ { egress_ecn: 'ecn' }, { verbosity: 3 }, { ilimit: -1 }, { tc_mtu: -1 },
+		                   { linklayer_adaptation_mechanism: 'stab' } ])
+			t.assert_equal(h.patch(stored(STOCK), ctx(), 'eth1', body).status, 422, sprintf('%J', body));
+	});
+});
+
 t.describe('booleans read as the init script of the daemon reads them', () => {
 	for (let row in SHELL_BOOLS) {
 		let file = row[0], type = row[1], option = row[2], field = row[3], absent = row[4];

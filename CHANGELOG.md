@@ -8,6 +8,16 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`sqm/queues` models the options of LuCI's sqm form.** A PUT removes each
+  option that the resource does not emit, so a PUT of the read removed the ECN,
+  DSCP, limit, target, qdisc option, link layer and log options that LuCI
+  writes, and the Terraform provider updates with a PUT. Nineteen fields now
+  carry them, as sqm-scripts 1.8.0 reads them, with the value of its
+  `defaults.sh` for an absent option and the uci name in the description where
+  it differs, such as `tcMTU` for `tc_mtu`. The three LuCI flags that only show
+  or hide fields in the form are fields too. The limits, targets and qdisc
+  options carry `x-uapi-clear-on-omit`, since null gives the qdisc its own
+  default. (#480) (#481)
 - **`docs/versioning.md` promises what the `X-Reload-*`, `X-Kernel-*` and
   `X-Mgmt-Path-Warning` headers can carry.** Each one only reports what a
   request did or found after uapi completed it, and never changes what the
@@ -468,6 +478,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   uci interface name longer than 15 characters answers 422.
   `network/interfaces` describes `runtime.l3_device`, which gives the device of
   an interface. Migration note in `docs/migration-v3-to-v4.md`. (#477) (#478)
+- **BREAKING: an absent option of `sqm/queues` reads the value that
+  sqm-scripts gives it.** `download`, `upload`, `qdisc`, `linklayer` and
+  `overhead` read null when the option was absent, although `defaults.sh` of
+  sqm-scripts then applies 14698, 2302, `fq_codel`, `none` and 0. They now read
+  those values, as a schema `default`. LuCI writes the options, so a queue that
+  it made reads the same. Migration note in `docs/migration-v3-to-v4.md`.
+  (#480) (#481)
 
 ### Removed
 

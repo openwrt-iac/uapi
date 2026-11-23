@@ -151,14 +151,14 @@ function check_clear_on_omit_shape(content, fields) {
 	for (let field in fields) {
 		// Six shapes read back null for an absent key, which is what a plain-Optional
 		// attribute requires: fw_enum returns a value that is not a string as it is, and the
-		// netifd readers return null for anything but a string. `as_list` is still excluded: it
+		// netifd readers return null for anything but a string, and as_int for anything but an integer. `as_list` is still excluded: it
 		// returns `[]`, which is the inconsistent-result trap this rule exists for.
 		let scalar_re = regexp(sprintf('\\b%s:\\s*section\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\?\\?\\s*null', field));
 		let list_re = regexp(sprintf('\\b%s:\\s*as_(word_)?list_or_null\\(', field));
 		let enum_re = regexp(sprintf('\\b%s:\\s*values\\.fw_enum\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*,', field));
-		let netifd_re = regexp(sprintf('\\b%s:\\s*(values\\.)?netifd_(int|string)\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*\\)', field));
+		let netifd_re = regexp(sprintf('\\b%s:\\s*(values\\.)?(netifd_int|netifd_string|as_int)\\(section\\.[a-zA-Z_][a-zA-Z0-9_]*\\)', field));
 		if (!match(content, scalar_re) && !match(content, list_re) && !match(content, enum_re) && !match(content, netifd_re))
-			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is not `section.X ?? null`, `as_list_or_null(...)`, `as_word_list_or_null(...)`, `values.fw_enum(section.X, ...)`, `netifd_int(section.X)` or `netifd_string(section.X)`, and each of those reads absent as null, which is what a plain-Optional attribute needs. Plain `as_list` returns [] and trips 'Provider produced inconsistent result'", field));
+			push(errors, sprintf("field '%s' has \"x-uapi-clear-on-omit\": true but its fromUci is not `section.X ?? null`, `as_list_or_null(...)`, `as_word_list_or_null(...)`, `values.fw_enum(section.X, ...)`, `netifd_int(section.X)`, `netifd_string(section.X)` or `as_int(section.X)`, and each of those reads absent as null, which is what a plain-Optional attribute needs. Plain `as_list` returns [] and trips 'Provider produced inconsistent result'", field));
 	}
 	return errors;
 }
