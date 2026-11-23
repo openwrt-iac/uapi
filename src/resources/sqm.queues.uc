@@ -41,11 +41,6 @@ function toUci(json) {
 function validate(json, conn) {
 	let errs = [];
 	values.require_present(errs, json, "interface");
-	if (conn != null && json.interface != null && json.interface != "") {
-		if (values.section_index(conn, 'network', 'interface', '.name')[json.interface] == null)
-			push(errs, { field: "interface", code: "conflict",
-			             message: sprintf("interface %J does not exist", json.interface) });
-	}
 	return errs;
 }
 
@@ -64,7 +59,8 @@ return {
 		enabled:   { type: "boolean", default: false,
 		             description: "Whether sqm-scripts starts SQM on this interface. It starts a queue only when `enabled` is 1, so an absent value, or a word such as `yes`, `on` or `true`, reads false." },
 		interface: { "x-uapi-read-nullable": true, type: "string",
-		             description: "Network interface name SQM applies to" },
+		             "x-uapi-write": { pattern: "^[^/: \t\n\r\f\v]{1,15}$" },
+		             description: "Network device that sqm-scripts shapes, such as `eth1` or `pppoe-wan`: its hotplug starts the queue when this device comes up. The name of a network interface, such as `wan`, matches nothing unless a device has that name. The `runtime.l3_device` of `network/interfaces` gives the device of an interface. A write takes a kernel device name, 1 to 15 characters without `/`, `:` or whitespace, and does not check that the device exists, since a device such as `pppoe-wan` exists only while its interface is up." },
 		qdisc:     { "x-uapi-read-nullable": true, type: "string", enum: keys(VALID_QDISCS) },
 		script:    { "x-uapi-read-nullable": true, type: "string", pattern: "^[A-Za-z0-9_][A-Za-z0-9_.+-]*\\.qos$",
 		             description: "A file in /usr/lib/sqm, which LuCI lists and start-sqm sources, such as piece_of_cake.qos, simple.qos, simplest.qos, layer_cake.qos or simplest_tbf.qos." },

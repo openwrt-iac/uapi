@@ -29682,7 +29682,8 @@
 								"type": [
 									"string",
 									"null"
-								]
+								],
+								"description": "Kernel device that carries the layer 3 traffic of the interface, such as `pppoe-wan`"
 							},
 							"uptime": {
 								"type": [
@@ -39388,7 +39389,7 @@
 							"string",
 							"null"
 						],
-						"description": "Network interface name SQM applies to"
+						"description": "Network device that sqm-scripts shapes, such as `eth1` or `pppoe-wan`: its hotplug starts the queue when this device comes up. The name of a network interface, such as `wan`, matches nothing unless a device has that name. The `runtime.l3_device` of `network/interfaces` gives the device of an interface. A write takes a kernel device name, 1 to 15 characters without `/`, `:` or whitespace, and does not check that the device exists, since a device such as `pppoe-wan` exists only while its interface is up."
 					},
 					"download": {
 						"type": [
@@ -39479,7 +39480,8 @@
 							"string",
 							"null"
 						],
-						"description": "Network interface name SQM applies to"
+						"description": "Network device that sqm-scripts shapes, such as `eth1` or `pppoe-wan`: its hotplug starts the queue when this device comes up. The name of a network interface, such as `wan`, matches nothing unless a device has that name. The `runtime.l3_device` of `network/interfaces` gives the device of an interface. A write takes a kernel device name, 1 to 15 characters without `/`, `:` or whitespace, and does not check that the device exists, since a device such as `pppoe-wan` exists only while its interface is up.",
+						"pattern": "^[^/: \t\n\r\f\u000b]{1,15}$"
 					},
 					"download": {
 						"type": [
@@ -39563,7 +39565,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"pattern": "^[^/: \t\n\r\f\u000b]{1,15}$"
 					},
 					"download": {
 						"type": [
@@ -40017,7 +40020,14 @@
 				"required": [
 					"id",
 					"runtime",
-					"group"
+					"group",
+					"context",
+					"version",
+					"level",
+					"prefix",
+					"read",
+					"write",
+					"notify"
 				]
 			},
 			"SnmpdAccessesRequest": {
@@ -40107,7 +40117,14 @@
 					}
 				},
 				"required": [
-					"group"
+					"group",
+					"context",
+					"version",
+					"level",
+					"prefix",
+					"read",
+					"write",
+					"notify"
 				]
 			},
 			"SnmpdAccessesPatch": {

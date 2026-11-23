@@ -68,7 +68,7 @@ return {
 	validate: validate,
 	validate_new: validate_new,
 	openapi_singular: "SNMP access ACL",
-	openapi_required: ["group"],
+	openapi_required: ["group", "context", "version", "level", "prefix", "read", "write", "notify"],
 	schema_properties: {
 		group:   { "x-uapi-read-nullable": true, type: "string", pattern: values.ONE_WORD_RE,
 		           description: "snmpd group this access entry binds to (must exist in snmpd/groups)" },

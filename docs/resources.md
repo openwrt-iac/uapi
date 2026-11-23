@@ -254,11 +254,11 @@ stays down, see `docs/operations.md`.
 | `unbound/server` (singleton) | `config unbound` | Recursive DNS tuning. |
 | `unbound/srv` (singleton) | `config unbound_srv 'main'` | Server-clause directives (`interface_bind`, `interface_outgoing`, `ip_transparent`, plus a raw `srv_line` passthrough). Requires `apk add unbound-uci-ext` from the openwrt-iac feed; otherwise the first write returns `503 init_script_missing`. |
 | `unbound/ext` (singleton) | `config unbound_ext 'main'` | Outside-server clauses (`forward-zone:`, `view:`, `stub:`, `remote-control:`) expressed as a verbatim `ext_line` list (one entry per rendered line). Same install dependency as `unbound/srv`. |
-| `sqm/queues` | `config queue` | Per-interface SQM shaping. |
+| `sqm/queues` | `config queue` | Per-device SQM shaping. `interface` is the device that sqm-scripts shapes, such as `eth1` or `pppoe-wan`, as its hotplug matches it. A write takes a kernel device name, 1 to 15 characters without `/`, `:` or whitespace, and does not check that the device exists. |
 | `snmpd/agents` | `config agent` | SNMP listen addrs. |
 | `snmpd/com2secs` | `config com2sec` | community-to-security mapping. |
 | `snmpd/groups` | `config group` | SNMP group definitions. |
-| `snmpd/accesses` | `config access` | group-to-view ACLs. |
+| `snmpd/accesses` | `config access` | group-to-view ACLs. A POST or PUT needs `group`, `context`, `version`, `level`, `prefix`, `read`, `write` and `notify`, since snmpd.init skips an access without one. |
 | `snmpd/system` (singleton) | `config system` (snmpd) | sys_location, sys_contact, etc. (snake_case in v2). |
 | `lldpd/config` (singleton) | `config lldpd 'config'` | LLDP/CDP/etc. toggles. |
 | `prometheus_node_exporter_lua/config` (singleton) | `config prometheus-node-exporter-lua 'main'` | `listen_interface` + `listen_port`. |

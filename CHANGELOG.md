@@ -451,6 +451,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   expire already read null, and rpcd-mod-luci reads both as no expiry. Both
   families now read null for it. Migration note in
   `docs/migration-v3-to-v4.md`. (#474) (#475)
+- **BREAKING: `sqm/queues.interface` takes a device name, as sqm-scripts
+  reads it.** The hotplug of sqm-scripts starts the queue whose `interface`
+  equals the device that came up, and LuCI offers a device for it. uapi took
+  only the name of a uci network interface, so every write of the stock queue,
+  which holds `interface 'eth1'`, answered 422, and `wan` passed although sqm
+  never matches it. A write now takes a kernel device name, 1 to 15 characters
+  without `/`, `:` or whitespace, and does not check that the device exists,
+  since a device such as `pppoe-wan` exists only while its interface is up. A
+  uci interface name longer than 15 characters answers 422.
+  `network/interfaces` describes `runtime.l3_device`, which gives the device of
+  an interface. Migration note in `docs/migration-v3-to-v4.md`. (#477) (#478)
 
 ### Removed
 
@@ -496,6 +507,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The request schema of `snmpd/accesses` lists each field that a write
+  needs.** Every write refuses an access without `context`, `version`, `level`,
+  `prefix`, `read`, `write` or `notify`, because snmpd.init skips such an
+  access and snmpd drops one without a context. The schema listed only `group`
+  in `required`, so a client found out at the write. It now lists the eight
+  fields for POST and PUT. No request that passed before is refused. (#478)
 - **The SBOM lists every dependency of the package.** `tools/gen_sbom.sh` read
   only the first line of `DEPENDS`, so the SBOM of 3.5.0 left out
   `ucode-mod-fs`, `ucode-mod-digest`, `ucode-mod-log`, `ucode-mod-io` and
