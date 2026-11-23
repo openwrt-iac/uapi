@@ -6,6 +6,29 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-23
+
+First release of the 4.x line. A router serves one API major, and 4.x mounts
+at `/api/v4`: the upgrade removes the `/api/v3` mount. Clients change their
+base URL and read `docs/migration-v3-to-v4.md`, which lists every change of
+the wire surface and what a client must do for it.
+
+The major makes uapi report what the daemons do. A read gives the value that
+netifd, fw4, dnsmasq, wifi-scripts or mwan3 applies, and each field reads one
+type, apart from two that read a number or a name. A write is refused while its
+section holds a value that the daemon refuses, as LuCI refuses a save, and a
+value that the platform takes is no error. The endpoints of uapi itself move
+under `/uapi/`, `dhcp/leases6` merges into `dhcp/leases`, and openvpn becomes a
+proto of `network/interfaces`.
+
+4.x runs on OpenWrt main and the next OpenWrt release cut from it, and CI tests
+OpenWrt main. The package depends on `netifd>=2026.07.17`, so apk does not
+install 4.x on OpenWrt 25.12, and a 25.12 router stays on 3.5.0.
+
+Before you move a router with openvpn instances to OpenWrt main, read the
+openvpn section of the migration doc. On OpenWrt main, an instance that was off
+starts, and a client can take the default route.
+
 ### Added
 
 - **`sqm/queues` models the options of LuCI's sqm form.** A PUT removes each
