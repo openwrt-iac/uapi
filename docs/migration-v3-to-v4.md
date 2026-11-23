@@ -9,13 +9,13 @@ to a plan made on 3.x.
 
 ## 4.x needs OpenWrt main or the next release
 
-4.x runs on OpenWrt main and on the next OpenWrt release cut from it. It needs
-a netifd that carries `e97e36f` (2026-07-16), which takes `disabled 'true'` on
-an interface. OpenWrt 25.12 does not carry it, and 4.x does not support 25.12.
-The 4.x package depends on a netifd that 25.12 does not have, so apk does not
-install 4.x on a 25.12 router, and such a router stays on 3.5.0. To move to
-4.x, move the router to OpenWrt main or to that release first, then install
-4.x.
+4.x runs on OpenWrt main and on the next OpenWrt release cut from it. It needs a
+netifd that carries `e97e36f` (committed 2026-07-17), which takes
+`disabled 'true'` on an interface. OpenWrt 25.12 does not carry it, and 4.x
+does not support 25.12. The 4.x package depends on a netifd that 25.12 does not
+have, so apk does not install 4.x on a 25.12 router, and such a router stays on
+3.5.0. To move to 4.x, move the router to OpenWrt main or to that release first,
+then install 4.x.
 
 Some sections below say what uapi does on 25.12, where netifd sets up a
 wireguard interface with `wireguard.sh`. They compare with 3.x on 25.12, or
@@ -212,6 +212,27 @@ other interface, the management one included. With `raw:openvpn`, a scope on
 `*:instances`, which now covers `dropbear/instances` and `uhttpd/instances`.
 Mint a token with `network:interfaces` for a client that manages tunnels, and
 revoke its old one.
+
+## The PPP login is a field of `network/interfaces`
+
+3.x did not model `username` and `password` on proto pppoe, ppp and wwan. A
+PATCH kept both, because a PATCH keeps the options that the resource does not
+model. A PUT removed both, because a PUT removes each option that the resource
+does not emit.
+
+In 4.x, the login fields of proto openvpn apply to pppoe, ppp and wwan too
+(#469). A read gives `username` and `has_password`, and `password` is
+write-only. A PUT that keeps the proto and leaves `password` out keeps the
+stored password, and a PUT that leaves `username` out removes it. A `password`
+of `""` removes the stored password.
+
+A write that changes `proto` removes `username` and `password`, unless it sends
+them, as LuCI's protocol switch does. This holds for a PATCH too, which kept
+them in 3.x. It also holds between pppoe, ppp, wwan and openvpn, and on a switch
+from a proto that uapi does not model, such as qmi. A client that switches a wan
+from pppoe to dhcp and back must send `username` and `password` in the write
+that sets pppoe again. The password is write-only, so a client cannot read it
+back: keep it on the client side.
 
 ## The token mint refuses a scope that the server does not know
 
@@ -848,7 +869,8 @@ said, which it did not do before. Refresh the state and check each such diff
 before you apply. The sections above name the cases that matter most.
 
 For Terraform, a plan refreshes first. A field that the configuration does not
-set takes the new read, and the apply writes nothing for it. Only a field that
+set takes the new read, and the apply writes nothing for it, or sends the new
+read back in a PUT, which the server takes. Only a field that
 the configuration sets writes its value. So a Terraform user edits nothing for a
 read that changed, unless the configuration sets that field. A field that
 carries `x-uapi-clear-on-omit`, such as a policy of `firewall/zones`, is the

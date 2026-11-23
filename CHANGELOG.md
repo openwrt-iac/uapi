@@ -8,7 +8,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **`firewall/zones` `input`, `output_policy` and `forward` carry
+- **BREAKING: `firewall/zones` `input`, `output_policy` and `forward` carry
   `x-uapi-clear-on-omit`.** A zone that sets no policy reads null, and fw4
   applies the policy of `firewall/defaults` to it. Without the flag, the
   Terraform provider kept a policy that the user removed from the
@@ -38,32 +38,26 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `stopped_instances` of `GET /uapi/diagnostics` now lists only the instances
   of these services, since procd shows a one-shot instance that ended as it
   shows one that it gave up on. (#461)
-- **`network/interfaces` takes `username`, the write-only `password` and
-  `has_password` on proto pppoe, ppp and wwan.** A client could not set the
-  PPPoE login of a wan through the curated API, and a PUT of such an interface
-  removed `username` and `password` from uci, because a PUT removes each option
-  that the resource does not emit. The three fields of proto openvpn now apply
-  to these protos too: ppp.sh gives both to pppd, and wwan gives both to the
-  handler of the modem that it finds. A PUT that keeps the proto and leaves
-  `password` out now keeps the stored one, as for every write-only secret, and
-  a PUT that leaves `username` out removes it. Each proto sends the login to
-  another party, so a write that changes `proto` removes both unless it sends
-  them, as LuCI's protocol switch does. This also holds between pppoe, ppp,
-  wwan and openvpn, and on a switch from a proto that uapi does not model, such
-  as qmi, whose read hides them. On such a proto they still do not apply.
-  (#469)
 
 ### Changed
 
-- **BREAKING: 4.x needs OpenWrt main or the next release, and 25.12 stays on
-  3.5.0.** 4.x reads `network/interfaces.disabled` as the netifd of OpenWrt
-  main reads it, and the netifd of 25.12 reads it another way. The package
-  depends on a netifd that 25.12 does not have, so apk does not install 4.x on
-  a 25.12 router, and such a router stays on 3.5.0. Move the router to OpenWrt
-  main, or to the next release cut from it, before you install 4.x. Migration
-  note in `docs/migration-v3-to-v4.md`. (#463)
+- **BREAKING: 4.x needs OpenWrt main or the next release, and the package
+  refuses OpenWrt 25.12.** 4.x reads `network/interfaces.disabled` as the
+  netifd of OpenWrt main reads it, and the netifd of 25.12 reads it another
+  way. The package depends on `netifd>=2026.07.17`, the commit date of netifd
+  e97e36f, which OpenWrt main has since its netifd `2026.09.11~06d06c86`.
+  25.12.6 has netifd `2026.02.26~cbb83a18-r2`. On 25.12, `apk add` of a 4.x APK
+  stops with `unable to select packages` and changes nothing, and `apk upgrade`
+  keeps 3.x, so such a router stays on 3.5.0. Move the router to OpenWrt main,
+  or to the next release cut from it, before you install 4.x. CI builds, tests
+  and releases 4.x with the snapshot SDK and image of OpenWrt main only. It
+  checks the snapshot SDK against the usign key of the OpenWrt snapshot builds
+  in `build/openwrt-snapshot-usign.pub`, which replaces the 25.12 checksums of
+  `build/sdk.sha256`. Migration note in `docs/migration-v3-to-v4.md`. (#463)
+  (#465)
 - **BREAKING: `network/interfaces.disabled` reads a stored `true` as true.**
-  netifd takes `disabled 'true'` on an interface since `e97e36f` (2026-07-16),
+  netifd takes `disabled 'true'` on an interface since `e97e36f` (committed
+  2026-07-17),
   and does not register the interface. The read took only `1`, so such an
   interface read `disabled: false` while netifd ignored it. The read now takes
   `1` and `true`, as for `network/routes` and `network/rules`, and any other
@@ -73,16 +67,6 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   take such a wireguard interface as disabled, so its peers no longer make a
   write answer `X-Kernel-Status: blocked`. Migration note in
   `docs/migration-v3-to-v4.md`. (#463)
-- **BREAKING: the package refuses OpenWrt 25.12.** uapi 4.x supports OpenWrt
-  main and the release cut from it. Routers on 25.12 stay on 3.5.0. The package
-  now depends on `netifd>=2026.07.17`, the commit date of netifd e97e36f, which
-  OpenWrt main has since its netifd `2026.09.11~06d06c86`. 25.12.6 has netifd
-  `2026.02.26~cbb83a18-r2`. On 25.12, `apk add` of a 4.x APK stops with
-  `unable to select packages` and changes nothing, and `apk upgrade` keeps 3.x.
-  CI builds, tests and releases 4.x with the snapshot SDK and image of OpenWrt
-  main only. It checks the snapshot SDK against the usign key of the OpenWrt
-  snapshot builds in `build/openwrt-snapshot-usign.pub`, which replaces the
-  25.12 checksums of `build/sdk.sha256`. (#465)
 - **BREAKING: a write to a WireGuard interface that a stored peer keeps down
   keeps its commit and answers `X-Kernel-Status: blocked`.** Both proto
   handlers give wg every enabled peer of an interface at once, and wg refuses
@@ -375,12 +359,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `null` mode is accepted and removes the option, and a create or PUT that sends
   no mode stores none. Announced in 3.4.0 (#307); migration note in
   `docs/migration-v3-to-v4.md`. (#347)
-- **BREAKING: `mwan3/interfaces.family` reads `ipv4` when the option is unset.**
-  `mwan3.sh` and `mwan3track` both default an unset family to ipv4, so the read
-  now follows the daemon instead of answering null; `family` leaves the request
-  schema's `required`, and a `null` on write removes the option, after which the
-  read answers `ipv4`. Announced in 3.4.0 (#306); migration note in
-  `docs/migration-v3-to-v4.md`. (#346)
+- **BREAKING: `mwan3/interfaces.family` reads `ipv4` when the option is unset
+  or empty, and every response holds it as a string.** `mwan3.sh` and
+  `mwan3track` read the option with `config_get family ... ipv4`, which takes
+  an empty value as unset. 3.x read null for an unset family and `""`, a value
+  outside the enum, for an empty one, for an interface that mwan3 runs as ipv4.
+  A list now reads as the string that `config_get` makes of it. The response
+  schema declares a required string, and the request schema no longer declares
+  null and leaves `family` out of `required`: a PUT that leaves `family` out
+  removes the option, and so does a null in a merge patch, after which the read
+  answers `ipv4`. Announced in 3.4.0 (#306). Migration note in
+  `docs/migration-v3-to-v4.md`. (#346) (#404)
 - **BREAKING: curated string fields refuse a newline and a carriage return on
   write.** One check in the type gate (`check_schema_types`) refuses them in
   every curated string, so the refusal no longer depends on the per-field
@@ -397,15 +386,6 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stable when `rt_tables` changes, and a name stored by hand or by LuCI still
   reads as its id. The response type stays an integer, as in 3.x. Announced in
   3.4.0 (#240). Migration note in `docs/migration-v3-to-v4.md`. (#343) (#422)
-- **BREAKING: `mwan3/interfaces.family` reads `ipv4` for an empty value too, and
-  every response holds it as a string.** mwan3 reads the option with
-  `config_get family ... ipv4`, which takes an empty value as unset, so v3 read
-  `""`, a value outside the enum, for an interface that mwan3 runs as ipv4. A
-  list now reads as the string that `config_get` makes of it. The response
-  schema declared null and left `family` optional, although the v4 read never
-  answers null. It is now a required string, and the request schema no longer
-  declares null: a PUT that leaves `family` out removes the option, and so does
-  a null in a merge patch. Part of the change of #306 (#346). (#404)
 - **A `wireless/interfaces` section without a `mode` no longer blocks its
   radio.** wifi-scripts sets up nothing for a section without a mode, so such a
   section no longer blocks a `wireless/devices` write that turns its radio on,
@@ -450,12 +430,27 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lowercase hex digits, as LuCI shows them, for the v4 leases too. `expires_at`
   is the time of the read plus the lifetime that odhcpd gives. Migration note
   in `docs/migration-v3-to-v4.md`. (#472) (#473)
+- **BREAKING: `network/interfaces` takes `username`, the write-only `password`
+  and `has_password` on proto pppoe, ppp and wwan, and a write that changes
+  `proto` removes them unless it sends them.** A client could not set the
+  PPPoE login of a wan through the curated API, and a PUT of such an interface
+  removed `username` and `password` from uci, because a PUT removes each option
+  that the resource does not emit. The three fields of proto openvpn now apply
+  to these protos too: ppp.sh gives both to pppd, and wwan gives both to the
+  handler of the modem that it finds. A PUT that keeps the proto and leaves
+  `password` out now keeps the stored one, as for every write-only secret, and
+  a PUT that leaves `username` out removes it. Each proto sends the login to
+  another party, so a write that changes `proto` removes both unless it sends
+  them, as LuCI's protocol switch does. This also holds between pppoe, ppp,
+  wwan and openvpn, and on a switch from a proto that uapi does not model, such
+  as qmi, whose read hides them. On such a proto they still do not apply.
+  Migration note in `docs/migration-v3-to-v4.md`. (#469)
 - **BREAKING: a v4 lease that does not expire reads `expires_at` null.**
   dnsmasq writes 0 for an infinite lease time, and the read gave that 0, so a
   client that computed the time left got epoch 0. A v6 lease that does not
   expire already read null, and rpcd-mod-luci reads both as no expiry. Both
   families now read null for it. Migration note in
-  `docs/migration-v3-to-v4.md`. (#474)
+  `docs/migration-v3-to-v4.md`. (#474) (#475)
 
 ### Removed
 
@@ -513,17 +508,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `validation_failed` with code `conflict` on `user`, and passwd does not run.
   The request failed before too, so no request that succeeded is refused.
   (#446)
-- **On OpenWrt main, a WireGuard key that the ucode handler skips is an error,
-  and its peer gets no route.** The handler matches a key as uci holds it, so it
-  skips a peer whose `public_key` holds whitespace or a `#` comment, and leaves
-  out such a `preshared_key`, or one that uci holds as a list. uapi judged the
-  key as wg reads it under wireguard.sh, so it reported no error, and a write of
-  the peer answered 200 and installed the routes of `route_allowed_ips` for the
-  peer that the handler skips. Such a stored key now blocks every write of its
-  peer there with 422 `invalid_format`, under the stored-error rule that 3.5.0
-  announces (#308), so no write installs a route for the peer. The
-  `allowed_ips` or `endpoint_host` of a peer that the handler skips does not
-  keep its interface down. Note in `docs/migration-v3-to-v4.md`. (#436)
+- **BREAKING: on OpenWrt main, a WireGuard key that the ucode handler skips is
+  an error, and its peer gets no route.** The handler matches a key as uci holds
+  it, so it skips a peer whose `public_key` holds whitespace or a `#` comment,
+  and leaves out such a `preshared_key`, or one that uci holds as a list. uapi
+  judged the key as wg reads it under wireguard.sh, so it reported no error, and
+  a write of the peer answered 200 and installed the routes of
+  `route_allowed_ips` for the peer that the handler skips. Such a stored key now
+  blocks every write of its peer there with 422 `invalid_format`, under the
+  stored-error rule that 3.5.0 announces (#308), so no write installs a route
+  for the peer. The `allowed_ips` or `endpoint_host` of a peer that the handler
+  skips does not keep its interface down. Note in `docs/migration-v3-to-v4.md`.
+  (#436)
 - **A stored value that LuCI or the daemon takes blocks no write.** v4 checks
   each stored section against the schema of its resource (#308), and the
   schemas take what the platform takes, as in 3.5.0 (#410). The rules on what a
@@ -573,8 +569,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   OpenWrt main.** Both proto handlers give wg port 51820 for such a peer, and
   the kernel apply of a write did too, but the restore on main left the endpoint
   out. The read of `endpoint_port` stays null. (#424)
-- **uapi reads the `If-Match`, `If-None-Match`, `Idempotency-Key` and
-  `X-Request-Id` headers.** uhttpd-mod-ucode sets no `HTTP_*` variable for
+- **BREAKING: uapi reads the `If-Match`, `If-None-Match`, `Idempotency-Key`
+  and `X-Request-Id` headers.** uhttpd-mod-ucode sets no `HTTP_*` variable for
   them, and uapi read only those variables, so it ignored the headers. uapi now
   reads them from `env.headers`, which holds every request header. A header
   that is not empty wins over its query form, and an `X-Request-Id` header only
@@ -591,7 +587,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   3.5.0 spec declared no pattern for the key. 3.5.0 made a write that the
   precondition of the request refused, and a retry with the same key created a
   second section. The spec now declares the pattern on `?idempotency_key=`, and
-  `?request_id=` on every operation. (#431)
+  `?request_id=` on every operation. Migration note in
+  `docs/migration-v3-to-v4.md`. (#431)
 - **A feed write answers when the feed host does not.** `POST /packages/feeds`
   runs `apk update` after it writes the feed file, and apk waits 60 s for a
   fetch that makes no progress. With a host that did not answer, uhttpd killed
