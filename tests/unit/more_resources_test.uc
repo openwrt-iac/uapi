@@ -1800,8 +1800,8 @@ t.describe('network.interfaces ip6prefix is a list', () => {
 	});
 });
 
-// netifd applies a device mtu only from 68 up, and wireguard.sh applies a smaller one that leaves
-// the device with no IPv4. Measured on OpenWrt 25.12.5.
+// netifd applies a device mtu only from 68 up, and the wireguard handler applies a smaller one that
+// leaves the device with no IPv4.
 t.describe('network.interfaces mtu floor', () => {
 	let body = { proto: 'static', ip6addrs: [ 'fd00::1/64' ] };
 	t.it('refuses an mtu below 68 and accepts 68', () => {
@@ -1826,15 +1826,36 @@ t.describe('network.interfaces mtu floor', () => {
 	});
 });
 
-// wireguard.sh hands listen_port to wg, which resolves a service name. -1 is what a name that
-// does not resolve reads, since 0 asks the kernel to pick a port.
+// The wireguard handler gives wg `ListenPort=%d` of ucode's int() of the stored value. A name gives
+// port 0, which asks the kernel to pick one, as no option does, and wg refuses a port outside 0 to
+// 65535 with the whole config, which reads -1.
 t.describe('network.interfaces listen_port', () => {
 	let wg = { proto: 'wireguard', private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', addresses: [ '10.9.0.1/24' ] };
-	t.it('reads decimals and nothing as before', () => {
-		t.assert_equal(interfaces.fromUci({ '.name': 'w', proto: 'wireguard', listen_port: ' 51820' }, null).listen_port, 51820);
-		t.assert_equal(interfaces.fromUci({ '.name': 'w', proto: 'wireguard', listen_port: '0' }, null).listen_port, 0);
-		t.assert_equal(interfaces.fromUci({ '.name': 'w', proto: 'wireguard', listen_port: '65536' }, null).listen_port, -1);
-		t.assert_equal(interfaces.fromUci({ '.name': 'w', proto: 'wireguard' }, null).listen_port, null);
+	let read = (v) => interfaces.fromUci({ '.name': 'w', proto: 'wireguard', listen_port: v }, null).listen_port;
+	t.it('reads the number that int() reads, as the handler gives it to wg', () => {
+		let cases = [ [ '51820', 51820 ], [ ' 51820 ', 51820 ], [ '0', 0 ], [ '+443', 443 ], [ '010', 10 ], [ '0x10', 0 ],
+		              [ '1194x', 1194 ], [ '12.7', 12 ], [ '65535', 65535 ] ];
+		for (let c in cases)
+			t.assert_equal(read(c[0]), c[1], c[0]);
+	});
+	t.it('reads null for a name, a list, an empty value and no option', () => {
+		for (let v in [ 'openvpn', 'nosuchservice', [ '51820' ], '', ' ', null ])
+			t.assert_equal(read(v), null, v);
+	});
+	t.it('reads -1 for a number outside 0 to 65535, which wg refuses', () => {
+		for (let v in [ '65536', '-1', '4294967297' ])
+			t.assert_equal(read(v), -1, v);
+	});
+	t.it('takes a write of an interface that stores a name, and a PATCH that switches to wireguard over one', () => {
+		for (let v in [ 'openvpn', 'nosuchservice' ]) {
+			let c = ubus.stub({ uci: { network: { w: { '.type': 'interface', '.anonymous': false, ...wg, listen_port: v } } } });
+			let r = interfaces.validate({ ...wg, listen_port: read(v), mtu: 1400 }, c, 'w', { mtu: 1400 });
+			t.assert_deep_equal(field_codes(r, 'listen_port'), [], v);
+			c = ubus.stub({ uci: { network: { w: { '.type': 'interface', '.anonymous': false, proto: 'static', listen_port: v } } } });
+			t.assert_deep_equal(field_codes(interfaces.validate({ ...wg }, c, 'w', { ...wg }, true), 'listen_port'), [], v);
+		}
+		let c = ubus.stub({ uci: { network: { w: { '.type': 'interface', '.anonymous': false, proto: 'static', listen_port: '65536' } } } });
+		t.assert_deep_equal(field_codes(interfaces.validate({ ...wg }, c, 'w', { ...wg }, true), 'listen_port'), [ 'conflict' ]);
 	});
 	t.it('refuses -1 on wireguard, and still answers only conflict for it on another proto', () => {
 		t.assert_deep_equal(field_codes(full_validate(interfaces, { ...wg, listen_port: -1 }, null), 'listen_port'), [ 'out_of_range' ]);

@@ -259,50 +259,6 @@ function netifd_string(v) {
 	return (type(v) == "string") ? v : null;
 }
 
-// wg resolves a port with getaddrinfo after its config parser strips every whitespace character,
-// and musl takes a decimal from 0 to 65535, or else a name that is any token of a /udp line in
-// /etc/services once `#` comments go. wireguard.sh treats an empty value as unset, so "" reads
-// null. What resolves to nothing reads `unresolved`, a port wg cannot use: 0 for an endpoint, and
-// -1 for a listen port, where 0 asks the kernel to pick one. Either way the read does not pass
-// for an absent value.
-function service_port(v, read_services, unresolved) {
-	let none = unresolved ?? 0;
-	if (type(v) != "string") return null;
-	if (v == "") return null;
-	let s = replace(v, /[[:space:]]/g, "");
-	if (match(s, /^[+-]?[0-9]+$/)) {
-		let n = int(s);
-		return (n >= 0 && n <= 65535) ? n : none;
-	}
-	for (let line in split((s == "") ? "" : (read_services() ?? ""), "\n")) {
-		let tok = filter(split(split(line, "#")[0], /[[:space:]]+/), (t) => t != "");
-		let m = (index(tok, s) != -1 && length(tok) > 1) ? match(tok[1], /^([0-9]+)\/udp/) : null;
-		if (m && int(m[1]) <= 65535) return int(m[1]);
-	}
-	return none;
-}
-
-// wg cuts a line of its config at `#` and strips every whitespace character from it.
-function wg_line(l) {
-	return replace(split(l, "#")[0], /[[:space:]]/g, "");
-}
-
-// wireguard.sh leaves an empty value out of the config for wg, and writes any other after
-// `PersistentKeepalive=`. wg takes `off` in any case or a decimal up to 65535. Anything else, or a
-// later line that holds more than a comment, makes wg refuse the config, so it reads -1, which a
-// write cannot set.
-function wg_keepalive(v) {
-	v = config_get(v);
-	if (type(v) != "string" || v == "") return null;
-	let lines = map(split(v, "\n"), (l) => lc(wg_line(l)));
-	let s = shift(lines);
-	if (length(filter(lines, (l) => l != "")) > 0) return -1;
-	if (s == "off") return 0;
-	if (!match(s, /^[0-9]+$/) || length(ltrim(s, "0")) > 5) return -1;
-	let n = int(s);
-	return (n <= 65535) ? n : -1;
-}
-
 // netifd's ucode side converts a wireless option of type number with `+v` (/lib/netifd/utils.uc):
 // it takes whitespace around the number, a 0x, 0o or 0b prefix, a fraction and an exponent, reads
 // `010` as 10, and reads any other text, a list included, as NaN. wifi-scripts writes the number
@@ -849,7 +805,7 @@ return {
 	normalize_bool, platform_bool,
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, config_get_words, as_int, netifd_int,
-	netifd_string, rt_table_id, config_get, service_port, wg_line, wg_keepalive, ucode_int,
+	netifd_string, rt_table_id, config_get, ucode_int,
 	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem, dnsmasq_option_problem,
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
 	require_present, section_index,

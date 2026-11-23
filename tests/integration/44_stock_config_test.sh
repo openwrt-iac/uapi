@@ -29,7 +29,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 # of those tests writes the values it then asserts rather than reading what OpenWrt shipped.
 #
 # Note on package naming: the package is 'vnstat2' (the v2 fork shipping in the
-# 25.12 feed) but the uci config and the resource paths are 'vnstat'.
+# packages feed) but the uci config and the resource paths are 'vnstat'.
 
 # A resource for an uninstalled package is never exercised against real config, so a
 # section-type mismatch looks identical to a correct model. That is how `vnstat/interfaces`

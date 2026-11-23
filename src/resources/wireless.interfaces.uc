@@ -80,7 +80,7 @@ const STA_PSK_MODES = { "psk": true, "psk2": true, "psk-mixed": true, "sae-mixed
 const STA_COMMENT_RE = /^[^"]*"([^"]*"[^"]*")*[^"]*#/;
 // WEP needs the shell wifi-scripts and the daemon of the mode built with it: hostapd for an access
 // point, wpa_supplicant for a station or an ad-hoc cell. A mesh point takes none. The ucode
-// wifi-scripts of OpenWrt 25.12 gave hostapd no WEP key, and the SSID ran open.
+// wifi-scripts give hostapd no WEP key, and the SSID runs open.
 const WEP_DAEMONS = { "ap": "hostapd", "sta": "wpa_supplicant", "adhoc": "wpa_supplicant", "mesh": null };
 
 // parse_encryption in wifi-scripts sets up psk3 as sae and psk3-mixed as sae-mixed.

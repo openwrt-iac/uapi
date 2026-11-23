@@ -295,11 +295,10 @@ ensure_daemon_packages() {
 	$SSH 'apk info -e lldpd >/dev/null 2>&1 && apk info -e vnstat2 >/dev/null 2>&1'
 }
 
-# netifd of OpenWrt main restarts a wireguard interface on every peer change
-# (its ucode proto handler reads the peer sections as part of the interface
-# config), so the kernel state of a write lands seconds after the write
-# returned, and a check that runs at once can see the interface mid-cycle.
-# 25.12 runs no such cycle: the settle passes on its first check there.
+# netifd restarts a wireguard interface on every peer change (its ucode proto
+# handler reads the peer sections as part of the interface config), so the
+# kernel state of a write lands seconds after the write returned, and a check
+# that runs at once can see the interface mid-cycle.
 wait_iface_settled() {
 	n=0
 	while [ $n -lt 20 ]; do
@@ -309,12 +308,6 @@ wait_iface_settled() {
 		n=$((n + 1)); sleep 1
 	done
 	return 1
-}
-
-# The ucode proto handler of OpenWrt main replaced the shell handler of 25.12;
-# the tests branch their platform-dependent expectations on which one runs.
-wg_ucode_platform() {
-	$SSH 'test -e /lib/netifd/proto/wireguard.uc'
 }
 
 # kmod-wireguard alone is not enough. netifd scans /lib/netifd/proto only when it

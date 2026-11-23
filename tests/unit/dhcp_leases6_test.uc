@@ -9,7 +9,7 @@ let servers = loadfile('src/resources/dhcp.servers.uc')();
 // The first line is what odhcpd 25.12.5 wrote for a DHCPv6 client on a test interface. The others
 // follow statefiles.c of odhcpd: a prefix delegation that does not expire, an address lease with two
 // addresses, a DHCPv4 lease that odhcpd serves, the hosts line that it writes beside them, a short
-// line, and the line of a client hostname that odhcpd of 25.12 writes unescaped.
+// line, and the line of a client hostname that an odhcpd before 68f382690b writes unescaped.
 const FILE = "# uapi6a 000300019e09e3b126e0 615f3ec7 router-1 1794128831 aed 128 fd99:6::aed/128\n" +
              "# br-lan 00010001aabbccddeeff 1 - -1 5 56 fd99:7:100::/56\n" +
              "# br-lan 00030001aabbccddee00 2 laptop 1794128900 b 128 fd99:6::b/128 fd99:6::c/128\n" +

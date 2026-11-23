@@ -333,21 +333,20 @@ without uci state change.
    for which wg refuses the config of
    the whole interface: a live error of the peer, an allowed IP that wg cannot
    parse, or a link-local %zone that names no interface of the router, which
-   it looks up in `/sys/class/net`. Both proto handlers give wg every peer of
+   it looks up in `/sys/class/net`. The proto handler gives wg every peer of
    the interface at once, so one such peer keeps the interface down, and a
    wait for its restart cannot tell a restart that the write broke from one
    that was broken before it. So the write keeps its commit, runs no restore,
    and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names
-   each such peer. On OpenWrt main the apply skips the interface with no wait,
-   and netifd sets the peers from uci at its next setup. On 25.12 an interface
-   that is still up takes the write. A write that fixes, disables or deletes
-   the peer finds none and goes on as below. A check sets no peer.
+   each such peer. The apply skips the interface with no wait, and netifd sets
+   the peers from uci at its next setup. A write that fixes, disables or
+   deletes the peer finds none and goes on as below. A check sets no peer.
 
    For each peer operation of an interface that no such peer holds, skip it
    unless `network.interface.<name>` reports `up`, then run the
-   matching `wg set`. The ucode handler of OpenWrt main restarts a wireguard
-   interface on every peer change, so there the check first waits for a setup
-   that is in flight to finish: without the wait the write's own reload would
+   matching `wg set`. The proto handler restarts a wireguard interface on
+   every peer change, so the check first waits for a setup that is in flight
+   to finish: without the wait the write's own reload would
    leave the interface mid-cycle, the apply would skip, and netifd would
    re-apply the peers from uci, which turns a peer that wg refuses into a
    committed section and a `setup_failed` interface instead of the 500 below.
@@ -367,10 +366,8 @@ without uci state change.
    which the handler gives wg as an address, and an IPv6 host that musl
    refuses. A write refuses each of them that it sends. The
    apply sets a peer as the handler does, without the endpoint of a host that
-   does not resolve, and answers `X-Kernel-Status: omitted`. wireguard.sh
-   restarts nothing on a peer change, and its failed setup reads pending until
-   the stored config changes, so on 25.12 the check reads the status once. Runs
-   only after the reload returned zero, and reports the same way, so a failure
+   does not resolve, and answers `X-Kernel-Status: omitted`. Runs only after
+   the reload returned zero, and reports the same way, so a failure
    here follows the recipe below. The interfaces actually
    applied are recorded and reported on the response as `X-Kernel-Status` and
    `X-Kernel-Applied` (`docs/errors.md` § Response headers), because a skip
@@ -453,30 +450,20 @@ of what the request staged.
 
 ### Why step 7 exists, and why it shells out to `wg`
 
-A reload converges a daemon only when the daemon notices its config changed.
-netifd reads WireGuard peers with `config_foreach wireguard_<iface>` *inside*
-the proto setup step, so editing a peer leaves the parent `interface` section
-untouched and `/etc/init.d/network reload` does nothing at all: the peer was
-committed to uci and never reached the kernel, and deleting one did not revoke
-it. `wireguard.sh` is the only proto handler under `/lib/netifd/proto/` that
-reads its own uci sections, so this affects exactly one resource.
+The proto handler of wireguard reads the peers of an interface from their own
+`wireguard_<iface>` sections, with the config of the interface, so a reload
+restarts the interface on every peer change and gives wg every peer at once.
+wg refuses that whole config for one value that it cannot read, so one bad peer
+keeps the interface down, and the reload reports nothing about it: the write
+would answer `200` over a committed section and an interface in
+`setup_failed`. The wireguard handler is the only proto handler that reads its
+own uci sections, so this affects exactly one resource.
 
-**This is a platform-wide defect, not a uapi one.** LuCI has it too, and says so
-in its peer form: *"Enable / Disable peer. Restart wireguard interface to apply
-changes."* Its Save and Apply resolves through
-`ubus call uci apply` → `/sbin/reload_config` → a `config.change` event carrying
-`{"package": "network"}` → `/etc/init.d/network reload` → `ubus call network
-reload`, which is the same call uapi makes. That chain is package-granular: it
-cannot express "interface wg3's peers changed", so a package-wide reload is the
-only action available to it. uapi knows which resource was written and therefore
-which interface is affected, so it can do better, and does.
-
-**Why not ask netifd to re-apply.** Measured on hardware:
+**Why not ask netifd to re-apply.**
 `ubus call network.interface.<i> renew` returns in 0 ms, so a failed apply is
-undetectable, and on failure `proto_wireguard_setup` calls `proto_setup_failed`,
-which takes the interface **down**. One peer with an unresolvable
-`endpoint_host` dropped a working tunnel and its healthy peers while the API
-answered `200`. A `down`+`up` restart behaves identically and additionally
+undetectable, and on failure the proto handler calls `setup_failed`, which
+takes the interface **down**: one bad peer drops a working tunnel and its
+healthy peers. A `down`+`up` restart behaves identically and additionally
 interrupts a healthy tunnel on every peer edit. Every netifd-mediated path
 applies the whole interface config as one unit, so one bad peer takes the
 innocent ones with it.
@@ -510,39 +497,32 @@ match netifd exactly (`proto static`, `scope link` on v4) and go into `ip4table`
 / `ip6table` when the interface sets one, since netifd puts them there rather
 than in main. A route is the prefix as netifd installs it: the length as
 netifd reads it, and the address masked to that length.
-wireguard.sh routes each word of the option as uci holds it, before printf %b
-expands the escapes that it gives wg, and takes the address before the first
-`/` of the word and the length after its last. So a write takes the words of
-the section as it stages it: a PATCH that leaves `allowed_ips` as it is keeps
-an option with an escape, whose route differs from the allowed IPs of the
-read. Routes are compared in that one spelling, so a respelled prefix, or the
-spelling that the kernel prints, is the same route. A prefix is only withdrawn
-when no
-remaining peer and no `config route` section still wants it, because two peers
-can carry overlapping `allowed_ips`. The kernel is never scanned for strays on
-the request path, only
-on the reconcile that follows a rollback, so a route uapi did not install is not
-at risk.
+The handler routes each entry as uci holds it, past a `#` and a comma that wg
+reads, so a write takes the entries of the section as it stages it: a PATCH
+that leaves `allowed_ips` as it is keeps an option whose routes can differ from
+the allowed IPs of the read. Routes are compared in that one spelling, so a
+respelled prefix, or the spelling that the kernel prints, is the same route. A
+prefix is only withdrawn when no remaining peer and no `config route` section
+still wants it, because two peers can carry overlapping `allowed_ips`. The
+kernel is never scanned for strays on the request path, only on the reconcile
+that follows a rollback, so a route uapi did not install is not at risk.
 
-OpenWrt main replaced `wireguard.sh` with a ucode proto handler,
-`/lib/netifd/proto/wireguard.uc`. `wg.uc` follows the handler that netifd runs,
-and it finds which one by the presence of that file. The ucode handler gives wg
-each value as uci holds it, with no printf %b. It takes a list of allowed IPs as
-its entries and an option as its words, and it routes each of them. A route
-takes the address before the first `/` and the length that ucode's `int()` reads
-after it. The handler leaves out a peer without a key, with its routes, and
-takes `disabled` and `route_allowed_ips` as on only when they hold `1`. Since
-openwrt ecd9120f04 it also checks a peer value against the grammar of wg, as uci
-holds it, and leaves out what wg would refuse: the peer, with its routes, for a
-key that is not a WireGuard key, and the line for a preshared key, an endpoint
-or a keepalive. It gives wg an endpoint host of digits and dots as it stands,
-so wg still refuses the whole config for one that inet_aton does not read, such
-as `10.0.0.256`. An endpoint port is 1 to 65535 in digits or the first field
-of a `/udp` line of `/etc/services`, and an empty one leaves the endpoint out.
-A peer with a host and no port gets port 51820, as under `wireguard.sh`. The
-read, the kernel apply, the routes and the reconcile take these rules from
-`wg.uc`. So on main a GET reports an entry that wg refuses as that
-one entry, not as the prefixes that `wireguard.sh` made of it.
+The proto handler, `/lib/netifd/proto/wireguard.uc` of wireguard-tools, gives wg
+each value as uci holds it, and expands no escape. It takes a list of allowed
+IPs as its entries and an option as its words, and it routes each of them. A
+route takes the address before the first `/` and the length that ucode's `int()`
+reads after it. The handler leaves out a peer without a key, with its routes,
+and takes `disabled` and `route_allowed_ips` as on only when they hold `1`.
+Since openwrt ecd9120f04 it also checks a peer value against the grammar of wg,
+as uci holds it, and leaves out what wg would refuse: the peer, with its routes,
+for a key that is not a WireGuard key, and the line for a preshared key, an
+endpoint or a keepalive. It gives wg an endpoint host of digits and dots as it
+stands, so wg still refuses the whole config for one that inet_aton does not
+read, such as `10.0.0.256`. An endpoint port is 1 to 65535 in digits or the
+first field of a `/udp` line of `/etc/services`, and an empty one leaves the
+endpoint out. A peer with a host and no port gets port 51820. The read, the
+kernel apply, the routes and the reconcile take these rules from `wg.uc`. So a
+GET reports an entry that wg refuses as that one entry.
 
 One consequence to know: netifd reports the routes it installs in
 `network.interface.<name> status`, and routes installed here are not in that
@@ -558,30 +538,15 @@ off the section type because it is not stored as an option, so a `DELETE` can
 only learn it from the section it is about to remove. A rotated public key emits
 a remove for the old key before the set, or the kernel would keep the previous
 peer and its access. A disabled peer is removed, matching what netifd omits when
-it builds the config. A remove takes every key that wg can read from the stored
-`public_key`, not only the key on its first line, with the escapes that
-wireguard.sh expands when it hands the config to wg. A value with a backslash
-that
-is longer than 512 bytes is not expanded, and its remove is refused. The kernel
-holds one peer per key, so a remove then sets again each other enabled section
-of
-the interface that holds one of these keys, in uci order, as ifup does. A set,
-in
-a write or in the reconcile after a failed write, takes a stored value that wg
-reads as the key alone. It refuses any other value, and the reconcile refuses it
-before it changes the kernel of the interface, as it refuses a stored
-`preshared_key` that wg reads as more than the key alone. The reconcile skips a
-peer whose stored key wg cannot read, because the kernel holds no peer under it.
-It does not set a peer whose stored `preshared_key` wg cannot read either:
-under `wireguard.sh`, wg refuses the whole config at ifup, so it never gets that
-peer without its key,
-and a set with `/dev/null` would take the key that the kernel holds from the
-peer. The kernel keeps the peer as it holds it, and the reconcile sets the peers
-after it. That restores the peer only when the kernel holds it and no operation
-of the request set or removed it, so the reconcile takes the operations of the
-request, and fails otherwise. The ucode handler of OpenWrt main runs such a peer
-without its preshared key, so there the reconcile sets it with `/dev/null`, as
-the restart of the restore left it.
+it builds the config. A remove takes the stored `public_key` as the handler
+gives it to wg, and the kernel holds no peer under a value that is not a
+WireGuard key. The kernel holds one peer per key, so a remove then sets again
+each other enabled section of the interface that holds the key, in uci order,
+as ifup does. A set, in a write or in the reconcile after a failed write, skips
+a peer whose stored key is not a WireGuard key, as the handler does. The
+handler runs a peer whose stored `preshared_key` is not one without a
+preshared key, so the set gives wg `/dev/null` for it, as the restart of the
+handler left it.
 
 An interface that is down, or that netifd does not know, is skipped: there is no
 kernel state to sync and `ifup` reads the peers from uci anyway. That is also
@@ -651,8 +616,8 @@ by design, so that a plan with no change has no side effect. `POST
 `recover()` of `src/lib/transaction.uc`:
 
 1. Look up `{name}` in `RECOVERABLE`: the services that uapi reloads and whose
-   init script sets `procd_set_param respawn` on every instance that it starts,
-   on OpenWrt 25.12 and main. `network`, `uhttpd` and `dropbear` qualify, and
+   init script sets `procd_set_param respawn` on every instance that it starts.
+   `network`, `uhttpd` and `dropbear` qualify, and
    are left out, because the stop acts on the whole service. A stop of
    `network` or `uhttpd` cuts off the request, and a stop of `dropbear` stops
    the instance that serves the management SSH session, which a start that

@@ -36,7 +36,7 @@ endef
 # that differs on disk as <file>.apk-new, and the token store always differs. 99-uapi creates it
 # from config.template. The entry stays so that the package names its own store for sysupgrade:
 # for a listed conffile that the package does not ship, the build writes its path into
-# /lib/upgrade/keep.d/uapi. base-files of OpenWrt 25.12.5 also keeps all of /etc/config/, through
+# /lib/upgrade/keep.d/uapi. base-files also keeps all of /etc/config/, through
 # /lib/upgrade/keep.d/base-files.
 define Package/uapi/conffiles
 /etc/config/uapi

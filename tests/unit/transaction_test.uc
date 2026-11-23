@@ -1057,8 +1057,7 @@ t.describe('transaction kernel_status', () => {
 		t.assert_equal(r.kernel_status, "ok");
 	});
 
-	// A stored peer that wg refuses keeps its interface down. On 25.12 an interface that is still up
-	// takes the write, and it does not come up at its next start.
+	// A stored peer that wg refuses keeps its interface down, and the apply skips that interface.
 	function blocking(applied, blocked, omitted) {
 		return function(c, o, a, om, b) {
 			push(a, ...applied);
@@ -1070,14 +1069,14 @@ t.describe('transaction kernel_status', () => {
 	t.it('reports blocked and names the peer when a stored peer keeps every target down', () => {
 		let r = run([{ iface: "wg0", action: "set" }], blocking([], [ "wg0/a" ]));
 		t.assert_deep_equal([ r.ok, r.kernel_status, r.kernel_applied, r.kernel_blocked ], [ true, "blocked", [], [ "wg0/a" ] ]);
-		r = run([{ iface: "wg0", action: "set" }], blocking([ "wg0" ], [ "wg0/a", "wg0/b" ]));
-		t.assert_deep_equal([ r.kernel_status, r.kernel_applied, r.kernel_blocked ], [ "blocked", [ "wg0" ], [ "wg0/a", "wg0/b" ] ]);
+		r = run([{ iface: "wg0", action: "set" }], blocking([], [ "wg0/a", "wg0/b" ]));
+		t.assert_deep_equal([ r.kernel_status, r.kernel_applied, r.kernel_blocked ], [ "blocked", [], [ "wg0/a", "wg0/b" ] ]);
 	});
 	t.it('reports partial when one interface is blocked and another applied, and omitted over it', () => {
 		let ops = [{ iface: "wg0", action: "set" }, { iface: "wg1", action: "set" }];
-		t.assert_deep_equal(map([ run(ops, blocking([ "wg1" ], [ "wg0/a" ])), run(ops, blocking([ "wg0", "wg1" ], [ "wg0/a" ])),
-		                          run(ops, blocking([ "wg1" ], [ "wg0/a" ], [ "wg1" ])) ], (r) => r.kernel_status),
-		                    [ "partial", "partial", "omitted" ]);
+		t.assert_deep_equal(map([ run(ops, blocking([ "wg1" ], [ "wg0/a" ])), run(ops, blocking([ "wg1" ], [ "wg0/a" ], [ "wg1" ])) ],
+		                        (r) => r.kernel_status),
+		                    [ "partial", "omitted" ]);
 	});
 	// A write of network/interfaces restarts the interface and sets no peer.
 	t.it('reports a check only when a stored peer keeps its interface down', () => {
