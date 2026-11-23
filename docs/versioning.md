@@ -77,6 +77,13 @@ rest.
 - New error codes. Clients branch on HTTP status and treat unknown `code`
   gracefully.
 - New scope names.
+- New response headers with the prefix `X-Reload-` or `X-Kernel-`, and new
+  values of such a header or of `X-Mgmt-Path-Warning`. uapi gives these names
+  only to advisory headers, which report what a request did or found after uapi
+  completed it. Such a header never changes what the status code means, or
+  what a client must send or retry, and it keeps its meaning for the whole
+  major. A client can pass each of them on as it is, with no release of its
+  own (`docs/errors.md`, "Response headers").
 - Field rename with both old and new accepted during a deprecation window: the
   old marked `deprecated: true` in `build/openapi.json`, an entry added to
   `docs/deprecations.md`, and the actual removal scheduled for the next major.

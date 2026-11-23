@@ -8,6 +8,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs/versioning.md` promises what the `X-Reload-*`, `X-Kernel-*` and
+  `X-Mgmt-Path-Warning` headers can carry.** Each one only reports what a
+  request did or found after uapi completed it, and never changes what the
+  status code means or what a client must send or retry. A 4.x minor can add
+  such a header, or a new value of one, as an additive change, so a client
+  that passes them on, as uapi-mcp does, needs no release for it. (#476) (#479)
 - **BREAKING: `firewall/zones` `input`, `output_policy` and `forward` carry
   `x-uapi-clear-on-omit`.** A zone that sets no policy reads null, and fw4
   applies the policy of `firewall/defaults` to it. Without the flag, the
