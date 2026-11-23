@@ -379,9 +379,13 @@ const CASES = [
 		section: { enabled: '0', ipv6: '1', assoc_steering: '1', '.type': 'usteer', network: 'default', syslog: '1' },
 	},
 	{
-		file: "openvpn.instances.uc", id: "vpn0", pkg: "openvpn",
+		file: "network.interfaces.uc", id: "vpn0", pkg: "network",
 		modify: { key: "port", value: 1195 },
-		section: { client: '1', nobind: '1', float: '1', client_to_client: '1', duplicate_cn: '1', persist_key: '1', persist_tun: '1', ncp_disable: '1', tls_server: '1', tls_client: '1', '.type': 'openvpn', enabled: '1', dev_type: 'tun', proto: 'udp', port: '1194', key: '/etc/openvpn/k.pem', tls_auth: '/etc/openvpn/ta.key' },
+		section: { client: '1', nobind: '1', float: '1', client_to_client: '1', duplicate_cn: '1', persist_key: '1', persist_tun: '1', tls_server: '1', tls_client: '1',
+		           auto: '0', disabled: '1', '.type': 'interface', proto: 'openvpn', dev: 'tun0', dev_type: 'tun', ovpnproto: 'udp', port: '1194',
+		           remote: [ 'vpn.example.com 1194' ], data_ciphers: [ 'AES-256-GCM:CHACHA20-POLY1305' ], ca: '/etc/openvpn/ca.pem',
+		           username: 'u', peerdns: '0', nohostroute: '1', key: '/etc/openvpn/k.pem', tls_auth: '/etc/openvpn/ta.key',
+		           password: 'pw', cert_password: 'cpw' },
 	},
 ];
 

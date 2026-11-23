@@ -400,6 +400,26 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- **BREAKING: openvpn becomes a proto of `network/interfaces`, and
+  `openvpn/instances` goes.** On OpenWrt main, the platform of 4.x, the openvpn
+  package runs a tunnel as a netifd protocol, with no init script and no
+  `/etc/config/openvpn`, so `openvpn/instances` read sections that nothing ran,
+  and each write answered 503 `init_script_missing`. `network/interfaces` now
+  takes `proto: "openvpn"`, with the options that `/lib/netifd/proto/openvpn.sh`
+  reads as fields of that proto only: the 3.x field set, with the transport as
+  `ovpnproto`, without `enabled`, `status`, `comp_lzo`, `compress`,
+  `ncp_ciphers` and `ncp_disable`, and with `config`, `data_ciphers`,
+  `username`, and the write-only `password` and `cert_password`. Each reads as
+  netifd hands it to the handler. A write with several `data_ciphers` entries
+  answers 422 `conflict`, because openvpn keeps only the last. `peerdns` and
+  `nohostroute` apply to openvpn too. A POST without an id names the tunnel
+  `vpn_<rand>`. `/openvpn/instances` answers 404, and `openvpn` and
+  `openvpn:instances` leave the scope tree. No 3.x release announced the
+  removal: v3 takes no more releases, and the path cannot work on the platform
+  of 4.x. At the first boot on OpenWrt main, the openvpn package copies each
+  `config openvpn` section into `/etc/config/network` once, and a section that
+  was off on 3.x then runs. Migration note in `docs/migration-v3-to-v4.md`.
+  (#468)
 - **BREAKING: `dhcp/leases6` merges into `dhcp/leases`.** The endpoint is gone;
   `GET /dhcp/leases` still returns the IPv4 leases and `GET
   /dhcp/leases?family=v6` the IPv6 ones from odhcpd's statefile. The entry id is

@@ -78,6 +78,18 @@ still stored as a scalar, which netifd, 6rd, map and 464xlat read the same way,
 so the stored form does not change. No `deprecated: true` flag was ever set on
 it, for the reason given under "How to migrate".
 
+Also removed in 4.0.0, without an announcement in 3.x:
+
+- **`openvpn/instances`, the whole endpoint, with the paths `openvpn` and
+  `openvpn:instances` of the scope tree.** On OpenWrt main, the only platform
+  of 4.x, the openvpn package runs a tunnel as a netifd protocol and has no init
+  script, so the endpoint read sections that nothing runs and each write
+  answered 503 `init_script_missing`. A tunnel is now a `network/interfaces`
+  section with `proto: "openvpn"`. The policy above asks for a deprecation in a
+  3.x minor first. v3 takes no more releases, and the path cannot work on the
+  platform of 4.x, so the maintainer made an exception (#466).
+  `docs/migration-v3-to-v4.md` has the field map and what a stored token does.
+
 ### 3.0.0
 
 | Field | Replaced by | Deprecated since | Removed in |

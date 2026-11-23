@@ -68,7 +68,6 @@ const RESOURCES = {
 	"mwan3:members":      handler.make(load_resource("mwan3:members")),
 	"mwan3:policies":     handler.make(load_resource("mwan3:policies")),
 	"mwan3:rules":        handler.make(load_resource("mwan3:rules")),
-	"openvpn:instances":  handler.make(load_resource("openvpn:instances")),
 };
 
 const SINGLETONS = {

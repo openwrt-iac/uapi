@@ -8,7 +8,7 @@ URL=http://127.0.0.1:8080/api/v4
 ADMIN="Authorization: Bearer $ADMIN_TOKEN"
 BRIDGE=br-uapi53
 WG_KEY=yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
-IFACES="uapi53 uapi53d uapi53v6 uapi53p uapi53w uapi53x uapi53t"
+IFACES="uapi53 uapi53d uapi53v6 uapi53p uapi53w uapi53x uapi53t uapi53o"
 fail() { echo "FAIL: $*"; exit 1; }
 call() { curl -sS -H "$ADMIN" -w "\n%{http_code}" "$@"; }
 body() { printf '%s\n' "$1" | sed '$d'; }
@@ -178,6 +178,25 @@ r=$(send PATCH /uapi53x '{"proto":"static","ipaddrs":["10.253.53.1/24"]}')
 [ -z "$(uci_get uapi53x.private_key)" ] && [ -z "$(uci_get uapi53x.listen_port)" ] \
 	|| fail "the switch back to static kept private_key or listen_port"
 
+echo "--- proto openvpn stores what its handler reads, masks the secrets and keeps them across a PUT of the read ---"
+r=$(send POST "" '{"id":"uapi53o","proto":"openvpn","auto":false,"client":true,"dev":"tun53","ovpnproto":"udp",
+	"remote":["vpn.example.invalid 1194"],"data_ciphers":["AES-256-GCM:CHACHA20-POLY1305"],"ca":"/etc/openvpn/ca.pem",
+	"key":"/etc/openvpn/k.pem","username":"u53","password":"pw53","peerdns":false,"nohostroute":true}')
+[ "$(status "$r")" = 200 ] || fail "create openvpn expected 200: $r"
+$SSH 'uci export network' | grep -q "list remote 'vpn.example.invalid 1194'" || fail "remote was not stored as a uci list"
+$SSH 'uci export network' | grep -q "list data_ciphers 'AES-256-GCM:CHACHA20-POLY1305'" || fail "data_ciphers was not stored as a uci list"
+[ "$(uci_get uapi53o.client)/$(uci_get uapi53o.peerdns)/$(uci_get uapi53o.nohostroute)" = 1/0/1 ] \
+	|| fail "the openvpn booleans were not stored as 1 or 0"
+read_back=$(body "$(call "$URL/network/interfaces/uapi53o")")
+printf '%s' "$read_back" | jq -e '.has_key and .has_password and (has("key") | not) and (has("password") | not)
+	and .remote == ["vpn.example.invalid 1194"] and .client and .peerdns == false' >/dev/null \
+	|| fail "the openvpn read is wrong: $read_back"
+r=$(send PUT /uapi53o "$(printf '%s' "$read_back" | jq -c 'del(.id, .managed, .runtime)')")
+[ "$(status "$r")" = 200 ] && [ "$(uci_get uapi53o.key)" = /etc/openvpn/k.pem ] && [ "$(uci_get uapi53o.password)" = pw53 ] \
+	|| fail "a PUT of the openvpn read lost a secret: $r"
+r=$(send PATCH /uapi53o '{"data_ciphers":["AES-256-GCM","AES-128-GCM"]}')
+[ "$(status "$r")" = 422 ] && [ "$(codes "$r" data_ciphers)" = conflict ] || fail "two data_ciphers entries expected 422 conflict: $r"
+
 echo "--- every read validates against the published Response schema ---"
 r=$(send POST "" "{\"id\":\"uapi53p\",\"proto\":\"pppoe\",\"device\":\"$BRIDGE\",\"auto\":false,
 	\"peerdns\":false,\"reqprefix\":\"56\",\"sourcefilter\":false}")
@@ -188,7 +207,7 @@ r=$(send POST "" "{\"id\":\"uapi53w\",\"proto\":\"wireguard\",\"auto\":false,\"p
 r=$(send PATCH /uapi53w '{"mtu":1400}')
 [ "$(status "$r")" = 200 ] && [ "$(uci_get uapi53w.mtu)" = 1400 ] && [ -z "$(uci_get uapi53w.nohostroute)" ] \
 	|| fail "a PATCH of mtu on a wireguard interface wrote a nohostroute it did not name: $r"
-for i in uapi53 uapi53d uapi53v6 uapi53p uapi53w uapi53t; do
+for i in uapi53 uapi53d uapi53v6 uapi53p uapi53w uapi53t uapi53o; do
 	printf '%s\t' "$i"
 	body "$(call "$URL/network/interfaces/$i")" | jq -c .
 done > /tmp/uapi53_bodies.tsv

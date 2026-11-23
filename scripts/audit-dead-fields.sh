@@ -28,13 +28,12 @@ probe_script() {
 	cat <<'SH'
 corpus_for() {
   case "$1" in
-    network)   echo "/sbin/netifd /lib/netifd /etc/init.d/network /sbin/ifup /lib/network /usr/sbin/odhcpd" ;;
+    network)   echo "/sbin/netifd /lib/netifd /etc/init.d/network /sbin/ifup /lib/network /usr/sbin/odhcpd /usr/share/openvpn /usr/libexec/openvpn-hotplug" ;;
     firewall)  echo "/usr/share/ucode/fw4.uc /usr/share/firewall4 /etc/init.d/firewall" ;;
     dhcp)      echo "/etc/init.d/dnsmasq /usr/sbin/dnsmasq /usr/sbin/odhcpd /etc/init.d/odhcpd" ;;
     dropbear)  echo "/etc/init.d/dropbear /usr/sbin/dropbear" ;;
     lldpd)     echo "/etc/init.d/lldpd /usr/sbin/lldpd /usr/sbin/lldpcli" ;;
     mwan3)     echo "/etc/init.d/mwan3 /usr/sbin/mwan3 /usr/sbin/mwan3track /usr/sbin/mwan3rtmon /lib/mwan3 /usr/share/rpcd/ucode/mwan3 /etc/hotplug.d/iface" ;;
-    openvpn)   echo "/etc/init.d/openvpn /usr/share/openvpn /lib/functions/openvpn.sh /usr/sbin/openvpn /usr/libexec/openvpn-hotplug" ;;
     prometheus-node-exporter-lua) echo "/etc/init.d/prometheus-node-exporter-lua /usr/bin/prometheus-node-exporter-lua /usr/lib/lua/prometheus-collectors" ;;
     snmpd)     echo "/etc/init.d/snmpd /usr/sbin/snmpd /usr/bin/snmpd" ;;
     sqm)       echo "/usr/lib/sqm /etc/init.d/sqm" ;;
@@ -62,7 +61,7 @@ seen() {
 for probe in "network:proto" "network:ip6assign" "firewall:src" "firewall:mtu_fix" \
              "dhcp:leasetime" "dhcp:dhcp_option" "dropbear:Port" "dropbear:RootPasswordAuth" \
              "lldpd:lldp_class" "lldpd:enable_cdp" "mwan3:reliability" "mwan3:track_ip" \
-             "openvpn:client_to_client" "openvpn:persist_tun" "snmpd:community" "snmpd:sysLocation" \
+             "network:client_to_client" "network:persist_tun" "snmpd:community" "snmpd:sysLocation" \
              "sqm:download" "sqm:qdisc" "system:hostname" "system:timezone" \
              "uhttpd:listen_http" "uhttpd:cert" "unbound:recursion" "unbound_srv:srv_line" \
              "usteer:debug_level" "usteer:band_steering_threshold" "vnstat:interface" \

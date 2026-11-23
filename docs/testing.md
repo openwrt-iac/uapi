@@ -261,8 +261,9 @@ in `build/gen_openapi.uc`, must answer 422 or remove nothing. Four seeds store
 an option for this property only, because no seed stored it in a form whose null
 the server takes: `firewall/nat.target` as `ACCEPT` without `snat_ip`, the
 `match.family` of a rule and of a redirect, and `nohostroute` of a wireguard
-interface. Validated twice. An openvpn `merge_for_patch` that skips a null fails
-it with `{"enabled": null} left enabled: "1"`. A `wireless/interfaces` `toUci`
+interface. Validated twice. The `merge_for_patch` of `openvpn/instances`, which
+4.0.0 removed, failed it when it skipped a null, with `{"enabled": null} left
+enabled: "1"`. A `wireless/interfaces` `toUci`
 that stores `ap` for a null mode fails it with `{"mode": null} wrote mode:
 "sta" -> "ap"`. `lint-openapi-shape` and `tests/merge_patch_bodies.py` send no
 null to the server: the lint reads only the spec, and the Python check runs no
@@ -320,8 +321,8 @@ Relationship to the stock-config round-trip (layer 8 above): 44 covers many more
 resources against genuinely stock configuration, but it PUTs verbatim only and
 its scope is bare-image packages, excluding wireless outright. Neither the
 secret-destruction nor the mirror-field class is reachable from it, because both
-live in wireguard, wireless and openvpn. 47 is the narrow complement: four
-resources, both forms, plus the uci and netdev checks.
+live in wireguard, wireless and openvpn interfaces. 47 is the narrow complement:
+four resources, both forms, plus the uci and netdev checks.
 
 Test 47 deletes the wireguard netdev in cleanup, not just the uci section. A
 wireguard netdev that outlives its config takes only part of it back on the next
@@ -495,8 +496,9 @@ dead export is now reported, and all 135 real exports still pass.
 - `lint-defaults` (2.2.2+): for every `fromUci` unconditional default, verifies
   a matching `default:` annotation in `schema_properties`; for every
   `x-uapi-clear-on-omit` flag, verifies the fromUci shape is `section.X ??
-  null`, `as_list_or_null(...)`, `as_word_list_or_null(...)` or
-  `values.fw_enum(section.X, ...)`, and the schema type includes `"null"` or
+  null`, `as_list_or_null(...)`, `as_word_list_or_null(...)`,
+  `values.fw_enum(section.X, ...)`, `netifd_int(section.X)` or
+  `netifd_string(section.X)`, and the schema type includes `"null"` or
   the property carries `x-uapi-read-nullable`.
 - `lint-response-nullability` (3.0.0+): calls each resource's `fromUci` on a
   bare section, and once per value of a Request `proto` enum, and fails when a
@@ -604,7 +606,8 @@ only while that test runs.
 
 Six resource families remain uncovered because their packages stay outside the
 image: `snmpd/*`, `mwan3/*`, `sqm/queues`, `usteer/config`,
-`prometheus_node_exporter_lua/config` and `openvpn/*`. That is a standing gap
+`prometheus_node_exporter_lua/config` and proto openvpn of
+`network/interfaces`. That is a standing gap
 rather than a decision that they cannot be tested, and the prometheus one
 matters least because most of its surface is now deprecated. Anything asserting
 what those daemons do has to be run by hand on a real device.

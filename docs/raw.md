@@ -146,10 +146,11 @@ The dual check exists so granting `raw:rw` does not silently bypass a
 carefully-scoped `firewall:rules:ro`. If the deepest matching scope on either
 tree denies, the request is denied.
 
-For a section type absent from that map (e.g. any `openvpn`, `mwan3` or
-`usteer` section, or a firewall `nat`), only `*:rw` or a package-level scope
-like `openvpn:rw` permits the domain side. The map is `TYPE_DOMAIN_MAP` in
-`src/raw.uc`.
+For a section type absent from that map (e.g. any `mwan3` or `usteer`
+section, a firewall `nat`, or a section of a package outside the tree, such as
+the `openvpn` sections that 4.x leaves in `/etc/config/openvpn`), only `*:rw` or
+a package-level scope like `mwan3:rw` permits the domain side. The map is
+`TYPE_DOMAIN_MAP` in `src/raw.uc`.
 
 ## Reload mapping
 

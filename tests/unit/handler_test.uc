@@ -1819,17 +1819,16 @@ t.describe('handler.sweep', () => {
 	// check_schema_types rather than validate(), so a sweep that ran only
 	// validate() would miss a whole class of tightening while looking thorough.
 	t.it('catches a schema-level violation, not just validate() failures', () => {
-		let ovpn_mod = loadfile('src/resources/openvpn.instances.uc')();
-		let ovpn = handler.make(ovpn_mod, {
+		let ifaces = handler.make(loadfile('src/resources/network.interfaces.uc')(), {
 			tx: {
 				acquire: function() { return {}; }, release: function() {},
 				reload: function() { return null; }, check_services: function() { return null; },
 			},
 		});
-		let c = ubus.stub({ uci: { openvpn: {
-			vpn0: { '.type': 'openvpn', '.anonymous': false, enabled: '1', proto: 'carrier-pigeon' },
+		let c = ubus.stub({ uci: { network: {
+			vpn0: { '.type': 'interface', '.anonymous': false, proto: 'openvpn', ovpnproto: 'carrier-pigeon' },
 		} } });
-		let found = ovpn.sweep(c);
+		let found = ifaces.sweep(c);
 		t.assert_equal(length(found), 1);
 		let seen = false;
 		for (let e in found[0].errors)

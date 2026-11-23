@@ -133,7 +133,8 @@ is what avoids
 the QEMU SLIRP failure that cost hours of CI when it was tried inline.
 
 Still outside the image, so still unexercised: snmpd, mwan3, sqm, usteer,
-prometheus-node-exporter-lua and openvpn. unbound is installed by
+prometheus-node-exporter-lua and the openvpn handler, whose uci storage
+`53_interface_proto_scope_test.sh` checks without it. unbound is installed by
 `40_unbound_uci_ext_test.sh`
 but only while that test runs, which is not a guarantee another test can lean
 on.
@@ -350,6 +351,10 @@ live in the issues.
   boolean](https://github.com/openwrt-iac/uapi/issues/311): 4.x needs OpenWrt
   main or the next release, whose netifd takes `disabled 'true'` on an
   interface since `e97e36f`, and 25.12 stays on 3.5.0.
+- [openvpn becomes a proto of
+  `network/interfaces`](https://github.com/openwrt-iac/uapi/issues/466): on
+  OpenWrt main the package has no init script, so `openvpn/instances` goes,
+  breaking.
 - The mount moves to `/api/v4` and the install hook strips every older prefix,
   as each major moved it before. The v3-to-v4 migration document rides the
   release.

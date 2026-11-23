@@ -192,7 +192,8 @@ fromUci owns server-side defaults; the framework MUST NOT silently fill absent
 fields from the spec or PATCH-delta semantics break.
 
 Only annotate **unconditional** defaults. Conditional defaults (e.g.
-`network.interfaces.nohostroute` reads false only under `proto=wireguard`) stay
+`network.interfaces.nohostroute` reads false only under `proto=wireguard` and
+`proto=openvpn`, and the openvpn booleans only under `proto=openvpn`) stay
 un-annotated because the literal value misleads under other protos.
 
 For a field that is **caller-owned and safe for an IaC client to clear by
@@ -211,10 +212,12 @@ both):
 1. **fromUci shape**: the field's assignment in fromUci's returned dict must be
    exactly `<jsonkey>: section.<ucikey> ?? null`, `<jsonkey>:
    as_list_or_null(section.<ucikey>)`, `<jsonkey>:
-   as_word_list_or_null(section.<ucikey>)` or `<jsonkey>:
-   values.fw_enum(section.<ucikey>, ...)`, the four shapes that read an absent
-   key as null. No plain `as_list()` (returns `[]` for null, not null itself),
-   no derivation, no aliasing to another field. The Terraform plugin-framework
+   as_word_list_or_null(section.<ucikey>)`, `<jsonkey>:
+   values.fw_enum(section.<ucikey>, ...)`, `<jsonkey>:
+   netifd_int(section.<ucikey>)` or `<jsonkey>:
+   netifd_string(section.<ucikey>)`, the six shapes that read an absent key as
+   null. No plain `as_list()` (returns `[]` for null, not null itself), no
+   derivation, no aliasing to another field. The Terraform plugin-framework
    rejects the apply with "Provider produced inconsistent result after apply" if
    a plain Optional attribute reads back any value for an absent uci option
    other than null.
@@ -255,7 +258,11 @@ Unsafe (lint fails):
 Conservative scope: only annotate when there is **evidence** a field is
 leftover-prone (e.g. survives an adopt + proto switch). The set today is
 `network/interfaces` `netmask`, `broadcast`, `gateway`, `ip6gw` and
-`ip6prefix`, and `firewall/zones` `input`, `output_policy` and `forward`.
+`ip6prefix`, the openvpn options of `network/interfaces` that read null when
+unset, and `firewall/zones` `input`, `output_policy` and `forward`. The
+Terraform provider and uapi-mcp asked for the openvpn ones: without the flag, a
+user who removes such an option from the configuration keeps it on the router,
+as for a zone policy.
 `ip6prefix` is an array, and it qualifies because a list field reads `null`
 when uci does not hold it (`docs/deprecations.md`). A zone that sets no policy
 takes the one of `firewall/defaults`, and without the flag a Terraform user who
@@ -454,10 +461,10 @@ wrong.
 
 Today only `network/wireguard_peers` declares `type_predicate`, `create_type`,
 `kernel_ops` and `read_runtime`. Do not generalize them further without a second
-consumer. The other hooks have more users: `openvpn/instances` declares
-`merge_for_patch` too, eight other resources declare `id_prefix`, and only
-`network/interfaces` declares `id_for_create`, which names a wireguard interface
-`wg_<rand>` to fit IFNAMSIZ. This section is the recipe, and
+consumer. The other hooks have more users: eight resources declare `id_prefix`,
+and only `network/interfaces` declares `id_for_create`, which names a wireguard
+interface `wg_<rand>` to fit IFNAMSIZ, and an openvpn one `vpn_<rand>` to fit
+the 15 chars that LuCI takes. This section is the recipe, and
 `src/resources/network.wireguard_peers.uc` is the reference implementation.
 
 ## 3. JSON conventions
@@ -547,16 +554,15 @@ Examples:
 
 - `wireless.interfaces.key` / `has_key`
 - `network.interfaces.private_key` / `has_private_key` (proto=wireguard)
+- `network.interfaces.key`, `tls_auth`, `pkcs12`, `password` and
+  `cert_password`, each with its `has_<field>` (proto=openvpn)
 - `network.wireguard_peers.preshared_key` / `has_preshared_key`
-- `openvpn.instances.key` / `has_key`
-- `openvpn.instances.tls_auth` / `has_tls_auth`
-- `openvpn.instances.pkcs12` / `has_pkcs12`
 
 Implementation: `fromUci` masks the field (`key: null` or omit) and
 sets `has_key: section.key != null && section.key != ""`. `toUci`
 passes the field through when present. The framework restores the old
 value after the merge, so an unrelated PATCH (e.g. changing `verb` on an
-openvpn instance) doesn't wipe the credential when the field is absent
+openvpn interface) doesn't wipe the credential when the field is absent
 from the request body. That is `carry_write_only` in `handler.uc`, not
 `merge_for_patch`: the merge only ever sees the masked read view, which
 is why the hook takes no uci section. The footprint that a PATCH deletes
@@ -623,7 +629,7 @@ registers the source module into `RESOURCE_SOURCES` (the thing backing
 ```
 
 So the module file has to be named `<domain>.<plural-type>.uc`, matching the
-key. That is not a new convention, it is what all 44 resources already do. The
+key. That is not a new convention, it is what all 43 resources already do. The
 filename simply is not written a second time.
 
 Use `handler.make_singleton` for singletons, `handler.make_collection`

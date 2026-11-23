@@ -3,7 +3,7 @@
 	"info": {
 		"title": "uapi",
 		"version": "3.4.1",
-		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v4/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v4/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v4/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) and `managed: bool` at the top level. `managed` is false for an anonymous section, whose name libuci derives from its position in the file at each load, until `POST /<resource>/<id>/adopt` renames it to a stable one. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/uapi/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or the `?if_match=<etag>` query param). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nA client that cannot set a header can pass `?idempotency_key=` instead. In the same way, `?if_match=`, `?if_none_match=` and `?request_id=` stand in for `If-Match`, `If-None-Match` and `X-Request-Id`. A header that is not empty wins over its query form, and an `X-Request-Id` header only when it matches the pattern of `?request_id=`. Each query form is declared on the operations that honour it.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `openvpn.instances.key`/`has_key`, `openvpn.instances.tls_auth`/`has_tls_auth`, `openvpn.instances.pkcs12`/`has_pkcs12`. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /uapi/batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n- `X-Reload-Status: stopped` - the write kept its commit, but a daemon that it reloaded is down and procd will not start it again on its own, and `X-Reload-Stopped` names it. Only dnsmasq meets it today, after uapi stopped and started it once in the request. `POST /uapi/services/dnsmasq/recover` starts it again\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
+		"description": "Native HTTP REST API for OpenWrt. Translates standard REST verbs into ubus/uci operations so edge routers become first-class targets for Infrastructure-as-Code workflows.\n\n## Quickstart\n\nMint a token on the router (one-time):\n\n```sh\nuapi-token create --name terraform_prod --scope '*:rw' --expires-in 90d\n```\n\nThen call the API:\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://router/api/v4/firewall/rules\n```\n\n## Two surfaces\n\n- **Curated resources** under `/api/v4/<domain>/...` - hand-written schemas, stable across the major. Field names are `snake_case`; uci booleans normalize to JSON booleans; uci list options surface as JSON arrays.\n- **Raw passthrough** under `/api/v4/raw/<package>/<id>` - generic uci access for the long tail. Same atomic-transaction recipe and same auth model, but payloads follow uci's field names directly (and move when upstream OpenWrt does).\n\n## Resource shape\n\nEvery curated resource carries `id` (the uci section name) and `managed: bool` at the top level. `managed` is false for an anonymous section, whose name libuci derives from its position in the file at each load, until `POST /<resource>/<id>/adopt` renames it to a stable one. Server-derived state lives under `runtime: {...}`: it is read-only and never part of the desired state or of a plan diff. Where it shows what a daemon or the kernel holds beside what uci holds, a client can report the difference.\n\n## Auth\n\nBearer tokens with hierarchical scopes (e.g. `firewall:rules:rw`, `*:ro`). See the **Auth / Tokens** group for mint/list/revoke and the `/uapi/whoami` endpoint for introspection.\n\n## Optimistic concurrency\n\nEvery curated-resource GET and write returns an `ETag` header that is a stable hash of the resource's own body (the `runtime` block is excluded so live ubus state never trips a 412). Honor with `If-Match` on writes (or the `?if_match=<etag>` query param). `If-None-Match` is honoured on writes too, per RFC 9110 13.1.2: a match, or `*` against an existing resource, gives 412. Preconditions are evaluated before the transaction, so a 412 never leaves a partial write. Conditional GET via `If-None-Match` returns 304 when matching, and the 304 carries the same `ETag`. Raw passthrough, the non-uci endpoints and the read-only lease views carry no `ETag` and so support neither conditional GET nor `If-Match`. Sibling sections in the same package do not influence each other's ETags; If-Match fires only when *this* resource has actually changed.\n\n## Idempotency\n\n`Idempotency-Key` on POST caches the response for 24 h; a repeat with the same key replays. Same key with a different body returns `409 idempotency_key_conflict`.\n\nA client that cannot set a header can pass `?idempotency_key=` instead. In the same way, `?if_match=`, `?if_none_match=` and `?request_id=` stand in for `If-Match`, `If-None-Match` and `X-Request-Id`. A header that is not empty wins over its query form, and an `X-Request-Id` header only when it matches the pattern of `?request_id=`. Each query form is declared on the operations that honour it.\n\n## Sensitive fields (write-only + `has_<field>` presence flag)\n\nFields holding secret material (passphrases, private keys, PSKs, PKCS#12 paths) are write-only on the wire: GET responses omit the value and surface a read-only `has_<field>: bool` companion indicating presence. Examples: `wireless.interfaces.key`/`has_key`, `network.interfaces.private_key`/`has_private_key`, `network.wireguard_peers.preshared_key`/`has_preshared_key`, `network.interfaces.key`/`has_key` and `network.interfaces.password`/`has_password` on proto openvpn. PATCH that omits a sensitive field carries the existing value forward; rotation is explicit.\n\n## Atomicity\n\nEvery write is one transaction: validate, stage, snapshot, commit, reload, restore-on-failure. A write that leaves uci as it was commits and reloads nothing.  `POST /uapi/batch` extends this across N packages under one combined snapshot/restore.\n\n## IMPORTANT - Success != runtime convergence\n\nA 2xx response means that the reload action of each init script that ran **exited 0**, and `X-Reload-Status: no_reload` says that none ran, because the write changed nothing in uci, or because procd runs none of the daemons that read a `dhcp` write. It does NOT mean the daemon has finished re-converging (`network/interfaces` is the dangerous one: a bad change can drop the management link, and the API has already reported success). The `X-Reload-Status` response header surfaces the reload outcome explicitly:\n\n- `X-Reload-Status: ok` - init script ran and exited 0 (not a convergence promise)\n- `X-Reload-Status: no_reload` - no init script ran, because the write changed nothing in uci or no daemon that reads it runs\n- `X-Reload-Status: unverified` - the write kept its commit, and whether its daemons take the new config is unknown: an init script was still running when uapi stopped waiting for the reloads, 20 s after the first started, or the `dnsmasq --test` check after a dhcp write did not finish within 10 s\n- `X-Reload-Status: stopped` - the write kept its commit, but a daemon that it reloaded is down and procd will not start it again on its own, and `X-Reload-Stopped` names it. Only dnsmasq meets it today, after uapi stopped and started it once in the request. `POST /uapi/services/dnsmasq/recover` starts it again\n\nFor high-stakes writes (management interface, firewall defaults, uhttpd itself) verify convergence out-of-band. See [`docs/operations.md`](https://github.com/openwrt-iac/uapi/blob/main/docs/operations.md) `Success != converged` for the full contract.\n\n## Compatibility & versioning\n\nA given uapi installation serves exactly one API major. Within a major, additions are backwards-compatible: new endpoints, new optional fields, new error codes, new scopes. Breaking changes require the next major, apart from the carve-outs that docs/versioning.md lists. Operators who need an older major keep that package version installed.\n\n## Schema annotations\n\nProperty schemas under `components.schemas.*.properties` carry two annotations beyond the standard OpenAPI shape:\n\n- **`default`**: the value uapi's `fromUci` synthesizes when the underlying uci option is absent. Standard OpenAPI 3.1 / JSON Schema 2020-12 keyword. The framework does NOT apply this default to incoming requests; it is documentation of the server-side fallback so IaC clients can keep the field sticky (Optional+Computed) instead of mistakenly treating it as caller-owned.\n- **`x-uapi-clear-on-omit`** (vendor extension, boolean): when present and `true`, the field is caller-owned and an IaC client (e.g. the terraform-provider-uapi) can safely send an explicit JSON null on `PUT`/`PATCH` to clear the underlying uci option. Absence of this flag means the field should be treated as sticky. A field with `default:` MUST NOT carry this flag, and vice versa (the framework's `lint-defaults` enforces this).\n\n## More\n\n- **GitHub:** https://github.com/openwrt-iac/uapi\n- **Terraform provider:** https://registry.terraform.io/providers/openwrt-iac/uapi\n- **APK feed install:** [/install/](../install/)\n- **Architecture, security, migration, release-process docs:** [in repo](https://github.com/openwrt-iac/uapi/tree/main/docs)",
 		"contact": {
 			"name": "uapi",
 			"url": "https://github.com/openwrt-iac/uapi"
@@ -23497,729 +23497,6 @@
 				]
 			}
 		},
-		"/openvpn/instances": {
-			"get": {
-				"summary": "List instances",
-				"parameters": [
-					{
-						"name": "managed",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"enum": [
-								"true",
-								"false"
-							]
-						},
-						"description": "Filter by managed flag. Another value answers 400."
-					},
-					{
-						"name": "limit",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "integer",
-							"minimum": 1,
-							"maximum": 500
-						},
-						"description": "Items on a page, 100 by default."
-					},
-					{
-						"name": "cursor",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"pattern": "^c_[A-Za-z0-9_.:-]+$"
-						},
-						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
-					},
-					{
-						"$ref": "#/components/parameters/RequestId"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "OK",
-						"headers": {
-							"Link": {
-								"$ref": "#/components/headers/Link"
-							},
-							"X-Next-Cursor": {
-								"$ref": "#/components/headers/XNextCursor"
-							},
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							}
-						},
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "array",
-									"items": {
-										"$ref": "#/components/schemas/OpenvpnInstancesResponse"
-									}
-								}
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					}
-				},
-				"tags": [
-					"Openvpn / Instances"
-				]
-			},
-			"post": {
-				"summary": "Create a instances",
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/OpenvpnInstancesRequest"
-							}
-						}
-					}
-				},
-				"parameters": [
-					{
-						"name": "idempotency_key",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
-						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
-					},
-					{
-						"$ref": "#/components/parameters/RequestId"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Created",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/OpenvpnInstancesResponse"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Reload-Stopped": {
-								"$ref": "#/components/headers/XReloadStopped"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"X-Kernel-Blocked": {
-								"$ref": "#/components/headers/XKernelBlocked"
-							},
-							"Idempotent-Replayed": {
-								"$ref": "#/components/headers/IdempotentReplayed"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					},
-					"413": {
-						"$ref": "#/components/responses/PayloadTooLarge"
-					}
-				},
-				"tags": [
-					"Openvpn / Instances"
-				]
-			}
-		},
-		"/openvpn/instances/{id}": {
-			"parameters": [
-				{
-					"name": "id",
-					"in": "path",
-					"required": true,
-					"schema": {
-						"type": "string"
-					},
-					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
-				}
-			],
-			"get": {
-				"summary": "Get one instances",
-				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=`). A matching ETag returns 304 with no body.",
-				"parameters": [
-					{
-						"name": "if_none_match",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
-					},
-					{
-						"$ref": "#/components/parameters/RequestId"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "OK",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/OpenvpnInstancesResponse"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"304": {
-						"description": "If-None-Match matched current ETag",
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					}
-				},
-				"tags": [
-					"Openvpn / Instances"
-				]
-			},
-			"put": {
-				"summary": "Replace a instances",
-				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=`). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
-				"parameters": [
-					{
-						"name": "if_match",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
-					},
-					{
-						"name": "if_none_match",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
-					},
-					{
-						"$ref": "#/components/parameters/RequestId"
-					}
-				],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/OpenvpnInstancesRequest"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Replaced",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/OpenvpnInstancesResponse"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Reload-Stopped": {
-								"$ref": "#/components/headers/XReloadStopped"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"X-Kernel-Blocked": {
-								"$ref": "#/components/headers/XKernelBlocked"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					},
-					"413": {
-						"$ref": "#/components/responses/PayloadTooLarge"
-					}
-				},
-				"tags": [
-					"Openvpn / Instances"
-				]
-			},
-			"patch": {
-				"summary": "Partially update a instances",
-				"parameters": [
-					{
-						"name": "if_match",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
-					},
-					{
-						"name": "if_none_match",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
-					},
-					{
-						"$ref": "#/components/parameters/RequestId"
-					}
-				],
-				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/OpenvpnInstancesPatch"
-							}
-						},
-						"application/json-patch+json": {
-							"schema": {
-								"$ref": "#/components/schemas/JsonPatch"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Updated",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/OpenvpnInstancesResponse"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Reload-Stopped": {
-								"$ref": "#/components/headers/XReloadStopped"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"X-Kernel-Blocked": {
-								"$ref": "#/components/headers/XKernelBlocked"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					},
-					"413": {
-						"$ref": "#/components/responses/PayloadTooLarge"
-					}
-				},
-				"tags": [
-					"Openvpn / Instances"
-				]
-			},
-			"delete": {
-				"summary": "Delete a instances",
-				"parameters": [
-					{
-						"name": "if_match",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						},
-						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
-					},
-					{
-						"name": "if_none_match",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						},
-						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
-					},
-					{
-						"$ref": "#/components/parameters/RequestId"
-					}
-				],
-				"responses": {
-					"204": {
-						"description": "Deleted",
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Reload-Stopped": {
-								"$ref": "#/components/headers/XReloadStopped"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"X-Kernel-Blocked": {
-								"$ref": "#/components/headers/XKernelBlocked"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					}
-				},
-				"tags": [
-					"Openvpn / Instances"
-				]
-			}
-		},
-		"/openvpn/instances/{id}/adopt": {
-			"parameters": [
-				{
-					"name": "id",
-					"in": "path",
-					"required": true,
-					"schema": {
-						"type": "string"
-					},
-					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
-				}
-			],
-			"post": {
-				"summary": "Adopt an anonymous openvpn instance",
-				"description": "Adopt an anonymous openvpn instance into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
-				"responses": {
-					"200": {
-						"description": "Adopted",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/OpenvpnInstancesResponse"
-								}
-							}
-						},
-						"headers": {
-							"X-Request-Id": {
-								"$ref": "#/components/headers/XRequestId"
-							},
-							"X-Reload-Status": {
-								"$ref": "#/components/headers/XReloadStatus"
-							},
-							"X-Reload-Services": {
-								"$ref": "#/components/headers/XReloadServices"
-							},
-							"X-Reload-Stopped": {
-								"$ref": "#/components/headers/XReloadStopped"
-							},
-							"X-Kernel-Status": {
-								"$ref": "#/components/headers/XKernelStatus"
-							},
-							"X-Kernel-Applied": {
-								"$ref": "#/components/headers/XKernelApplied"
-							},
-							"X-Kernel-Blocked": {
-								"$ref": "#/components/headers/XKernelBlocked"
-							},
-							"Idempotent-Replayed": {
-								"$ref": "#/components/headers/IdempotentReplayed"
-							},
-							"ETag": {
-								"$ref": "#/components/headers/ETag"
-							}
-						}
-					},
-					"400": {
-						"$ref": "#/components/responses/BadRequest"
-					},
-					"401": {
-						"$ref": "#/components/responses/Unauthorized"
-					},
-					"403": {
-						"$ref": "#/components/responses/Forbidden"
-					},
-					"404": {
-						"$ref": "#/components/responses/NotFound"
-					},
-					"429": {
-						"$ref": "#/components/responses/TooManyRequests"
-					},
-					"500": {
-						"$ref": "#/components/responses/InternalError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
-					},
-					"409": {
-						"$ref": "#/components/responses/Conflict"
-					},
-					"412": {
-						"$ref": "#/components/responses/PreconditionFailed"
-					},
-					"422": {
-						"$ref": "#/components/responses/ValidationFailed"
-					},
-					"423": {
-						"$ref": "#/components/responses/Locked"
-					},
-					"413": {
-						"$ref": "#/components/responses/PayloadTooLarge"
-					}
-				},
-				"tags": [
-					"Openvpn / Instances"
-				],
-				"parameters": [
-					{
-						"name": "idempotency_key",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
-						},
-						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
-					},
-					{
-						"$ref": "#/components/parameters/RequestId"
-					}
-				]
-			}
-		},
 		"/raw/{package}": {
 			"parameters": [
 				{
@@ -30256,7 +29533,7 @@
 				"properties": {
 					"id": {
 						"type": "string",
-						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write."
+						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev), a 15-char `vpn_<rand>` for proto=openvpn, or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write."
 					},
 					"managed": {
 						"type": "boolean",
@@ -30272,7 +29549,7 @@
 					"proto": {
 						"type": "string",
 						"default": "none",
-						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer."
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, ppp/pppoe need `ppp`, and openvpn needs `openvpn-openssl`, or its `openvpn-mbedtls` or `openvpn-wolfssl` variant. When the handler is missing, the write still succeeds, the interface is inert, and `runtime.effective_proto` reads `none`. netifd loads its handlers when it starts, so a handler package installed later takes effect after a reboot or `/etc/init.d/network restart`. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer."
 					},
 					"dns": {
 						"type": [
@@ -30281,7 +29558,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "DNS servers that netifd sets for this interface. On proto openvpn too, this is netifd's list and not openvpn's own `--dns`, which uapi does not model: a write stores a uci list, which the openvpn handler does not take for its `dns` option."
 					},
 					"ip6assign": {
 						"type": [
@@ -30371,7 +29649,7 @@
 							"boolean",
 							"null"
 						],
-						"description": "Install the default route the protocol provides. Unset means true."
+						"description": "Install the default route the protocol provides. Unset means true. On openvpn, openvpn-hotplug provides one each time openvpn knows a route gateway, which a `topology subnet` server always pushes, also without `redirect-gateway`. netifd then replaces the default route of wan, and when the tunnel goes down the main table keeps no IPv4 default route until wan restarts. Set false on a client that must not carry the default route."
 					},
 					"delegate": {
 						"type": [
@@ -30541,14 +29819,14 @@
 					},
 					"nohostroute": {
 						"type": "boolean",
-						"description": "Suppress the implicit host-route for wireguard endpoint"
+						"description": "Suppress the host route that wireguard adds to a peer endpoint and openvpn to its remote server. Only a stored `1` reads true, which is the value that openvpn-hotplug compares it with."
 					},
 					"peerdns": {
 						"type": [
 							"boolean",
 							"null"
 						],
-						"description": "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan). Unset means true."
+						"description": "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan, openvpn). On openvpn they are the DNS servers of a pushed `dhcp-option`. Unset means true."
 					},
 					"broadcast_flag": {
 						"type": [
@@ -30597,6 +29875,446 @@
 							"null"
 						],
 						"description": "Source-specific default routes (dhcpv6, ppp, pppoe). Unset means true. False adds the upstream default route without a source, which a routed `ip6prefix` needs: traffic from its downstream subnets matches no source-specific route."
+					},
+					"client": {
+						"type": "boolean",
+						"description": "proto openvpn only. Run in client mode (`--client`), which takes the options that the server pushes. Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"dev": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. tun or tap device name, such as `tun0`. openvpn needs a device, from this field or from `config`."
+					},
+					"dev_type": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"tun",
+							"tap",
+							"null",
+							null
+						],
+						"description": "proto openvpn only. `tun` or `tap`. Unset, the handler passes `--dev-type tun`. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses."
+					},
+					"ovpnproto": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"udp",
+							"tcp",
+							"tcp-client",
+							"tcp-server",
+							"udp4",
+							"tcp4",
+							"tcp4-client",
+							"tcp4-server",
+							"udp6",
+							"tcp6",
+							"tcp6-client",
+							"tcp6-server",
+							null
+						],
+						"description": "proto openvpn only. Transport protocol, openvpn's `--proto`. uci names it `ovpnproto` because `proto` is the netifd protocol, and it is the `proto` of the openvpn/instances of uapi 3.x. Unset, openvpn uses udp."
+					},
+					"port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "proto openvpn only. Local and remote port (`--port`)."
+					},
+					"lport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "proto openvpn only. Local port (`--lport`)."
+					},
+					"rport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "proto openvpn only. Remote port (`--rport`)."
+					},
+					"remote": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						},
+						"description": "proto openvpn only. Servers that a client connects to, each `host [port [proto]]`, tried in order. Always an array. netifd splits an option that is not a uci list into its words, and the handler gives openvpn each as an entry of its own, so such an option reads as its words."
+					},
+					"local": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Local IP address or host name to bind to (`--local`), as LuCI's form takes it."
+					},
+					"nobind": {
+						"type": "boolean",
+						"description": "proto openvpn only. Bind to no local address and port (`--nobind`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"float": {
+						"type": "boolean",
+						"description": "proto openvpn only. Let the peer change its address or port (`--float`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"topology": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"net30",
+							"p2p",
+							"subnet",
+							null
+						],
+						"description": "proto openvpn only. Server-mode topology."
+					},
+					"server": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Server-mode subnet, such as `10.8.0.0 255.255.255.0`."
+					},
+					"server_bridge": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Bridged server mode: `gateway netmask pool-start pool-end`."
+					},
+					"push": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						},
+						"description": "proto openvpn only. Server-mode directives pushed to clients, such as `route 10.0.0.0 255.255.255.0`. Always an array. netifd splits an option that is not a uci list into its words, and the handler gives openvpn each as an entry of its own, so such an option reads as its words."
+					},
+					"route": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						},
+						"description": "proto openvpn only. Routes of the tunnel, each `network [netmask [gateway [metric]]]`, which openvpn-hotplug hands to netifd. Always an array. netifd splits an option that is not a uci list into its words, and the handler gives openvpn each as an entry of its own, so such an option reads as its words."
+					},
+					"route_gateway": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Gateway of the `route` entries that name none."
+					},
+					"ifconfig": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Tunnel addresses: `local remote` on a point-to-point tun, `address netmask` otherwise."
+					},
+					"ifconfig_pool": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Server-mode address pool: `start end [netmask]`."
+					},
+					"client_to_client": {
+						"type": "boolean",
+						"description": "proto openvpn only. Server mode: route traffic between clients inside openvpn (`--client-to-client`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"duplicate_cn": {
+						"type": "boolean",
+						"description": "proto openvpn only. Server mode: let several clients connect with one common name (`--duplicate-cn`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"keepalive": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. `interval timeout` pair, such as `10 60`."
+					},
+					"ping": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "proto openvpn only. Seconds between pings when no other traffic passes (`--ping`)."
+					},
+					"ping_restart": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "proto openvpn only. Seconds without traffic from the peer before openvpn restarts (`--ping-restart`)."
+					},
+					"persist_key": {
+						"type": "boolean",
+						"description": "proto openvpn only. Keep the keys across a restart (`--persist-key`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"persist_tun": {
+						"type": "boolean",
+						"description": "proto openvpn only. Keep the tun or tap device across a restart (`--persist-tun`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"cipher": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Data cipher for a peer that negotiates none, such as `AES-256-CBC` (`--cipher`)."
+					},
+					"auth": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. HMAC digest, such as `SHA256` (`--auth`)."
+					},
+					"data_ciphers": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						},
+						"description": "proto openvpn only. Ciphers that openvpn negotiates, as one entry of names joined by colons, such as `AES-256-GCM:CHACHA20-POLY1305`. It replaces `ncp_ciphers`. The handler gives openvpn each entry as a `--data-ciphers` of its own, and openvpn keeps only the last, so a write with several entries answers 422 `conflict`. Several stored entries, which LuCI's form can write, are an error of the section, and every write answers 422 until one sends a single entry. Always an array."
+					},
+					"tls_server": {
+						"type": "boolean",
+						"description": "proto openvpn only. Take the TLS server role (`--tls-server`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"tls_client": {
+						"type": "boolean",
+						"description": "proto openvpn only. Take the TLS client role (`--tls-client`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"tls_crypt": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the tls-crypt key file. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"ca": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the CA certificate PEM. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"cert": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the local certificate PEM. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"dh": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the Diffie-Hellman parameters PEM, for server mode. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"crl_verify": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the certificate revocation list PEM. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"remote_cert_tls": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"client",
+							"server",
+							null
+						],
+						"description": "proto openvpn only. Require that the peer certificate carries the key usage of a client or of a server."
+					},
+					"verify_x509_name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Accept only a peer certificate of this name: `name [type]`."
+					},
+					"user": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. User that openvpn drops its privileges to."
+					},
+					"group": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Group that openvpn drops its privileges to."
+					},
+					"log": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of a log file, which openvpn truncates at each start (`--log`)."
+					},
+					"log_append": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of a log file that openvpn appends to (`--log-append`)."
+					},
+					"verb": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "proto openvpn only. Log verbosity. A write takes 0 to 11."
+					},
+					"mute": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "proto openvpn only. Log at most this many messages of one category in a row (`--mute`)."
+					},
+					"config": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of an openvpn config file, which openvpn reads beside these options (`--config`). LuCI's raw config tab stores `/etc/openvpn/<id>/<id>_config.cfg`. The handler runs openvpn in the directory of this file, so a relative path in it resolves there. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"username": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. User name that the client sends. The handler writes it with `password` to a file that it gives openvpn as `--auth-user-pass`."
+					},
+					"key": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Absolute path of the private key PEM. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists. Write-only: a read gives `has_key`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"tls_auth": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Absolute path of the tls-auth key file. Write-only: a read gives `has_tls_auth`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"pkcs12": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Absolute path of the PKCS#12 bundle. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists. Write-only: a read gives `has_pkcs12`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"password": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Password that the client sends with `username`. Write-only: a read gives `has_password`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"cert_password": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Passphrase of the private key, which the handler writes to a file that it gives openvpn as `--askpass`. Write-only: a read gives `has_cert_password`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"has_key": {
+						"type": "boolean",
+						"readOnly": true,
+						"description": "proto openvpn only. Whether uci holds `key`."
+					},
+					"has_tls_auth": {
+						"type": "boolean",
+						"readOnly": true,
+						"description": "proto openvpn only. Whether uci holds `tls_auth`."
+					},
+					"has_pkcs12": {
+						"type": "boolean",
+						"readOnly": true,
+						"description": "proto openvpn only. Whether uci holds `pkcs12`."
+					},
+					"has_password": {
+						"type": "boolean",
+						"readOnly": true,
+						"description": "proto openvpn only. Whether uci holds `password`."
+					},
+					"has_cert_password": {
+						"type": "boolean",
+						"readOnly": true,
+						"description": "proto openvpn only. Whether uci holds `cert_password`."
 					}
 				},
 				"required": [
@@ -30664,7 +30382,8 @@
 										"none",
 										"ppp",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -30707,7 +30426,8 @@
 										"pppoe",
 										"none",
 										"ppp",
-										"wwan"
+										"wwan",
+										"openvpn"
 									]
 								}
 							},
@@ -30734,7 +30454,8 @@
 										"none",
 										"ppp",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -30763,7 +30484,8 @@
 										"none",
 										"ppp",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -30790,7 +30512,8 @@
 										"none",
 										"ppp",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -30815,7 +30538,8 @@
 										"dhcp",
 										"none",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -30868,7 +30592,8 @@
 										"pppoe",
 										"none",
 										"ppp",
-										"wwan"
+										"wwan",
+										"openvpn"
 									]
 								}
 							},
@@ -30889,8 +30614,225 @@
 								},
 								"addresses": {
 									"type": "null"
-								},
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
 								"nohostroute": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"client": {
+									"type": "null"
+								},
+								"dev": {
+									"type": "null"
+								},
+								"dev_type": {
+									"type": "null"
+								},
+								"ovpnproto": {
+									"type": "null"
+								},
+								"port": {
+									"type": "null"
+								},
+								"lport": {
+									"type": "null"
+								},
+								"rport": {
+									"type": "null"
+								},
+								"remote": {
+									"type": "null"
+								},
+								"local": {
+									"type": "null"
+								},
+								"nobind": {
+									"type": "null"
+								},
+								"float": {
+									"type": "null"
+								},
+								"topology": {
+									"type": "null"
+								},
+								"server": {
+									"type": "null"
+								},
+								"server_bridge": {
+									"type": "null"
+								},
+								"push": {
+									"type": "null"
+								},
+								"route": {
+									"type": "null"
+								},
+								"route_gateway": {
+									"type": "null"
+								},
+								"ifconfig": {
+									"type": "null"
+								},
+								"ifconfig_pool": {
+									"type": "null"
+								},
+								"client_to_client": {
+									"type": "null"
+								},
+								"duplicate_cn": {
+									"type": "null"
+								},
+								"keepalive": {
+									"type": "null"
+								},
+								"ping": {
+									"type": "null"
+								},
+								"ping_restart": {
+									"type": "null"
+								},
+								"persist_key": {
+									"type": "null"
+								},
+								"persist_tun": {
+									"type": "null"
+								},
+								"cipher": {
+									"type": "null"
+								},
+								"auth": {
+									"type": "null"
+								},
+								"data_ciphers": {
+									"type": "null"
+								},
+								"tls_server": {
+									"type": "null"
+								},
+								"tls_client": {
+									"type": "null"
+								},
+								"tls_crypt": {
+									"type": "null"
+								},
+								"ca": {
+									"type": "null"
+								},
+								"cert": {
+									"type": "null"
+								},
+								"dh": {
+									"type": "null"
+								},
+								"crl_verify": {
+									"type": "null"
+								},
+								"remote_cert_tls": {
+									"type": "null"
+								},
+								"verify_x509_name": {
+									"type": "null"
+								},
+								"user": {
+									"type": "null"
+								},
+								"group": {
+									"type": "null"
+								},
+								"log": {
+									"type": "null"
+								},
+								"log_append": {
+									"type": "null"
+								},
+								"verb": {
+									"type": "null"
+								},
+								"mute": {
+									"type": "null"
+								},
+								"config": {
+									"type": "null"
+								},
+								"username": {
+									"type": "null"
+								},
+								"key": {
+									"type": "null"
+								},
+								"tls_auth": {
+									"type": "null"
+								},
+								"pkcs12": {
+									"type": "null"
+								},
+								"password": {
+									"type": "null"
+								},
+								"cert_password": {
+									"type": "null"
+								},
+								"has_key": {
+									"type": "null"
+								},
+								"has_tls_auth": {
+									"type": "null"
+								},
+								"has_pkcs12": {
+									"type": "null"
+								},
+								"has_password": {
+									"type": "null"
+								},
+								"has_cert_password": {
 									"type": "null"
 								}
 							}
@@ -30905,7 +30847,7 @@
 					"id": {
 						"type": "string",
 						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
-						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev) or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write."
+						"description": "Create-time only; picks the uci section name (which becomes the uapi `id` field). When omitted, the server emits a 14-char `wg_<rand>` for proto=wireguard (fits Linux IFNAMSIZ for the kernel netdev), a 15-char `vpn_<rand>` for proto=openvpn, or a 28-char ULID otherwise. Useful for LuCI parity (`lan`, `wan`, `guest`) and readable cross-references. For proto=wireguard the value must additionally fit IFNAMSIZ (15 chars max). The pattern applies to the create only: a section that LuCI or a shell named otherwise, such as `4g`, takes every other write."
 					},
 					"device": {
 						"type": [
@@ -30917,7 +30859,7 @@
 					"proto": {
 						"type": "string",
 						"default": "none",
-						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, and ppp/pppoe need `ppp`. When the handler is missing the write still succeeds and the interface is inert; `runtime.effective_proto` is what reveals it. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer.",
+						"description": "Interface protocol. Several values need a handler package on the device: wwan needs `wwan`, wireguard needs `wireguard-tools`, dhcpv6 needs `odhcp6c`, ppp/pppoe need `ppp`, and openvpn needs `openvpn-openssl`, or its `openvpn-mbedtls` or `openvpn-wolfssl` variant. When the handler is missing, the write still succeeds, the interface is inert, and `runtime.effective_proto` reads `none`. netifd loads its handlers when it starts, so a handler package installed later takes effect after a reboot or `/etc/init.d/network restart`. A read answers any proto that uci stores, such as the `6in4` that LuCI writes or the `qmi` that an LTE router ships, while a write takes only the protos that the request schema lists. Another proto is no error of the section: a PATCH that leaves `proto` out passes and keeps the options that its handler reads, and the validation sweep does not list it. A write that leaves a wireguard interface enabled keeps its commit while an enabled `network/wireguard_peers` of the interface holds a value that makes wg refuse the whole interface, and answers `X-Kernel-Status: blocked` with `X-Kernel-Blocked`, which names each such peer.",
 						"enum": [
 							"static",
 							"dhcp",
@@ -30926,7 +30868,8 @@
 							"none",
 							"ppp",
 							"wwan",
-							"wireguard"
+							"wireguard",
+							"openvpn"
 						]
 					},
 					"dns": {
@@ -30936,7 +30879,8 @@
 						],
 						"items": {
 							"type": "string"
-						}
+						},
+						"description": "DNS servers that netifd sets for this interface. On proto openvpn too, this is netifd's list and not openvpn's own `--dns`, which uapi does not model: a write stores a uci list, which the openvpn handler does not take for its `dns` option."
 					},
 					"ip6assign": {
 						"type": [
@@ -31026,7 +30970,7 @@
 							"boolean",
 							"null"
 						],
-						"description": "Install the default route the protocol provides. Unset means true."
+						"description": "Install the default route the protocol provides. Unset means true. On openvpn, openvpn-hotplug provides one each time openvpn knows a route gateway, which a `topology subnet` server always pushes, also without `redirect-gateway`. netifd then replaces the default route of wan, and when the tunnel goes down the main table keeps no IPv4 default route until wan restarts. Set false on a client that must not carry the default route."
 					},
 					"delegate": {
 						"type": [
@@ -31124,14 +31068,14 @@
 					},
 					"nohostroute": {
 						"type": "boolean",
-						"description": "Suppress the implicit host-route for wireguard endpoint"
+						"description": "Suppress the host route that wireguard adds to a peer endpoint and openvpn to its remote server. Only a stored `1` reads true, which is the value that openvpn-hotplug compares it with."
 					},
 					"peerdns": {
 						"type": [
 							"boolean",
 							"null"
 						],
-						"description": "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan). Unset means true."
+						"description": "Use the DNS servers the upstream advertises (dhcp, dhcpv6, pppoe, ppp, wwan, openvpn). On openvpn they are the DNS servers of a pushed `dhcp-option`. Unset means true."
 					},
 					"broadcast_flag": {
 						"type": [
@@ -31182,6 +31126,420 @@
 							"null"
 						],
 						"description": "Source-specific default routes (dhcpv6, ppp, pppoe). Unset means true. False adds the upstream default route without a source, which a routed `ip6prefix` needs: traffic from its downstream subnets matches no source-specific route."
+					},
+					"client": {
+						"type": "boolean",
+						"description": "proto openvpn only. Run in client mode (`--client`), which takes the options that the server pushes. Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"dev": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. tun or tap device name, such as `tun0`. openvpn needs a device, from this field or from `config`."
+					},
+					"dev_type": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"tun",
+							"tap",
+							null
+						],
+						"description": "proto openvpn only. `tun` or `tap`. Unset, the handler passes `--dev-type tun`. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses."
+					},
+					"ovpnproto": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"udp",
+							"tcp",
+							"tcp-client",
+							"tcp-server",
+							"udp4",
+							"tcp4",
+							"tcp4-client",
+							"tcp4-server",
+							"udp6",
+							"tcp6",
+							"tcp6-client",
+							"tcp6-server",
+							null
+						],
+						"description": "proto openvpn only. Transport protocol, openvpn's `--proto`. uci names it `ovpnproto` because `proto` is the netifd protocol, and it is the `proto` of the openvpn/instances of uapi 3.x. Unset, openvpn uses udp."
+					},
+					"port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 1,
+						"maximum": 65535,
+						"description": "proto openvpn only. Local and remote port (`--port`)."
+					},
+					"lport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 65535,
+						"description": "proto openvpn only. Local port (`--lport`)."
+					},
+					"rport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 1,
+						"maximum": 65535,
+						"description": "proto openvpn only. Remote port (`--rport`)."
+					},
+					"remote": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						},
+						"description": "proto openvpn only. Servers that a client connects to, each `host [port [proto]]`, tried in order. Always an array. netifd splits an option that is not a uci list into its words, and the handler gives openvpn each as an entry of its own, so such an option reads as its words."
+					},
+					"local": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Local IP address or host name to bind to (`--local`), as LuCI's form takes it."
+					},
+					"nobind": {
+						"type": "boolean",
+						"description": "proto openvpn only. Bind to no local address and port (`--nobind`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"float": {
+						"type": "boolean",
+						"description": "proto openvpn only. Let the peer change its address or port (`--float`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"topology": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"net30",
+							"p2p",
+							"subnet",
+							null
+						],
+						"description": "proto openvpn only. Server-mode topology."
+					},
+					"server": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Server-mode subnet, such as `10.8.0.0 255.255.255.0`."
+					},
+					"server_bridge": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Bridged server mode: `gateway netmask pool-start pool-end`."
+					},
+					"push": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						},
+						"description": "proto openvpn only. Server-mode directives pushed to clients, such as `route 10.0.0.0 255.255.255.0`. Always an array. netifd splits an option that is not a uci list into its words, and the handler gives openvpn each as an entry of its own, so such an option reads as its words."
+					},
+					"route": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						},
+						"description": "proto openvpn only. Routes of the tunnel, each `network [netmask [gateway [metric]]]`, which openvpn-hotplug hands to netifd. Always an array. netifd splits an option that is not a uci list into its words, and the handler gives openvpn each as an entry of its own, so such an option reads as its words."
+					},
+					"route_gateway": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Gateway of the `route` entries that name none."
+					},
+					"ifconfig": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Tunnel addresses: `local remote` on a point-to-point tun, `address netmask` otherwise."
+					},
+					"ifconfig_pool": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Server-mode address pool: `start end [netmask]`."
+					},
+					"client_to_client": {
+						"type": "boolean",
+						"description": "proto openvpn only. Server mode: route traffic between clients inside openvpn (`--client-to-client`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"duplicate_cn": {
+						"type": "boolean",
+						"description": "proto openvpn only. Server mode: let several clients connect with one common name (`--duplicate-cn`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"keepalive": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. `interval timeout` pair, such as `10 60`."
+					},
+					"ping": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "proto openvpn only. Seconds between pings when no other traffic passes (`--ping`)."
+					},
+					"ping_restart": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "proto openvpn only. Seconds without traffic from the peer before openvpn restarts (`--ping-restart`)."
+					},
+					"persist_key": {
+						"type": "boolean",
+						"description": "proto openvpn only. Keep the keys across a restart (`--persist-key`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"persist_tun": {
+						"type": "boolean",
+						"description": "proto openvpn only. Keep the tun or tap device across a restart (`--persist-tun`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"cipher": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Data cipher for a peer that negotiates none, such as `AES-256-CBC` (`--cipher`)."
+					},
+					"auth": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. HMAC digest, such as `SHA256` (`--auth`)."
+					},
+					"data_ciphers": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						},
+						"description": "proto openvpn only. Ciphers that openvpn negotiates, as one entry of names joined by colons, such as `AES-256-GCM:CHACHA20-POLY1305`. It replaces `ncp_ciphers`. The handler gives openvpn each entry as a `--data-ciphers` of its own, and openvpn keeps only the last, so a write with several entries answers 422 `conflict`. Several stored entries, which LuCI's form can write, are an error of the section, and every write answers 422 until one sends a single entry. Always an array."
+					},
+					"tls_server": {
+						"type": "boolean",
+						"description": "proto openvpn only. Take the TLS server role (`--tls-server`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"tls_client": {
+						"type": "boolean",
+						"description": "proto openvpn only. Take the TLS client role (`--tls-client`). Only a stored `1` or `true` reads true: netifd drops another value, and the handler then passes no flag."
+					},
+					"tls_crypt": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the tls-crypt key file. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"ca": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the CA certificate PEM. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"cert": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the local certificate PEM. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"dh": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the Diffie-Hellman parameters PEM, for server mode. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"crl_verify": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of the certificate revocation list PEM. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"remote_cert_tls": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"client",
+							"server",
+							null
+						],
+						"description": "proto openvpn only. Require that the peer certificate carries the key usage of a client or of a server."
+					},
+					"verify_x509_name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Accept only a peer certificate of this name: `name [type]`."
+					},
+					"user": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. User that openvpn drops its privileges to."
+					},
+					"group": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Group that openvpn drops its privileges to."
+					},
+					"log": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of a log file, which openvpn truncates at each start (`--log`)."
+					},
+					"log_append": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of a log file that openvpn appends to (`--log-append`)."
+					},
+					"verb": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 11,
+						"description": "proto openvpn only. Log verbosity. A write takes 0 to 11."
+					},
+					"mute": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647,
+						"description": "proto openvpn only. Log at most this many messages of one category in a row (`--mute`)."
+					},
+					"config": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. Absolute path of an openvpn config file, which openvpn reads beside these options (`--config`). LuCI's raw config tab stores `/etc/openvpn/<id>/<id>_config.cfg`. The handler runs openvpn in the directory of this file, so a relative path in it resolves there. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists."
+					},
+					"username": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"description": "proto openvpn only. User name that the client sends. The handler writes it with `password` to a file that it gives openvpn as `--auth-user-pass`."
+					},
+					"key": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Absolute path of the private key PEM. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists. Write-only: a read gives `has_key`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"tls_auth": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Absolute path of the tls-auth key file. Write-only: a read gives `has_tls_auth`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"pkcs12": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Absolute path of the PKCS#12 bundle. The handler leaves the option out when the file does not exist at ifup, so openvpn then runs as if it were unset. A write does not check that the file exists. Write-only: a read gives `has_pkcs12`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"password": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Password that the client sends with `username`. Write-only: a read gives `has_password`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
+					},
+					"cert_password": {
+						"type": "string",
+						"writeOnly": true,
+						"description": "proto openvpn only. Passphrase of the private key, which the handler writes to a file that it gives openvpn as `--askpass`. Write-only: a read gives `has_cert_password`. A null, or a write that leaves it out, keeps the stored value, an empty string removes it, and a switch to another proto removes it."
 					}
 				},
 				"required": [
@@ -31242,7 +31600,8 @@
 										"none",
 										"ppp",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -31282,7 +31641,8 @@
 										"pppoe",
 										"none",
 										"ppp",
-										"wwan"
+										"wwan",
+										"openvpn"
 									]
 								}
 							},
@@ -31309,7 +31669,8 @@
 										"none",
 										"ppp",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -31338,7 +31699,8 @@
 										"none",
 										"ppp",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -31365,7 +31727,8 @@
 										"none",
 										"ppp",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -31390,7 +31753,8 @@
 										"dhcp",
 										"none",
 										"wwan",
-										"wireguard"
+										"wireguard",
+										"openvpn"
 									]
 								}
 							},
@@ -31443,7 +31807,8 @@
 										"pppoe",
 										"none",
 										"ppp",
-										"wwan"
+										"wwan",
+										"openvpn"
 									]
 								}
 							},
@@ -31461,8 +31826,210 @@
 								},
 								"addresses": {
 									"type": "null"
-								},
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
 								"nohostroute": {
+									"type": "null"
+								}
+							}
+						}
+					},
+					{
+						"if": {
+							"properties": {
+								"proto": {
+									"enum": [
+										"static",
+										"dhcp",
+										"dhcpv6",
+										"pppoe",
+										"none",
+										"ppp",
+										"wwan",
+										"wireguard"
+									]
+								}
+							},
+							"required": [
+								"proto"
+							]
+						},
+						"then": {
+							"properties": {
+								"client": {
+									"type": "null"
+								},
+								"dev": {
+									"type": "null"
+								},
+								"dev_type": {
+									"type": "null"
+								},
+								"ovpnproto": {
+									"type": "null"
+								},
+								"port": {
+									"type": "null"
+								},
+								"lport": {
+									"type": "null"
+								},
+								"rport": {
+									"type": "null"
+								},
+								"remote": {
+									"type": "null"
+								},
+								"local": {
+									"type": "null"
+								},
+								"nobind": {
+									"type": "null"
+								},
+								"float": {
+									"type": "null"
+								},
+								"topology": {
+									"type": "null"
+								},
+								"server": {
+									"type": "null"
+								},
+								"server_bridge": {
+									"type": "null"
+								},
+								"push": {
+									"type": "null"
+								},
+								"route": {
+									"type": "null"
+								},
+								"route_gateway": {
+									"type": "null"
+								},
+								"ifconfig": {
+									"type": "null"
+								},
+								"ifconfig_pool": {
+									"type": "null"
+								},
+								"client_to_client": {
+									"type": "null"
+								},
+								"duplicate_cn": {
+									"type": "null"
+								},
+								"keepalive": {
+									"type": "null"
+								},
+								"ping": {
+									"type": "null"
+								},
+								"ping_restart": {
+									"type": "null"
+								},
+								"persist_key": {
+									"type": "null"
+								},
+								"persist_tun": {
+									"type": "null"
+								},
+								"cipher": {
+									"type": "null"
+								},
+								"auth": {
+									"type": "null"
+								},
+								"data_ciphers": {
+									"type": "null"
+								},
+								"tls_server": {
+									"type": "null"
+								},
+								"tls_client": {
+									"type": "null"
+								},
+								"tls_crypt": {
+									"type": "null"
+								},
+								"ca": {
+									"type": "null"
+								},
+								"cert": {
+									"type": "null"
+								},
+								"dh": {
+									"type": "null"
+								},
+								"crl_verify": {
+									"type": "null"
+								},
+								"remote_cert_tls": {
+									"type": "null"
+								},
+								"verify_x509_name": {
+									"type": "null"
+								},
+								"user": {
+									"type": "null"
+								},
+								"group": {
+									"type": "null"
+								},
+								"log": {
+									"type": "null"
+								},
+								"log_append": {
+									"type": "null"
+								},
+								"verb": {
+									"type": "null"
+								},
+								"mute": {
+									"type": "null"
+								},
+								"config": {
+									"type": "null"
+								},
+								"username": {
+									"type": "null"
+								},
+								"key": {
+									"type": "null"
+								},
+								"tls_auth": {
+									"type": "null"
+								},
+								"pkcs12": {
+									"type": "null"
+								},
+								"password": {
+									"type": "null"
+								},
+								"cert_password": {
 									"type": "null"
 								}
 							}
@@ -31517,7 +32084,8 @@
 							"none",
 							"ppp",
 							"wwan",
-							"wireguard"
+							"wireguard",
+							"openvpn"
 						]
 					},
 					"dns": {
@@ -31749,6 +32317,396 @@
 							"boolean",
 							"null"
 						]
+					},
+					"client": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"dev": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"dev_type": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"tun",
+							"tap",
+							null
+						]
+					},
+					"ovpnproto": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"udp",
+							"tcp",
+							"tcp-client",
+							"tcp-server",
+							"udp4",
+							"tcp4",
+							"tcp4-client",
+							"tcp4-server",
+							"udp6",
+							"tcp6",
+							"tcp6-client",
+							"tcp6-server",
+							null
+						]
+					},
+					"port": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"lport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 65535
+					},
+					"rport": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 1,
+						"maximum": 65535
+					},
+					"remote": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						}
+					},
+					"local": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"nobind": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"float": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"topology": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"net30",
+							"p2p",
+							"subnet",
+							null
+						]
+					},
+					"server": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"server_bridge": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"push": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						}
+					},
+					"route": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						}
+					},
+					"route_gateway": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"ifconfig": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"ifconfig_pool": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"client_to_client": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"duplicate_cn": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"keepalive": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"ping": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647
+					},
+					"ping_restart": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647
+					},
+					"persist_key": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"persist_tun": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"cipher": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"auth": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"data_ciphers": {
+						"type": [
+							"array",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"items": {
+							"type": "string"
+						}
+					},
+					"tls_server": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"tls_client": {
+						"type": [
+							"boolean",
+							"null"
+						]
+					},
+					"tls_crypt": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"ca": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"cert": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"dh": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"crl_verify": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"remote_cert_tls": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"enum": [
+							"client",
+							"server",
+							null
+						]
+					},
+					"verify_x509_name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"user": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"group": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"log": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"log_append": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"verb": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 11
+					},
+					"mute": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true,
+						"minimum": 0,
+						"maximum": 2147483647
+					},
+					"config": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"username": {
+						"type": [
+							"string",
+							"null"
+						],
+						"x-uapi-clear-on-omit": true
+					},
+					"key": {
+						"type": "string",
+						"writeOnly": true
+					},
+					"tls_auth": {
+						"type": "string",
+						"writeOnly": true
+					},
+					"pkcs12": {
+						"type": "string",
+						"writeOnly": true
+					},
+					"password": {
+						"type": "string",
+						"writeOnly": true
+					},
+					"cert_password": {
+						"type": "string",
+						"writeOnly": true
 					}
 				}
 			},
@@ -41656,1188 +42614,6 @@
 						"items": {
 							"type": "string"
 						}
-					}
-				}
-			},
-			"OpenvpnInstancesResponse": {
-				"type": "object",
-				"description": "uapi resource backed by uci openvpn.openvpn",
-				"properties": {
-					"id": {
-						"type": "string",
-						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
-					},
-					"managed": {
-						"type": "boolean",
-						"readOnly": true
-					},
-					"enabled": {
-						"type": "boolean",
-						"default": false
-					},
-					"client": {
-						"type": "boolean",
-						"default": false,
-						"description": "True to run as a client; false (the default) runs as a server."
-					},
-					"dev": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Interface name (tun0, tap0, etc.)."
-					},
-					"dev_type": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"tun",
-							"tap",
-							"null",
-							null
-						],
-						"description": "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses."
-					},
-					"proto": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"udp",
-							"tcp",
-							"tcp-client",
-							"tcp-server",
-							"udp4",
-							"tcp4",
-							"tcp4-client",
-							"tcp4-server",
-							"udp6",
-							"tcp6",
-							"tcp6-client",
-							"tcp6-server",
-							null
-						]
-					},
-					"port": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 65535
-					},
-					"lport": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 65535
-					},
-					"rport": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 65535
-					},
-					"remote": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						},
-						"description": "host[:port] entries; client tries them in order."
-					},
-					"local": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Bind to this local IP."
-					},
-					"nobind": {
-						"type": "boolean",
-						"default": false
-					},
-					"float": {
-						"type": "boolean",
-						"default": false
-					},
-					"topology": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"net30",
-							"p2p",
-							"subnet",
-							null
-						]
-					},
-					"server": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Server-mode subnet (e.g. `10.8.0.0 255.255.255.0`)."
-					},
-					"server_bridge": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"push": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						},
-						"description": "Server-mode directives pushed to clients."
-					},
-					"route": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						}
-					},
-					"route_gateway": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ifconfig": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ifconfig_pool": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"client_to_client": {
-						"type": "boolean",
-						"default": false
-					},
-					"duplicate_cn": {
-						"type": "boolean",
-						"default": false
-					},
-					"keepalive": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "`interval timeout` pair."
-					},
-					"ping": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 2147483647
-					},
-					"ping_restart": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 2147483647
-					},
-					"persist_key": {
-						"type": "boolean",
-						"default": false
-					},
-					"persist_tun": {
-						"type": "boolean",
-						"default": false
-					},
-					"comp_lzo": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"yes",
-							"no",
-							"adaptive",
-							null
-						]
-					},
-					"compress": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"lzo",
-							"lz4",
-							"lz4-v2",
-							"stub",
-							"stub-v2",
-							"migrate",
-							"frames_only",
-							null
-						],
-						"description": "Compression framing. `frames_only` is LuCI's name for a bare `compress`, which the init script writes for it."
-					},
-					"cipher": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Legacy data cipher (e.g. AES-256-CBC)."
-					},
-					"auth": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "HMAC digest (SHA256, etc.)."
-					},
-					"ncp_ciphers": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Colon-separated negotiable data ciphers."
-					},
-					"ncp_disable": {
-						"type": "boolean",
-						"default": false
-					},
-					"tls_server": {
-						"type": "boolean",
-						"default": false
-					},
-					"tls_client": {
-						"type": "boolean",
-						"default": false
-					},
-					"tls_crypt": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to tls-crypt key file."
-					},
-					"ca": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to CA cert PEM."
-					},
-					"cert": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to local cert PEM."
-					},
-					"dh": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to DH parameters PEM (server-mode)."
-					},
-					"crl_verify": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to CRL PEM."
-					},
-					"remote_cert_tls": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"client",
-							"server",
-							null
-						]
-					},
-					"verify_x509_name": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"user": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Drop privileges to this user."
-					},
-					"group": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"status": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Status file path."
-					},
-					"log": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"log_append": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"verb": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 2147483647
-					},
-					"mute": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0
-					},
-					"has_key": {
-						"type": "boolean",
-						"readOnly": true
-					},
-					"has_tls_auth": {
-						"type": "boolean",
-						"readOnly": true
-					},
-					"has_pkcs12": {
-						"type": "boolean",
-						"readOnly": true
-					},
-					"runtime": {
-						"type": "object",
-						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
-						"readOnly": true
-					},
-					"key": {
-						"type": "string",
-						"writeOnly": true,
-						"description": "Path to private key PEM. Write-only; reads return has_key. A null, or a write that leaves it out, keeps the stored path, and an empty string removes it."
-					},
-					"tls_auth": {
-						"type": "string",
-						"writeOnly": true,
-						"description": "Path to TLS auth key file. Write-only; reads return has_tls_auth. A null, or a write that leaves it out, keeps the stored path, and an empty string removes it."
-					},
-					"pkcs12": {
-						"type": "string",
-						"writeOnly": true,
-						"description": "Path to PKCS#12 bundle. Write-only; reads return has_pkcs12. A null, or a write that leaves it out, keeps the stored path, and an empty string removes it."
-					}
-				},
-				"required": [
-					"id",
-					"runtime"
-				]
-			},
-			"OpenvpnInstancesRequest": {
-				"type": "object",
-				"description": "Request body for the uapi resource backed by uci openvpn.openvpn.",
-				"properties": {
-					"id": {
-						"type": "string",
-						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
-						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
-					},
-					"enabled": {
-						"type": "boolean",
-						"default": false
-					},
-					"client": {
-						"type": "boolean",
-						"default": false,
-						"description": "True to run as a client; false (the default) runs as a server."
-					},
-					"dev": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Interface name (tun0, tap0, etc.)."
-					},
-					"dev_type": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"tun",
-							"tap",
-							null
-						],
-						"description": "tun or tap. openvpn also takes `null`, a device that carries no traffic, which a read gives and a write refuses."
-					},
-					"proto": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"udp",
-							"tcp",
-							"tcp-client",
-							"tcp-server",
-							"udp4",
-							"tcp4",
-							"tcp4-client",
-							"tcp4-server",
-							"udp6",
-							"tcp6",
-							"tcp6-client",
-							"tcp6-server",
-							null
-						]
-					},
-					"port": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 1,
-						"maximum": 65535
-					},
-					"lport": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 65535
-					},
-					"rport": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 1,
-						"maximum": 65535
-					},
-					"remote": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						},
-						"description": "host[:port] entries; client tries them in order."
-					},
-					"local": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Bind to this local IP."
-					},
-					"nobind": {
-						"type": "boolean",
-						"default": false
-					},
-					"float": {
-						"type": "boolean",
-						"default": false
-					},
-					"topology": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"net30",
-							"p2p",
-							"subnet",
-							null
-						]
-					},
-					"server": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Server-mode subnet (e.g. `10.8.0.0 255.255.255.0`)."
-					},
-					"server_bridge": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"push": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						},
-						"description": "Server-mode directives pushed to clients."
-					},
-					"route": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						}
-					},
-					"route_gateway": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ifconfig": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ifconfig_pool": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"client_to_client": {
-						"type": "boolean",
-						"default": false
-					},
-					"duplicate_cn": {
-						"type": "boolean",
-						"default": false
-					},
-					"keepalive": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "`interval timeout` pair."
-					},
-					"ping": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 2147483647
-					},
-					"ping_restart": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 2147483647
-					},
-					"persist_key": {
-						"type": "boolean",
-						"default": false
-					},
-					"persist_tun": {
-						"type": "boolean",
-						"default": false
-					},
-					"comp_lzo": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"yes",
-							"no",
-							"adaptive",
-							null
-						]
-					},
-					"compress": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"lzo",
-							"lz4",
-							"lz4-v2",
-							"stub",
-							"stub-v2",
-							"migrate",
-							"frames_only",
-							null
-						],
-						"description": "Compression framing. `frames_only` is LuCI's name for a bare `compress`, which the init script writes for it."
-					},
-					"cipher": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Legacy data cipher (e.g. AES-256-CBC)."
-					},
-					"auth": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "HMAC digest (SHA256, etc.)."
-					},
-					"ncp_ciphers": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Colon-separated negotiable data ciphers."
-					},
-					"ncp_disable": {
-						"type": "boolean",
-						"default": false
-					},
-					"tls_server": {
-						"type": "boolean",
-						"default": false
-					},
-					"tls_client": {
-						"type": "boolean",
-						"default": false
-					},
-					"tls_crypt": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to tls-crypt key file."
-					},
-					"ca": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to CA cert PEM."
-					},
-					"cert": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to local cert PEM."
-					},
-					"dh": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to DH parameters PEM (server-mode)."
-					},
-					"crl_verify": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Path to CRL PEM."
-					},
-					"remote_cert_tls": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"client",
-							"server",
-							null
-						]
-					},
-					"verify_x509_name": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"user": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Drop privileges to this user."
-					},
-					"group": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"status": {
-						"type": [
-							"string",
-							"null"
-						],
-						"description": "Status file path."
-					},
-					"log": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"log_append": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"verb": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 11
-					},
-					"mute": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0
-					},
-					"key": {
-						"type": "string",
-						"writeOnly": true,
-						"description": "Path to private key PEM. Write-only; reads return has_key. A null, or a write that leaves it out, keeps the stored path, and an empty string removes it."
-					},
-					"tls_auth": {
-						"type": "string",
-						"writeOnly": true,
-						"description": "Path to TLS auth key file. Write-only; reads return has_tls_auth. A null, or a write that leaves it out, keeps the stored path, and an empty string removes it."
-					},
-					"pkcs12": {
-						"type": "string",
-						"writeOnly": true,
-						"description": "Path to PKCS#12 bundle. Write-only; reads return has_pkcs12. A null, or a write that leaves it out, keeps the stored path, and an empty string removes it."
-					}
-				}
-			},
-			"OpenvpnInstancesPatch": {
-				"type": "object",
-				"description": "Merge-patch body (RFC 7396): any subset of OpenvpnInstancesRequest, which describes the fields.",
-				"properties": {
-					"id": {
-						"type": "string",
-						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
-					},
-					"enabled": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"client": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"dev": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"dev_type": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"tun",
-							"tap",
-							null
-						]
-					},
-					"proto": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"udp",
-							"tcp",
-							"tcp-client",
-							"tcp-server",
-							"udp4",
-							"tcp4",
-							"tcp4-client",
-							"tcp4-server",
-							"udp6",
-							"tcp6",
-							"tcp6-client",
-							"tcp6-server",
-							null
-						]
-					},
-					"port": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 1,
-						"maximum": 65535
-					},
-					"lport": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 65535
-					},
-					"rport": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 1,
-						"maximum": 65535
-					},
-					"remote": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						}
-					},
-					"local": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"nobind": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"float": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"topology": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"net30",
-							"p2p",
-							"subnet",
-							null
-						]
-					},
-					"server": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"server_bridge": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"push": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						}
-					},
-					"route": {
-						"type": [
-							"array",
-							"null"
-						],
-						"items": {
-							"type": "string"
-						}
-					},
-					"route_gateway": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ifconfig": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ifconfig_pool": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"client_to_client": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"duplicate_cn": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"keepalive": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ping": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 2147483647
-					},
-					"ping_restart": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 2147483647
-					},
-					"persist_key": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"persist_tun": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"comp_lzo": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"yes",
-							"no",
-							"adaptive",
-							null
-						]
-					},
-					"compress": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"lzo",
-							"lz4",
-							"lz4-v2",
-							"stub",
-							"stub-v2",
-							"migrate",
-							"frames_only",
-							null
-						]
-					},
-					"cipher": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"auth": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ncp_ciphers": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ncp_disable": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"tls_server": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"tls_client": {
-						"type": [
-							"boolean",
-							"null"
-						]
-					},
-					"tls_crypt": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"ca": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"cert": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"dh": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"crl_verify": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"remote_cert_tls": {
-						"type": [
-							"string",
-							"null"
-						],
-						"enum": [
-							"client",
-							"server",
-							null
-						]
-					},
-					"verify_x509_name": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"user": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"group": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"status": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"log": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"log_append": {
-						"type": [
-							"string",
-							"null"
-						]
-					},
-					"verb": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0,
-						"maximum": 11
-					},
-					"mute": {
-						"type": [
-							"integer",
-							"null"
-						],
-						"minimum": 0
-					},
-					"key": {
-						"type": "string",
-						"writeOnly": true
-					},
-					"tls_auth": {
-						"type": "string",
-						"writeOnly": true
-					},
-					"pkcs12": {
-						"type": "string",
-						"writeOnly": true
 					}
 				}
 			}

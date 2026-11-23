@@ -197,7 +197,6 @@ The authoritative source is `src/lib/scope.uc` `KNOWN_PATHS`.
 | `vnstat` | `config`, `interfaces` (raw only) |
 | `mwan3` | `globals`, `interfaces`, `members`, `policies`, `rules` |
 | `usteer` | `config` |
-| `openvpn` | `instances` |
 | `packages` | `installed`, `feeds` |
 | `uapi` | `tokens`, `metrics`, `diagnostics`, `services` |
 | `raw` | `<any-package>` (composes with the curated domain tree) |

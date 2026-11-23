@@ -61,8 +61,6 @@ const KNOWN_PATHS = {
 	"mwan3:rules": true,
 	"usteer": true,
 	"usteer:config": true,
-	"openvpn": true,
-	"openvpn:instances": true,
 	"packages": true,
 	"packages:installed": true,
 	"packages:feeds": true,
