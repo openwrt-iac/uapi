@@ -640,7 +640,7 @@ return {
 			available:        { type: "boolean" },
 			effective_proto:  { type: ["string", "null"],
 			                    description: "The protocol netifd is actually running for this interface. Differs from the configured `proto` when no handler is registered for it, in which case netifd reports `none` and the interface is inert; a mismatch means the device needs the handler package and a networking restart." },
-			l3_device:        { type: ["string", "null"] },
+			l3_device:        { type: ["string", "null"], description: "Kernel device that carries the layer 3 traffic of the interface, such as `pppoe-wan`" },
 			uptime:           { type: ["integer", "null"], minimum: 0 },
 			ipv4_address:     { type: "array", items: { type: "object" } },
 			ipv6_address:     { type: "array", items: { type: "object" } },

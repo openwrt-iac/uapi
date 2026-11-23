@@ -257,6 +257,32 @@ t.describe('sqm/queues.enabled reads true only where sqm-scripts starts the queu
 	});
 });
 
+// sqm-scripts matches `interface` against the device that its hotplug reports, and the stock
+// /etc/config/sqm holds `interface 'eth1'`. uapi checked it against the uci interfaces, so no write
+// of the stock queue passed.
+t.describe('sqm/queues.interface takes a device name', () => {
+	let sqm = loadfile('src/resources/sqm.queues.uc')();
+	let h = handler.make(sqm, { tx: {
+		acquire: function() { return {}; }, release: function() {},
+		reload: function() { return null; }, check_services: function() { return null; },
+	} });
+	let ctx = () => ({ request_id: "01hx0000000000000000000sqm" });
+	let stock = () => ubus.stub({ uci: {
+		sqm: { eth1: { '.type': 'queue', '.anonymous': false, enabled: '0', interface: 'eth1', download: '85000',
+		               upload: '10000', qdisc: 'cake', script: 'piece_of_cake.qos' } },
+		network: { wan: { '.type': 'interface', '.anonymous': false, device: 'eth1', proto: 'dhcp' } },
+	} });
+	t.it('passes a write of the stock queue and a create on a device that is not up', () => {
+		t.assert_equal(h.patch(stock(), ctx(), 'eth1', { upload: 10001 }).status, 200);
+		t.assert_equal(h.create(stock(), ctx(), { id: 'ppp', interface: 'pppoe-wan', download: 1, upload: 1 }).status, 200);
+	});
+	t.it('refuses a name that the kernel cannot give a device', () => {
+		for (let v in [ 'a/b', 'a:b', 'a b', '0123456789abcdef' ])
+			t.assert_deep_equal(map(field_errors('sqm.queues.uc', { interface: v }, 'interface'), (e) => e.code),
+			                    [ 'invalid_format' ], v);
+	});
+});
+
 t.describe('booleans read as the init script of the daemon reads them', () => {
 	for (let row in SHELL_BOOLS) {
 		let file = row[0], type = row[1], option = row[2], field = row[3], absent = row[4];

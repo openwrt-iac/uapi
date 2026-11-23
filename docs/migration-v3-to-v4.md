@@ -464,6 +464,15 @@ the same. A plan that sets `enabled = true` on such a queue now writes `1`,
 which starts SQM there. A value such as `01`, `+1` or ` 1` reads `true`, because
 the shell test takes it as 1.
 
+`sqm/queues.interface` is the device that sqm-scripts shapes, such as `eth1` or
+`pppoe-wan`, as its hotplug matches it. 3.x took only the name of a uci network
+interface, such as `wan`, which sqm never matches unless a device has that
+name, and refused the `eth1` of the stock queue. A write now takes a kernel
+device name, 1 to 15 characters without `/`, `:` or whitespace, and does not
+check that the device exists. A uci interface name longer than 15 characters
+answers 422. Set the field to the device of the interface, which
+`runtime.l3_device` of `network/interfaces` gives (#477).
+
 ## A `wireless/interfaces` section with no `mode` reads `null`
 
 wifi-scripts sets up nothing for a section without a `mode` (mac80211.sh skips
