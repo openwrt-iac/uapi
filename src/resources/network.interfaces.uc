@@ -45,7 +45,11 @@ const FIELD_PROTOS = {
 	peerdns: [ "dhcp", "dhcpv6", "pppoe", "ppp", "wwan", "openvpn" ],
 	private_key: [ "wireguard" ], has_private_key: [ "wireguard" ], listen_port: [ "wireguard" ],
 	addresses: [ "wireguard" ], nohostroute: [ "wireguard", "openvpn" ],
+	// ppp.sh hands them to pppd, and wwan to the handler of the modem that it finds.
+	username: [ "pppoe", "ppp", "wwan", "openvpn" ], password: [ "pppoe", "ppp", "wwan", "openvpn" ],
+	has_password: [ "pppoe", "ppp", "wwan", "openvpn" ],
 };
+const LOGIN = [ "username", "password" ];
 
 // The options of /lib/netifd/proto/openvpn.sh that uapi models. Each field is the uci option of
 // its name.
@@ -59,7 +63,7 @@ for (let f in [ "client", "dev", "dev_type", "ovpnproto", "port", "lport", "rpor
                 "username", "key", "tls_auth", "pkcs12", "password", "cert_password",
                 "has_key", "has_tls_auth", "has_pkcs12", "has_password", "has_cert_password" ]) {
 	OPENVPN[f] = true;
-	FIELD_PROTOS[f] = [ "openvpn" ];
+	FIELD_PROTOS[f] ??= [ "openvpn" ];
 }
 
 // openvpn's --proto takes a family-agnostic form plus explicit v4 and v6 variants, and tcp has
@@ -79,9 +83,10 @@ const HOSTNAME_RE = /^([A-Za-z0-9_]+|[A-Za-z0-9_][A-Za-z0-9_.-]*[A-Za-z0-9]\.?)$
 
 // The table judges only the protos uapi models. A handler such as 6in4 reads ipaddr and
 // ip6prefix, and uapi cannot know what else, so on such a proto every field applies except those
-// that are another reading of an option: uci `broadcast` there is no dhcp flag, and `server` or
-// `password` there is no openvpn option. A has_ twin reads false where uci holds nothing, which
-// on such a proto would show a field for an option that is absent.
+// that are another reading of an option: uci `broadcast` there is no dhcp flag, and `server` there
+// is no openvpn option. A has_ twin reads false where uci holds nothing, which on such a proto
+// would show a field for an option that is absent. `password` there would be a secret that no read
+// shows, so it stays out with its `username`.
 function applies(field, proto) {
 	let protos = FIELD_PROTOS[field];
 	return protos == null || index(protos, proto) != -1
@@ -357,6 +362,11 @@ function toUci(body) {
 	                "log", "log_append", "config", "username", "key", "tls_auth", "pkcs12", "password",
 	                "cert_password" ])
 		if (json[k] != null) out[k] = json[k];
+	// A switch sends the login as null. A PATCH deletes only what the read of the old proto shows,
+	// so this clear also reaches a login that the read hides, as on qmi. On a proto that uapi does
+	// not model, the handler can read the login, so a null there keeps it.
+	for (let k in LOGIN)
+		if (exists(body, k) && body[k] == null && VALID_PROTOS[body.proto]) out[k] = [];
 	return out;
 }
 
@@ -579,6 +589,9 @@ return {
 	// A static interface takes `option ipaddr` and `list ipaddr` alike, so a PATCH that sends its
 	// address back writes nothing there.
 	rewrite_when_named: (view) => VALID_PROTOS[view.proto] ? {} : LIST_OPTIONS,
+	// Each proto sends the login to another party: a switch from pppoe to openvpn that kept it gave
+	// the ISP login to the VPN server.
+	clear_on_switch: { proto: LOGIN },
 	// Opt in to the advisory management-path warning. Only this resource carries the
 	// fields that can move the caller's own path, and `disabled` on a peer or a rule is
 	// not the same condition, so the framework is told rather than guessing.
@@ -796,7 +809,7 @@ return {
 		config:           { type: ["string", "null"], "x-uapi-clear-on-omit": true,
 		                    description: "proto openvpn only. Absolute path of an openvpn config file, which openvpn reads beside these options (`--config`). LuCI's raw config tab stores `/etc/openvpn/<id>/<id>_config.cfg`. The handler runs openvpn in the directory of this file, so a relative path in it resolves there." + OVPN_FILE },
 		username:         { type: ["string", "null"], "x-uapi-clear-on-omit": true,
-		                    description: "proto openvpn only. User name that the client sends. The handler writes it with `password` to a file that it gives openvpn as `--auth-user-pass`." },
+		                    description: "User name that the interface logs in with (pppoe, ppp, wwan, openvpn). ppp.sh gives it and `password` to pppd, and gives neither when it is unset. wwan hands both to the handler of the modem that it finds, such as qmi or mbim. The openvpn handler writes it with `password` to a file that it gives openvpn as `--auth-user-pass`. Each proto sends the login to another party, so a switch to another proto removes it, and a switch that sends a user name stores it." },
 		key:              { type: "string", writeOnly: true,
 		                    description: "proto openvpn only. Absolute path of the private key PEM." + OVPN_FILE + sprintf(OVPN_SECRET, "key") },
 		tls_auth:         { type: "string", writeOnly: true,
@@ -804,13 +817,13 @@ return {
 		pkcs12:           { type: "string", writeOnly: true,
 		                    description: "proto openvpn only. Absolute path of the PKCS#12 bundle." + OVPN_FILE + sprintf(OVPN_SECRET, "pkcs12") },
 		password:         { type: "string", writeOnly: true,
-		                    description: "proto openvpn only. Password that the client sends with `username`." + sprintf(OVPN_SECRET, "password") },
+		                    description: "Password that the interface logs in with, beside `username` (pppoe, ppp, wwan, openvpn). On pppoe and ppp, a password without `username` does nothing, since ppp.sh then gives pppd neither." + sprintf(OVPN_SECRET, "password") + " A switch that sends a password stores it." },
 		cert_password:    { type: "string", writeOnly: true,
 		                    description: "proto openvpn only. Passphrase of the private key, which the handler writes to a file that it gives openvpn as `--askpass`." + sprintf(OVPN_SECRET, "cert_password") },
 		has_key:          { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `key`." },
 		has_tls_auth:     { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `tls_auth`." },
 		has_pkcs12:       { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `pkcs12`." },
-		has_password:     { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `password`." },
+		has_password:     { type: "boolean", readOnly: true, description: "Whether uci holds `password` (pppoe, ppp, wwan, openvpn)." },
 		has_cert_password: { type: "boolean", readOnly: true, description: "proto openvpn only. Whether uci holds `cert_password`." },
 	},
 };

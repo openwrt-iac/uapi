@@ -38,6 +38,20 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `stopped_instances` of `GET /uapi/diagnostics` now lists only the instances
   of these services, since procd shows a one-shot instance that ended as it
   shows one that it gave up on. (#461)
+- **`network/interfaces` takes `username`, the write-only `password` and
+  `has_password` on proto pppoe, ppp and wwan.** A client could not set the
+  PPPoE login of a wan through the curated API, and a PUT of such an interface
+  removed `username` and `password` from uci, because a PUT removes each option
+  that the resource does not emit. The three fields of proto openvpn now apply
+  to these protos too: ppp.sh gives both to pppd, and wwan gives both to the
+  handler of the modem that it finds. A PUT that keeps the proto and leaves
+  `password` out now keeps the stored one, as for every write-only secret, and
+  a PUT that leaves `username` out removes it. Each proto sends the login to
+  another party, so a write that changes `proto` removes both unless it sends
+  them, as LuCI's protocol switch does. This also holds between pppoe, ppp,
+  wwan and openvpn, and on a switch from a proto that uapi does not model, such
+  as qmi, whose read hides them. On such a proto they still do not apply.
+  (#469)
 
 ### Changed
 

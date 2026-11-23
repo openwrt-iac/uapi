@@ -140,7 +140,7 @@ const CASES = [
 		file: "network.interfaces.uc", id: "wan_ppp", pkg: "network",
 		modify: { key: "reqprefix", value: "auto" },
 		section: { auto: '0', disabled: '1', '.type': 'interface', proto: 'pppoe', device: 'eth8',
-		           peerdns: '0', reqprefix: '56', sourcefilter: '0', mtu: '1492' },
+		           peerdns: '0', reqprefix: '56', sourcefilter: '0', mtu: '1492', username: 'isp', password: 'pw' },
 	},
 	{
 		file: "network.devices.uc", id: "dev1", pkg: "network",
