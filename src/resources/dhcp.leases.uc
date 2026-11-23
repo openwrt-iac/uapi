@@ -15,7 +15,7 @@ function parse_leases(content) {
 			expires_at: int(parts[0]),
 			mac: parts[1],
 			ip: parts[2],
-			hostname: parts[3] == "*" ? null : parts[3],
+			hostname: parts[3] == "*" ? null : odhcpd_leases.escape_hostname(parts[3]),
 			duid: (length(parts) > 4 && parts[4] != "*") ? parts[4] : null,
 		});
 	}
@@ -57,7 +57,7 @@ return {
 		ia_type: { type: "string", enum: [ "IA_NA", "IA_PD" ], description: "An address (`IA_NA`) or a delegated prefix (`IA_PD`) (v6 entries only)" },
 		prefix_length: { type: ["integer", "null"], description: "Length of a delegated prefix; null for an address (v6 entries only)" },
 		ip: { type: "string", description: "Assigned IP address" },
-		hostname: { type: ["string", "null"] },
+		hostname: { type: ["string", "null"], description: "Client hostname, null when the client sent none. A v6 entry gives the bytes that the client sent, as odhcpd holds them, which are not always a valid DNS name. A v4 entry gives the name that dnsmasq writes. A control byte (0x00 to 0x1f, 0x7f), the backslash and each byte that is not part of valid UTF-8 read as `\\x` and two lowercase hex digits, as LuCI shows them, so `\\x5c` is a backslash" },
 		duid:     { type: ["string", "null"], description: "Client DUID. A v4 entry carries the client id that dnsmasq records, or null when the client sent none. A v6 entry always carries the DUID" },
 	},
 };

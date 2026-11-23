@@ -36316,7 +36316,8 @@
 						"type": [
 							"string",
 							"null"
-						]
+						],
+						"description": "Client hostname, null when the client sent none. A v6 entry gives the bytes that the client sent, as odhcpd holds them, which are not always a valid DNS name. A v4 entry gives the name that dnsmasq writes. A control byte (0x00 to 0x1f, 0x7f), the backslash and each byte that is not part of valid UTF-8 read as `\\x` and two lowercase hex digits, as LuCI shows them, so `\\x5c` is a backslash"
 					},
 					"duid": {
 						"type": [

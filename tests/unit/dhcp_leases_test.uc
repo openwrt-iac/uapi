@@ -27,6 +27,12 @@ t.describe('dhcp.leases parser', () => {
 		t.assert_equal(out[1].hostname, null);
 	});
 
+	// LuCI ab13720f6e escapes the hostnames of the dnsmasq lease file too.
+	t.it('escapes a hostname as the v6 leases do', () => {
+		let out = leases_mod.parse_leases("1735689600 aa:bb:cc:dd:ee:01 192.168.1.50 a\\b" + chr(0xff) + " *\n");
+		t.assert_equal(out[0].hostname, "a\\x5cb\\xff");
+	});
+
 	t.it('handles missing duid as null', () => {
 		let out = leases_mod.parse_leases(SAMPLE);
 		t.assert_equal(out[2].duid, null);

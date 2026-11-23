@@ -35,7 +35,7 @@ function count_v4_leases_total() {
 }
 
 // A lease of several addresses or prefixes counts once. Two uci interfaces on one device count each
-// other's leases, because the lease file names only the device.
+// other's leases, because odhcpd names only the device.
 function count_v6_leases_for(conn, iface) {
 	let dev = null;
 	try { dev = conn.call("network.interface." + iface, "status", {})?.l3_device; } catch (e) {}
