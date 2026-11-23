@@ -209,9 +209,10 @@ is not: `/raw/` checks each of its sections against the package alone.
 
 `POST /uapi/services/<name>/recover` passes with `uapi:services:rw`, or with
 `rw` on a domain whose writes reload the service, as such a write would reload
-it: `dhcp:rw` for `dnsmasq`, `odhcpd` and `unbound`, `system:rw` for `sysntpd`.
-uapi derives them from the services that the writes of each resource reload,
-and the spec lists them on the operation. A scope below the domain,
+it, for example `dhcp:rw` for `dnsmasq` or `system:rw` for `sysntpd`. uapi
+derives them from the services that the writes of each resource reload, and
+the description of the operation in the spec lists every domain of each
+service. A scope below the domain,
 such as `dhcp:hosts:rw`, does not pass.
 
 ## Deepest-match-wins

@@ -96,9 +96,9 @@ addresses and routes are absent. A disabled route or rule is never installed.
 
 All three read the option as netifd parses it, with `platform_bool`. On the
 interface, netifd compares the value against `1` and, since netifd `e97e36f`
-(2026-07-16), against `true`. On routes and rules, the value goes through the
-boolean blob converter, which takes the same two. `on`, `yes` and any other
-value read false. A unit test pins the reading.
+(committed 2026-07-17), against `true`. On routes and rules, the value goes
+through the boolean blob converter, which takes the same two. `on`, `yes` and
+any other value read false. A unit test pins the reading.
 
 [#64](https://github.com/openwrt-iac/uapi/issues/64) tracked the gap. Two
 alternatives were turned down:
