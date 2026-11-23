@@ -1,30 +1,46 @@
 let t = require('harness');
 let bus = require('bus');
-let fs = require('fs');
 let odhcpd_leases = require('odhcpd_leases');
 let handler = require('handler');
 let leases = loadfile('src/resources/dhcp.leases.uc')();
 let servers = loadfile('src/resources/dhcp.servers.uc')();
 
-// The first line is what odhcpd 25.12.5 wrote for a DHCPv6 client on a test interface. The others
-// follow statefiles.c of odhcpd: a prefix delegation that does not expire, an address lease with two
-// addresses, a DHCPv4 lease that odhcpd serves, the hosts line that it writes beside them, a short
-// line, and the line of a client hostname that an odhcpd before 68f382690b writes unescaped.
-const FILE = "# uapi6a 000300019e09e3b126e0 615f3ec7 router-1 1794128831 aed 128 fd99:6::aed/128\n" +
-             "# br-lan 00010001aabbccddeeff 1 - -1 5 56 fd99:7:100::/56\n" +
-             "# br-lan 00030001aabbccddee00 2 laptop 1794128900 b 128 fd99:6::b/128 fd99:6::c/128\n" +
-             "# br-lan 52:54:00:12:34:56 ipv4 host 1794128831 a 32 192.168.1.10/32\n" +
-             "fd99:6::aed\trouter-1\n" +
-             "# br-lan short\n" +
-             "# br-lan 00030001aabbccddee01 3 broken\\x20a 1794128831 1 128 fd99:6::d/128 1794128831 c 128 fd99:6::e/128\n";
+// `ubus call dhcp ipv6leases` of odhcpd 2026.11.17 as ucode reads it, with each u32 as a signed
+// int32: an address lease, a prefix delegation that does not expire, a lease of two addresses with
+// an iaid from 2^31, a lease that odhcpd only offered, and a client hostname with a space, a control
+// byte, a backslash and a byte that is not UTF-8.
+const REPLY = { device: {
+	uapi6a: { leases: [
+		{ duid: "000300019e09e3b126e0", iaid: 1633631943, hostname: "router-1", "accept-reconf": false,
+		  assigned: 2797, flags: [ "bound" ],
+		  "ipv6-addr": [ { address: "fd99:6::aed", "preferred-lifetime": 3600, "valid-lifetime": 7200 } ], valid: 7200 },
+	] },
+	"br-lan": { leases: [
+		{ duid: "00010001aabbccddeeff", iaid: 1, hostname: "", "accept-reconf": false, assigned: 5,
+		  flags: [ "bound", "static" ],
+		  "ipv6-prefix": [ { address: "fd99:7:100::", "preferred-lifetime": -1,
+		                     "valid-lifetime": -1, "prefix-length": 56 } ], valid: -1 },
+		{ duid: "00030001aabbccddee00", iaid: -784789893, hostname: "laptop", "accept-reconf": false, assigned: 11,
+		  flags: [ "bound" ],
+		  "ipv6-addr": [ { address: "fd99:6::b", "preferred-lifetime": 60, "valid-lifetime": 120 },
+		                 { address: "fd99:6::c", "preferred-lifetime": 60, "valid-lifetime": 120 } ], valid: 120 },
+		{ duid: "00030001aabbccddee01", iaid: 3, hostname: "offered", "accept-reconf": false, assigned: 13,
+		  flags: [], "ipv6-addr": [ { address: "fd99:6::d", "preferred-lifetime": 60, "valid-lifetime": 120 } ],
+		  valid: 120 },
+		{ duid: "00030001aabbccddee02", iaid: 4, hostname: "my host" + chr(1) + "\\" + chr(0xff),
+		  "accept-reconf": false, assigned: 14, flags: [ "bound" ],
+		  "ipv6-addr": [ { address: "fd99:6::e", "preferred-lifetime": 60, "valid-lifetime": 120 } ], valid: 120 },
+	] },
+} };
 
-function with_leasefile(content, fn) {
-	let path = sprintf("/tmp/uapi-leases6-test.%d", time());
-	fs.writefile(path, content);
-	let r = fn(bus.stub({ uci: { dhcp: { odhcpd: { '.type': 'odhcpd', leasefile: path } } } }));
-	fs.unlink(path);
-	return r;
+function with_reply(reply, fn) {
+	let c = bus.stub();
+	c.set_ubus_response('dhcp', 'ipv6leases', reply);
+	return fn(c);
 }
+
+// expires_at is the time of the read plus `valid`, so each run compares it apart.
+function without_expiry(list) { return map(list, (e) => { let o = { ...e }; delete o.expires_at; return o; }); }
 
 // v4 (#320): dhcp/leases6 merged into dhcp/leases with ?family=v6.
 t.describe('dhcp.leases merged endpoint (#320)', () => {
@@ -55,40 +71,64 @@ t.describe('dhcp.leases merged endpoint (#320)', () => {
 });
 
 t.describe('dhcp/leases?family=v6 lists what odhcpd_leases reads', () => {
-	t.it('from the leasefile of the odhcpd section', () => {
-		t.assert_deep_equal(with_leasefile(FILE, (c) => leases.list_fn(c, { family: "v6" })),
-		                    with_leasefile(FILE, (c) => odhcpd_leases.read(c)));
-		t.assert_equal(length(with_leasefile(FILE, (c) => leases.list_fn(c, { family: "v6" }))), 4);
+	t.it('from ubus call dhcp ipv6leases', () => {
+		t.assert_deep_equal(without_expiry(with_reply(REPLY, (c) => leases.list_fn(c, { family: "v6" }))),
+		                    without_expiry(with_reply(REPLY, (c) => odhcpd_leases.read(c))));
+		t.assert_equal(length(with_reply(REPLY, (c) => leases.list_fn(c, { family: "v6" }))), 5);
 	});
 });
 
 t.describe('odhcpd_leases.read', () => {
-	t.it('gives one entry for each address or prefix of a DHCPv6 lease, from the leasefile of the odhcpd section', () => {
-		t.assert_deep_equal(with_leasefile(FILE, (c) => odhcpd_leases.read(c)), [
+	t.it('gives one entry for each address or prefix of a bound lease', () => {
+		t.assert_deep_equal(without_expiry(with_reply(REPLY, (c) => odhcpd_leases.read(c))), [
 			{ duid: "000300019e09e3b126e0", iaid: "615f3ec7", hostname: "router-1", interface: "uapi6a",
-			  ia_type: "IA_NA", ip: "fd99:6::aed", prefix_length: null, expires_at: 1794128831 },
+			  ia_type: "IA_NA", ip: "fd99:6::aed", prefix_length: null },
 			{ duid: "00010001aabbccddeeff", iaid: "1", hostname: null, interface: "br-lan",
-			  ia_type: "IA_PD", ip: "fd99:7:100::", prefix_length: 56, expires_at: null },
-			{ duid: "00030001aabbccddee00", iaid: "2", hostname: "laptop", interface: "br-lan",
-			  ia_type: "IA_NA", ip: "fd99:6::b", prefix_length: null, expires_at: 1794128900 },
-			{ duid: "00030001aabbccddee00", iaid: "2", hostname: "laptop", interface: "br-lan",
-			  ia_type: "IA_NA", ip: "fd99:6::c", prefix_length: null, expires_at: 1794128900 },
+			  ia_type: "IA_PD", ip: "fd99:7:100::", prefix_length: 56 },
+			{ duid: "00030001aabbccddee00", iaid: "d1390e7b", hostname: "laptop", interface: "br-lan",
+			  ia_type: "IA_NA", ip: "fd99:6::b", prefix_length: null },
+			{ duid: "00030001aabbccddee00", iaid: "d1390e7b", hostname: "laptop", interface: "br-lan",
+			  ia_type: "IA_NA", ip: "fd99:6::c", prefix_length: null },
+			{ duid: "00030001aabbccddee02", iaid: "4", hostname: "my host\\x01\\x5c\\xff", interface: "br-lan",
+			  ia_type: "IA_NA", ip: "fd99:6::e", prefix_length: null },
 		]);
 	});
 
-	t.it('reads no lease from a missing file', () => {
-		let c = bus.stub({ uci: { dhcp: { odhcpd: { '.type': 'odhcpd', leasefile: '/nonexistent/uapi-leases6' } } } });
-		t.assert_deep_equal(odhcpd_leases.read(c), []);
+	t.it('reads expires_at as the time of the read plus valid, and null for a lease that does not expire', () => {
+		let before = time();
+		let r = with_reply(REPLY, (c) => odhcpd_leases.read(c));
+		let after = time();
+		t.assert_true(r[0].expires_at >= before + 7200 && r[0].expires_at <= after + 7200);
+		t.assert_equal(r[1].expires_at, null);
+	});
+
+	t.it('reads no lease when odhcpd does not run', () => {
+		t.assert_deep_equal(with_reply({ _error: 'Not found' }, (c) => odhcpd_leases.read(c)), []);
+		t.assert_deep_equal(with_reply(null, (c) => odhcpd_leases.read(c)), []);
+	});
+});
+
+t.describe('odhcpd_leases.escape_hostname', () => {
+	t.it('escapes control bytes, the backslash and invalid UTF-8 as rpcd-mod-luci does, and keeps valid UTF-8', () => {
+		let e = odhcpd_leases.escape_hostname;
+		t.assert_equal(e("foo!"), "foo!");
+		t.assert_equal(e("caf" + chr(0xc3, 0xa9)), "caf" + chr(0xc3, 0xa9));
+		t.assert_equal(e("a" + chr(0x1b) + "[2J" + chr(0x7f)), "a\\x1b[2J\\x7f");
+		t.assert_equal(e("x\\x20"), "x\\x5cx20");
+		t.assert_equal(e("bad" + chr(0xc3)), "bad\\xc3");
+		t.assert_equal(e(chr(0xc0, 0x80)), "\\xc0\\x80");
+		t.assert_equal(e(chr(0xed, 0xa0, 0x80)), "\\xed\\xa0\\x80");
+		t.assert_equal(e(chr(0xf4, 0x90, 0x80, 0x80)), "\\xf4\\x90\\x80\\x80");
 	});
 });
 
 t.describe('dhcp/servers counts the DHCPv6 leases of its interface', () => {
-	let runtime = (status) => with_leasefile(FILE, (c) => {
+	let runtime = (status) => with_reply(REPLY, (c) => {
 		c.set_ubus_response('network.interface.lan', 'status', status);
 		return servers.fromUci({ '.type': 'dhcp', '.name': 'lan', interface: 'lan' }, c).runtime;
 	});
 	t.it('on the device that netifd reports for the interface, once for a lease of two addresses', () => {
-		t.assert_equal(runtime({ up: true, l3_device: 'br-lan' }).active_leases_v6_iface, 2);
+		t.assert_equal(runtime({ up: true, l3_device: 'br-lan' }).active_leases_v6_iface, 3);
 		t.assert_equal(runtime({ up: true, l3_device: 'uapi6a' }).active_leases_v6_iface, 1);
 		t.assert_equal(runtime({ up: false }).active_leases_v6_iface, 0);
 	});

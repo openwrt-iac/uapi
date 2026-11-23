@@ -438,6 +438,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the whole config for it, and a PATCH that switches to wireguard over such a
   hidden number now answers 422 for a null too: send a port, or switch with a
   PUT. Migration note in `docs/migration-v3-to-v4.md`. (#471) (#470)
+- **BREAKING: `dhcp/leases?family=v6` reads the leases of odhcpd over ubus,
+  with the hostname that the client sent.** LuCI reads `ubus call dhcp
+  ipv6leases` on OpenWrt main, since odhcpd can change or drop its lease file,
+  and uapi now does the same. The entries do not change, because odhcpd writes
+  only its bound leases to the file. In the file, odhcpd escapes each byte of a
+  hostname other than a letter, a digit, `-`, `_` and `.`, and puts
+  `broken\x20` before a name that it does not accept. So a client that sent
+  `foo!` read `broken\x20foo\x21`, and now reads `foo!`. A control byte, the
+  backslash and each byte that is not part of valid UTF-8 read as `\x` and two
+  lowercase hex digits, as LuCI shows them, for the v4 leases too. `expires_at`
+  is the time of the read plus the lifetime that odhcpd gives. Migration note
+  in `docs/migration-v3-to-v4.md`. (#472) (#473)
 
 ### Removed
 
@@ -463,7 +475,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (#468)
 - **BREAKING: `dhcp/leases6` merges into `dhcp/leases`.** The endpoint is gone;
   `GET /dhcp/leases` still returns the IPv4 leases and `GET
-  /dhcp/leases?family=v6` the IPv6 ones from odhcpd's statefile. The entry id is
+  /dhcp/leases?family=v6` the IPv6 ones from odhcpd. The entry id is
   the MAC for v4 and the IP for v6, so a v6 entry is looked up as `GET
   /dhcp/leases/<ip>?family=v6`. The `dhcp:leases6` scope leaves the scope tree
   with the endpoint. Announced in 3.5.0 (#320); migration note in

@@ -21,12 +21,13 @@ esac
 old=$(call "$URL/dhcp/leases6")
 echo "$old" | tail -1 | grep -q '^404$' || fail "leases6 endpoint expected 404 on v4: $old"
 
-# odhcpd writes each lease as a line that starts with `#`, which the reader skipped, so the list was
-# always empty. A client on one end of a veth pair takes a lease from odhcpd on the other end. Its
-# pidfile keeps the kill off the odhcp6c of wan6.
+# A client on one end of a veth pair takes a lease from odhcpd on the other end. Its pidfile keeps
+# the kill off the odhcp6c of wan6. odhcp6c sends the system hostname, and odhcpd writes `foo!` as
+# `broken\x20foo\x21` in its lease file, which uapi read as the hostname.
 echo "--- dhcp/leases?family=v6 and dhcp/servers report a lease that odhcpd gave ---"
 cleanup() {
 	$SSH '[ -f /tmp/uapi27.pid ] && kill -9 "$(cat /tmp/uapi27.pid)"; rm -f /tmp/uapi27.pid
+		[ -f /tmp/uapi27.hostname ] && cat /tmp/uapi27.hostname > /proc/sys/kernel/hostname; rm -f /tmp/uapi27.hostname
 		uci -q delete dhcp.uapi27; uci commit dhcp; uci -q delete network.uapi27; uci -q delete network.uapi27dev
 		uci commit network; ubus call network reload; /etc/init.d/odhcpd reload' >/dev/null 2>&1 || true
 }
@@ -38,7 +39,8 @@ $SSH 'uci set network.uapi27dev=device; uci set network.uapi27dev.type=veth; uci
 	uci set dhcp.uapi27=dhcp; uci set dhcp.uapi27.interface=uapi27; uci set dhcp.uapi27.dhcpv6=server
 	uci set dhcp.uapi27.ra=server; uci commit dhcp; ubus call network reload; sleep 2; ifup uapi27'
 sleep 4
-$SSH 'ip link set uapi27b up; /etc/init.d/odhcpd reload; sleep 2; odhcp6c -d -p /tmp/uapi27.pid -s /bin/true -N force uapi27b'
+$SSH 'cat /proc/sys/kernel/hostname > /tmp/uapi27.hostname; printf "foo!" > /proc/sys/kernel/hostname
+	ip link set uapi27b up; /etc/init.d/odhcpd reload; sleep 2; odhcp6c -d -p /tmp/uapi27.pid -s /bin/true -N force uapi27b'
 own_lease() { body "$(call "$URL/dhcp/leases?family=v6")" | jq -c '[.[] | select(.interface == "uapi27a")]'; }
 n=0
 until [ "$(own_lease | jq length)" = 1 ]; do
@@ -46,7 +48,7 @@ until [ "$(own_lease | jq length)" = 1 ]; do
 	sleep 1
 done
 lease=$(own_lease | jq -c '.[0]')
-printf '%s' "$lease" | jq -e '.ia_type == "IA_NA" and .prefix_length == null and (.ip | startswith("fd27:6::")) and .expires_at > now' >/dev/null \
+printf '%s' "$lease" | jq -e '.ia_type == "IA_NA" and .prefix_length == null and (.ip | startswith("fd27:6::")) and .expires_at > now and .hostname == "foo!"' >/dev/null \
 	|| fail "the lease on uapi27a read wrong: $lease"
 r=$(call "$URL/dhcp/leases/$(printf '%s' "$lease" | jq -r .ip)?family=v6")
 [ "$(echo "$r" | tail -1)" = 200 ] || fail "GET of the lease by its ip: $r"

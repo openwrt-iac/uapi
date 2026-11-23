@@ -391,6 +391,15 @@ They live in the default `REQUIRE_SEARCH_PATH` ahead of any project paths.
 Naming a local lib `ubus.uc` shadows nothing because the `.so` wins. uapi calls
 its abstraction `bus.uc` to avoid the collision.
 
+### The ubus module reads a blobmsg u32 as a signed int32
+
+A daemon that sends a field with `blobmsg_add_u32` gives ucode a negative
+number from 2^31 up, as `ubus call` prints it. odhcpd sends the iaid of a
+DHCPv6 lease and the infinite lifetime 0xffffffff that way, so ucode reads
+`-784789893` and `-1`. Mask the value with `& 0xffffffff` before you print it
+in hex or compare it with 0xffffffff. A stub reply in a unit test holds the
+negative number, as the ubus module gives it.
+
 ## When you find a new one
 
 Add it here. The bar is "this would have saved me a CI round-trip if I had seen

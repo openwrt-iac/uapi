@@ -905,7 +905,7 @@ categories and § Log line format have the categories and the format.
 | Root crontab                 | `/etc/crontabs/root`                        | Indefinite        |
 | Package feeds                | `/etc/apk/repositories.d/<name>.list`       | Indefinite        |
 | Root password hash           | `/etc/shadow`, written by `busybox passwd`  | Indefinite        |
-| DHCP leases                  | `/tmp/dhcp.leases`, the `leasefile` of odhcpd (`/tmp/odhcpd.leases` by default) | Daemon-managed |
+| DHCP leases                  | `/tmp/dhcp.leases`, `ubus call dhcp ipv6leases` of odhcpd | Daemon-managed |
 | Routing table names (read)   | `/etc/iproute2/rt_tables`                   | Operator-managed, base-files conffile |
 | Service names (read)         | `/etc/services`                             | Operator-managed, base-files conffile |
 | Rate-limit buckets           | `/var/run/uapi-ratelimit/`                  | Until the first mint or revoke after the token is revoked or expires, else until reboot. One that a request in flight at the revoke writes waits for the next |

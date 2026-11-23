@@ -56,7 +56,7 @@ old path or label stops matching.
 
 The `/dhcp/leases6` endpoint is removed (announced in 3.5.0, #320). `GET
 /dhcp/leases` still returns the IPv4 leases, and `GET /dhcp/leases?family=v6`
-returns the IPv6 ones from odhcpd's statefile. The entry id is the MAC for v4
+returns the IPv6 ones from odhcpd. The entry id is the MAC for v4
 entries and the IP for v6 ones, so `GET /dhcp/leases/<ip>?family=v6` looks a v6
 entry up. The `Link` to the next page keeps `family`. 3.x ignored `family`, so
 any value listed the IPv4 leases. Now a value other than `v4` or `v6` answers
@@ -72,6 +72,18 @@ schema, `expires_at` can now be `null`: a v6 lease that does not expire reads
 `null`, and a v4 one still reads `0`. For a client of the v3 `dhcp/leases6`
 schema, `duid` can now be `null`, but a v6 entry always has one, and `ia_type`
 no longer lists `IA_TA`, which uapi never returned.
+
+`?family=v6` reads the leases from `ubus call dhcp ipv6leases`, as LuCI does on
+OpenWrt main, and no longer from the lease file of odhcpd. The entries are the
+same, because odhcpd writes only its bound leases to the file. The `hostname` of
+a v6 entry is now the name that the client sent, as odhcpd holds it. In the
+file, odhcpd escapes each byte of a hostname other than a letter, a digit, `-`,
+`_` and `.`, and puts `broken\x20` before a name that it does not accept. So a
+client that sent `foo!` read `broken\x20foo\x21`, and now reads `foo!`.
+A control byte, the backslash and each byte that is not part of valid UTF-8
+read as `\x` and two lowercase hex digits, as LuCI shows them, for the v4
+entries too. A hostname is not always a valid DNS name, so check it before you
+copy it into `dhcp/hosts` (#472).
 
 The upgrade keeps each stored token and its scopes. A token that holds
 `dhcp:leases` or `*:leases`, with either verb, now also reads the IPv6 leases,
