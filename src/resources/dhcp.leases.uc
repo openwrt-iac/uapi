@@ -11,8 +11,9 @@ function parse_leases(content) {
 		if (trimmed == "") continue;
 		let parts = split(trimmed, " ");
 		if (length(parts) < 4) continue;
+		let expires = int(parts[0]);
 		push(leases, {
-			expires_at: int(parts[0]),
+			expires_at: (expires == 0) ? null : expires,
 			mac: parts[1],
 			ip: parts[2],
 			hostname: parts[3] == "*" ? null : odhcpd_leases.escape_hostname(parts[3]),
@@ -50,7 +51,7 @@ return {
 	list_fn: list_fn,
 	parse_leases: parse_leases,
 	schema_properties: {
-		expires_at: { type: ["integer", "null"], description: "Unix epoch seconds when the lease expires. A lease that does not expire reads 0 for v4, as dnsmasq writes it, and null for v6" },
+		expires_at: { type: ["integer", "null"], description: "Unix epoch seconds when the lease expires, null for a lease that does not expire. dnsmasq writes 0 for such a v4 lease, and odhcpd gives 0xffffffff for such a v6 lease" },
 		mac: { type: "string", description: "Client MAC address (v4 entries only)" },
 		iaid: { type: "string", description: "Identity association id, in hex (v6 entries only)" },
 		interface: { type: "string", description: "Network device that odhcpd served the lease on, such as `br-lan`, not the uci interface (v6 entries only)" },

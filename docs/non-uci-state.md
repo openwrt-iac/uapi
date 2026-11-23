@@ -122,7 +122,9 @@ read-only collection, and a writable one puts it in its item view.
 - **Lock.** None; reads only.
 - **Format.** Space-separated lines `<expires_at> <mac> <ip> <hostname>
   <client id>`. dnsmasq writes `*` for a missing host name or client id, and
-  each reads null. A client id reads as `duid`.
+  each reads null. A client id reads as `duid`. dnsmasq writes 0 for a lease
+  that does not expire, and `expires_at` reads null for it, as for an IPv6
+  lease and as rpcd-mod-luci reads it.
 - **Why not uci.** Active leases are runtime state, by definition not in
   `/etc/config/`.
 

@@ -14,6 +14,7 @@ echo "--- seed /tmp/dhcp.leases ---"
 $SSH 'cat > /tmp/dhcp.leases' <<'EOF'
 1735689600 aa:bb:cc:dd:ee:01 192.168.1.50 printer 01:aa:bb:cc:dd:ee:01
 1735689700 aa:bb:cc:dd:ee:02 192.168.1.51 * *
+0 aa:bb:cc:dd:ee:03 192.168.1.52 nas *
 EOF
 
 echo "--- GET /dhcp/leases returns the parsed list ---"
@@ -28,6 +29,11 @@ echo "--- GET /dhcp/leases/<mac> returns the single lease ---"
 single=$(call "$URL/dhcp/leases/aa:bb:cc:dd:ee:02")
 echo "$single" | tail -1 | grep -q '^200$' || fail "GET single expected 200"
 echo "$single" | grep -q '"ip": "192.168.1.51"' || fail "wrong ip"
+
+echo "--- a lease that dnsmasq writes with expiry 0 reads expires_at null ---"
+nas=$(call "$URL/dhcp/leases/aa:bb:cc:dd:ee:03")
+echo "$nas" | tail -1 | grep -q '^200$' || fail "GET of the lease that does not expire expected 200: $nas"
+echo "$nas" | sed '$d' | jq -e '.expires_at == null and .hostname == "nas"' >/dev/null || fail "expires_at of a lease that does not expire: $nas"
 
 echo "--- GET /dhcp/leases/<unknown> returns 404 ---"
 missing=$(call "$URL/dhcp/leases/zz:zz:zz:zz:zz:zz")

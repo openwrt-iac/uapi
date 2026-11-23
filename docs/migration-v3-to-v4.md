@@ -65,11 +65,11 @@ any value listed the IPv4 leases. Now a value other than `v4` or `v6` answers
 An IPv4 entry whose client sent no client id now reads `duid` null (announced
 in 3.5.0, #392). dnsmasq writes `*` there, and 3.x read it as the string `"*"`.
 
-The items do not change otherwise, and one schema now describes both families.
-A v4 entry has `mac`, and a v6 entry has `iaid`, `interface`, `ia_type` and
-`prefix_length` instead. For a client generated from the v3 `dhcp/leases`
-schema, `expires_at` can now be `null`: a v6 lease that does not expire reads
-`null`, and a v4 one still reads `0`. For a client of the v3 `dhcp/leases6`
+One schema now describes both families. A v4 entry has `mac`, and a v6 entry
+has `iaid`, `interface`, `ia_type` and `prefix_length` instead. A lease that
+does not expire reads `expires_at` null in both families. dnsmasq writes 0 for
+such a v4 lease, and 3.x read that 0, so a client got epoch 0 for it. LuCI
+reads it as no expiry too (#474). For a client of the v3 `dhcp/leases6`
 schema, `duid` can now be `null`, but a v6 entry always has one, and `ia_type`
 no longer lists `IA_TA`, which uapi never returned.
 
@@ -824,6 +824,8 @@ another value for the same stored option, to follow what the daemon does:
 | `network/routes` | `type` | a number from 1 to 9, in decimal, hex or octal as strtoul reads it, such as `6` or `010` |
 | `network/interfaces` | `disabled` | `true`, which reads true: netifd `e97e36f` disables the interface for it, and the netifd of 25.12 did not |
 | `network/interfaces` | `listen_port` | a service name, such as `openvpn`, which reads null instead of its port from `/etc/services` or -1, or a number that ucode's `int()` reads in another way than 3.x, such as `0x10`, which reads 0, or `1194x`, which reads 1194, both -1 in 3.x |
+| `dhcp/leases` | `expires_at` | 0 in the lease file of dnsmasq, for a v4 lease that does not expire, which reads null instead of 0 |
+| `dhcp/leases` | `hostname` | on a v6 lease, a name with a byte other than a letter, a digit, `-`, `_` or `.`, which reads as the client sent it instead of as the lease file of odhcpd escapes it |
 
 `network/interfaces.listen_port` follows the wireguard handler of OpenWrt main.
 netifd parses no listen port, and the handler gives wg the number that ucode's

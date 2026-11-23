@@ -36279,7 +36279,7 @@
 							"integer",
 							"null"
 						],
-						"description": "Unix epoch seconds when the lease expires. A lease that does not expire reads 0 for v4, as dnsmasq writes it, and null for v6"
+						"description": "Unix epoch seconds when the lease expires, null for a lease that does not expire. dnsmasq writes 0 for such a v4 lease, and odhcpd gives 0xffffffff for such a v6 lease"
 					},
 					"mac": {
 						"type": "string",
