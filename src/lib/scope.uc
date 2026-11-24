@@ -1,3 +1,5 @@
+let values = require('values');
+
 const KNOWN_PATHS = {
 	"*": true,
 	"network": true,
@@ -88,7 +90,7 @@ function parse(scope) {
 
 	let segments = slice(parts, 0, -1);
 	for (let seg in segments) {
-		if (!match(seg, SEGMENT_RE))
+		if (!values.whole_match(seg, SEGMENT_RE))
 			die(sprintf("scope: %J segment %J has invalid chars", scope, seg));
 	}
 

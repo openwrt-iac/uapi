@@ -6,6 +6,25 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A value with a newline no longer passes uapi's checks on OpenWrt main.** On
+  the ucode of OpenWrt main, a check that should judge a whole value matched one
+  line of it, so a value with a newline passed when one of its lines did, and
+  produced broken state. uapi now answers `400 bad_request`, before the bearer
+  check, for a newline or a carriage return in the path, in the name or the
+  value of a query parameter, and in a request header that it reads:
+  `Authorization`, `Content-Type`, `Content-Length`, `Transfer-Encoding`,
+  `If-Match`, `If-None-Match`, `Idempotency-Key` and `X-Request-Id`. Such a
+  request gets a request id of the server. A newline in a name, an id or a key
+  of a body that uapi checks is refused with the code that the check already
+  answers, mostly `422 validation_failed`, and `uapi-token create` refuses one
+  in its arguments. A body of more than 2000 lines no longer answers 413 for
+  them: uapi counted each newline as a `{` or a `[`. This refuses requests that
+  4.0.0 accepted, under the carve-out of `docs/versioning.md` for a payload
+  that produced broken state no caller can rely on. It fails loudly, with the
+  400 or the 422. (#482)
+
 ## [4.0.0] - 2026-11-23
 
 First release of the 4.x line. A router serves one API major, and 4.x mounts

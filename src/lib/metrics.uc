@@ -1,5 +1,6 @@
 let fs = require('fs');
 let state_dir = require('state_dir');
+let values = require('values');
 
 // Each series is one file with the bare integer count. Histograms are
 // represented as one file per (series, le-bucket). Atomic increment uses
@@ -29,7 +30,7 @@ function _mkdir_p(path) {
 function _safe_label(v) {
 	if (v == null) return null;
 	if (type(v) != "string") v = "" + v;
-	if (v == "" || !match(v, LABEL_RE)) return null;
+	if (v == "" || !values.whole_match(v, LABEL_RE)) return null;
 	return v;
 }
 

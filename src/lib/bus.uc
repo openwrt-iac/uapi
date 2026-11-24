@@ -1,3 +1,5 @@
+let values = require('values');
+
 function deepcopy(v) {
 	if (type(v) == "array") {
 		let out = [];
@@ -16,7 +18,7 @@ function deepcopy(v) {
 // with a dot, which keeps its temp files, such as .firewall.uci-XXXXXX, and the restore's out of
 // reach. A load by path opens any file in the directory, so only a name that uci loads passes.
 function loadable(pkg) {
-	return type(pkg) == "string" && match(pkg, /^[!-~]+$/) != null
+	return values.whole_match(pkg, /^[!-~]+$/) != null
 		&& substr(pkg, 0, 1) != "." && index(pkg, "/") < 0;
 }
 

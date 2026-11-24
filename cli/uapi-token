@@ -42,7 +42,7 @@ function as_list(v) {
 
 function parse_duration_to_seconds(s) {
 	if (type(s) != "string" || s == "") return null;
-	let m = match(s, /^([0-9]+)([smhd]?)$/);
+	let m = values.whole_match(s, /^([0-9]+)([smhd]?)$/);
 	if (!m) return null;
 	let n = int(m[1]);
 	let suffix = m[2];
@@ -54,7 +54,7 @@ function parse_duration_to_seconds(s) {
 }
 
 function parse_positive_int(s, flag) {
-	if (type(s) != "string" || !match(s, /^[1-9][0-9]*$/))
+	if (!values.whole_match(s, /^[1-9][0-9]*$/))
 		die(sprintf("uapi-token: %s needs a positive integer", flag));
 	return int(s);
 }
@@ -130,7 +130,7 @@ function ensure_package() {
 
 function cmd_create(opts) {
 	if (!opts.name) die("uapi-token create: --name required");
-	if (!match(opts.name, NAME_RE))
+	if (!values.whole_match(opts.name, NAME_RE))
 		die(sprintf("uapi-token create: --name %J is invalid (must match [A-Za-z0-9_]+; "
 		            + "use underscores instead of hyphens)", opts.name));
 	if (length(opts.scopes) == 0) die("uapi-token create: at least one --scope required");

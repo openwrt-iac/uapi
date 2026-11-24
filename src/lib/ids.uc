@@ -1,4 +1,5 @@
 let fs = require('fs');
+let values = require('values');
 
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 const TIME_LEN = 10;
@@ -68,7 +69,7 @@ function is_valid_id(s) {
 	// Matches every shape new_id can emit: 1-3 lowercase prefix chars, then
 	// either the 26-char time+rand ULID or a short rand-only suffix (11
 	// chars or longer, capped at 26 to mirror new_id's rand_len max).
-	return type(s) == "string" && !!match(s, /^[a-z]{1,3}_[0-9a-z]{11,26}$/);
+	return !!values.whole_match(s, /^[a-z]{1,3}_[0-9a-z]{11,26}$/);
 }
 
 // digest is optional at module-load time so unit tests in the build env (no
@@ -93,7 +94,7 @@ function content_id(s) {
 }
 
 function is_content_id(s) {
-	return type(s) == "string" && !!match(s, /^[a-f0-9]{12}$/);
+	return !!values.whole_match(s, /^[a-f0-9]{12}$/);
 }
 
 return {
