@@ -6,6 +6,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-11-24
+
+This release fixes input checks on the ucode of OpenWrt main. Upgrade every 4.0.0
+install.
+
 ### Fixed
 
 - **A value with a newline no longer passes uapi's checks on OpenWrt main.** On
