@@ -14,8 +14,9 @@ netifd that carries `e97e36f` (committed 2026-07-17), which takes
 `disabled 'true'` on an interface. OpenWrt 25.12 does not carry it, and 4.x
 does not support 25.12. The 4.x package depends on a netifd that 25.12 does not
 have, so apk does not install 4.x on a 25.12 router, and such a router stays on
-3.5.0. To move to 4.x, move the router to OpenWrt main or to that release first,
-then install 4.x.
+3.5.0. Pin it there with `apk add 'uapi<4'`, or `apk upgrade` fails while the
+feed serves 4.x (`docs/installation.md`). To move to 4.x, move the router to
+OpenWrt main or to that release first, then install 4.x.
 
 Some sections below say what uapi does on 25.12, where netifd sets up a
 wireguard interface with `wireguard.sh`. They compare with 3.x on 25.12, or

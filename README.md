@@ -78,6 +78,11 @@ apk upgrade uhttpd uhttpd-mod-ubus uhttpd-mod-ucode uhttpd-mod-lua
 apk add uapi
 ```
 
+On OpenWrt 25.12, run `apk add 'uapi<4'` in place of `apk add uapi`. It
+installs 3.5.0 from the feed, because 4.x needs a netifd that 25.12 does not
+ship and apk does not fall back to 3.5.0 on its own. A 25.12 router that already
+runs 3.x from the feed needs the same command once, or `apk upgrade` fails.
+
 Or a local APK file:
 
 ```sh
