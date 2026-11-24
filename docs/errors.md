@@ -31,7 +31,8 @@ Every non-2xx response carries this body shape (Content-Type:
   request server-side. Clients may supply their own via `X-Request-Id` header or
   `?request_id=` query param, each validated against `^[A-Za-z0-9_-]{8,128}$`.
   The header wins when it matches. When neither form matches, the server
-  generates a ULID.
+  generates a ULID. A request whose `X-Request-Id` or `?request_id=` holds a
+  newline or a carriage return answers `400 bad_request` under a ULID.
 - `errors[]` is only present for `422 validation_failed`. **All** field errors
   are reported together so the client can fix everything in one round trip.
 
@@ -39,7 +40,7 @@ Every non-2xx response carries this body shape (Content-Type:
 
 | HTTP | `code`                          | When                                                         |
 |------|----------------------------------|--------------------------------------------------------------|
-| 400  | `bad_request`                   | Malformed JSON, wrong shape, body where none expected, a query parameter value that the endpoint does not declare (a `limit` outside 1 to 500, a `family` other than `v4` or `v6` on `dhcp/leases`, a `managed` other than `true` or `false` on a curated list, a `validate` other than `1` on `/uapi/diagnostics`), an `Idempotency-Key` on a POST that does not match `^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$`, no body on a PUT/PATCH, a key or string with a NUL or a control character other than tab, newline and carriage return, which uci cannot store, or the body of a POST, PUT or PATCH that has not arrived in full 10 s after the start of the request, which is checked before the bearer check |
+| 400  | `bad_request`                   | Malformed JSON, wrong shape, body where none expected, a query parameter value that the endpoint does not declare (a `limit` outside 1 to 500, a `family` other than `v4` or `v6` on `dhcp/leases`, a `managed` other than `true` or `false` on a curated list, a `validate` other than `1` on `/uapi/diagnostics`), an `Idempotency-Key` on a POST that does not match `^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$`, no body on a PUT/PATCH, a newline or a carriage return in the path, in the name or the value of a query parameter, or in a request header that uapi reads (`Authorization`, `Content-Type`, `Content-Length`, `Transfer-Encoding`, `If-Match`, `If-None-Match`, `Idempotency-Key`, `X-Request-Id`), which is checked before the bearer check, a key or string with a NUL or a control character other than tab, newline and carriage return, which uci cannot store, or the body of a POST, PUT or PATCH that has not arrived in full 10 s after the start of the request, which is checked before the bearer check |
 | 400  | `invalid_cursor`                | Empty or malformed `?cursor=`, one referencing no current item, or one that ends on an unmanaged section when an item up to that section changed |
 | 401  | `unauthorized`                  | No `Authorization` header, or one that is not `Bearer <token>` |
 | 401  | `invalid_token`                 | Token not in store, expired, or source IP not in `allowed_cidrs` (either address family) |

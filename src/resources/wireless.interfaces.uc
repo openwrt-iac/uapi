@@ -356,12 +356,12 @@ function rules(json, radio_on, conn) {
 
 	if (type(md) == "string") {
 		line("mobility_domain", md, on && (r.roams || (mode == "ap" && EAP[base])));
-		if (!match(md, MD_RE))
+		if (!values.whole_match(md, MD_RE))
 			err("mobility_domain", "invalid_format", "must be 4 hex digits: hostapd refuses its whole config for another mobility domain", on && r.roams);
 	}
 	if (type(r1) == "string") {
 		line("r1_key_holder", r1, on && r.key_holders);
-		if (!match(r1, R1KH_ID_RE))
+		if (!values.whole_match(r1, R1KH_ID_RE))
 			err("r1_key_holder", "invalid_format", "must be 12 hex digits: hostapd refuses its whole config for another R1 key holder", on && r.key_holders);
 	}
 

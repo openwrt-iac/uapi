@@ -37,10 +37,12 @@ What uapi defends against, what it doesn't, and what the operator should do.
 8. **Shell metacharacter injection.** Every shell-invoked path (apk install,
    init-script reload) validates names against
    `^[A-Za-z0-9_-]+$` (or `^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$` for packages)
-   before interpolating, and uses `--` to separate flags from positional
-   arguments. Service names from ucitrack are validated before
-   interpolating into `/etc/init.d/<svc>`. The WireGuard apply path in
-   `src/lib/wg.uc` builds each `wg` and `ip` command as an argument list,
+   over the whole value, through `values.whole_match` (see
+   [ucode quirks](ucode-quirks.md)), before interpolating, and uses `--` to
+   separate flags from positional arguments. Service names from ucitrack are
+   validated before interpolating into `/etc/init.d/<svc>`. The WireGuard
+   apply path in `src/lib/wg.uc` builds each `wg` and `ip` command as an
+   argument list,
    and one function quotes every argument with `shellquote`, because the
    restore after a failed write reads peers straight from uci, where a
    value never passed `validate()`. wg.uc also checks the values before it

@@ -552,6 +552,16 @@ t.describe('uapi-token create', () => {
 		t.assert_match(r.err, /cannot commit \/etc\/config\/uapi: No space left on device, so token "fresh" does not exist/);
 	});
 
+	t.it('refuses a name, a lifetime and a rate that hold a newline, and prints no bearer', () => {
+		for (let args in [ [ "--name", "ab\ncd" ], [ "--name", "fresh", "--expires-in", "10\nx" ],
+		                   [ "--name", "fresh", "--rate", "5\nx" ] ]) {
+			let r = uapi_token([ "create", ...args, "--scope", "*:ro" ], ADMIN_ONLY, "true");
+			t.assert_true(r.code != "0", r.err);
+			t.assert_equal(r.out, "");
+			t.assert_equal(r.at_commit, null);
+		}
+	});
+
 	t.it('refuses a name that another section of the token store already holds', () => {
 		let r = uapi_token([ "create", "--name", "taken", "--scope", "*:ro" ],
 		                   { ...ADMIN_ONLY, taken: { '.type': 'other', x: '1' } }, "true");

@@ -3,6 +3,7 @@ let wg = require('wg');
 let limits = require('limits');
 let write_journal = require('write_journal');
 let log = require('log');
+let values = require('values');
 
 // Lock layout (introduced to let concurrent writes to different uci packages
 // proceed in parallel without losing the apk-vs-uci serialization guarantee):
@@ -32,7 +33,7 @@ const SAFE_NAME_RE = /^[A-Za-z0-9_-]+$/;
 // misleading since uci IS in a clean state.
 function default_check_services(services) {
 	for (let svc in services) {
-		if (type(svc) != "string" || !match(svc, SAFE_NAME_RE))
+		if (!values.whole_match(svc, SAFE_NAME_RE))
 			return sprintf("refusing to reload service with unsafe name %J", svc);
 		let path = "/etc/init.d/" + svc;
 		if (fs.stat(path) == null)
@@ -98,7 +99,7 @@ function now_ms() {
 function default_reload(services, budget, init_dir, action) {
 	action ??= "reload";
 	for (let svc in services)
-		if (type(svc) != "string" || !match(svc, SAFE_NAME_RE))
+		if (!values.whole_match(svc, SAFE_NAME_RE))
 			return sprintf("refusing to reload service with unsafe name %J", svc);
 	if (length(services) == 0) return null;
 	budget ??= {};
@@ -453,7 +454,7 @@ function default_release(handle) {
 // caller learns which lock blocked them. prefix is for the tests, as in
 // multi_transaction().
 function default_acquire_pkg(global_path, package, also, prefix) {
-	if (type(package) != "string" || !match(package, SAFE_NAME_RE))
+	if (!values.whole_match(package, SAFE_NAME_RE))
 		return { unavailable: sprintf("invalid package name %J", package) };
 	let g = _lock_one(global_path ?? LOCK_PATH, "s");
 	if (g == null) return { contention: "global" };
@@ -780,7 +781,7 @@ function multi_transaction(conn, params) {
 	// Validate package names + sort + dedup so lock acquisition is deterministic.
 	let unique = {};
 	for (let p in packages) {
-		if (type(p) != "string" || !match(p, SAFE_NAME_RE))
+		if (!values.whole_match(p, SAFE_NAME_RE))
 			return { ok: false, kind: "lock_unavailable",
 			         error: sprintf("invalid package name %J", p) };
 		unique[p] = true;

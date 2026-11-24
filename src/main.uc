@@ -263,6 +263,22 @@ function parse_query(qs) {
 	return out;
 }
 
+const READ_HEADERS = [ "authorization", "content-type", "content-length", "transfer-encoding",
+                       "if-match", "if-none-match", "idempotency-key", "x-request-id" ];
+
+function holds_line_break(s) {
+	return type(s) == "string" && (index(s, "\n") >= 0 || index(s, "\r") >= 0);
+}
+
+function line_break_in_request(env, query) {
+	if (holds_line_break(env.PATH_INFO)) return "the path";
+	for (let k, v in query)
+		if (holds_line_break(k) || holds_line_break(v)) return "a query parameter";
+	for (let h in READ_HEADERS)
+		if (holds_line_break(env.headers?.[h])) return sprintf("the %s header", h);
+	return null;
+}
+
 function split_path(path) {
 	let parts = [];
 	for (let s in split(path, "/")) if (s != "") push(parts, s);
@@ -475,7 +491,7 @@ function if_none_match_matches(if_none_match, current_etag) {
 // package that /etc/config holds, so that one is looked up per request.
 const METRIC_ROUTES = {
 	labels: {},
-	raw_package: (p) => match(p, /^[A-Za-z0-9_-]+$/) && fs.stat("/etc/config/" + p)?.type == "file",
+	raw_package: (p) => values.whole_match(p, /^[A-Za-z0-9_-]+$/) && fs.stat("/etc/config/" + p)?.type == "file",
 };
 for (let l in [ "/openapi.json", "/healthz", "/uapi/metrics", "/uapi/batch", "/uapi/diagnostics",
                 "/schema", "/uapi/tokens", "/uapi/tokens/:id", "/uapi/whoami", "/uapi/services/:id/recover",
@@ -1006,6 +1022,11 @@ function dispatch(env, start) {
 	// arrived through before it can say a write moved it.
 	ctx.remote_addr = env.REMOTE_ADDR ?? null;
 
+	let broken = line_break_in_request(env, query);
+	if (broken != null)
+		return { ctx, resp: errors.error(ctx, "bad_request",
+		                                 sprintf("The request holds a newline or a carriage return in %s", broken)) };
+
 	let tls = tls_check(env);
 	if (!tls.ok)
 		return { ctx, resp: errors.error(ctx, "tls_required",
@@ -1052,7 +1073,8 @@ function dispatch(env, start) {
 		if (!in_bound || length(body_text) > lim.max_body_bytes)
 			return { ctx, resp: errors.error(ctx, "payload_too_large",
 				sprintf("Request body is larger than %d bytes", lim.max_body_bytes)) };
-		if (length(replace(body_text, /[^{[]/g, "")) > lim.max_body_containers)
+		// On the ucode of OpenWrt main, a bracket expression that starts with ^ matches no newline.
+		if (length(replace(replace(body_text, "\n", ""), /[^{[]/g, "")) > lim.max_body_containers)
 			return { ctx, resp: errors.error(ctx, "payload_too_large",
 				sprintf("Request body holds more than %d { and [ characters", lim.max_body_containers)) };
 		if (body_text != "") {
@@ -1242,6 +1264,8 @@ global.handle_request = function(env) {
 	let token = result.token;
 	let method = env.REQUEST_METHOD ?? "GET";
 	let path = env.PATH_INFO ?? "/";
+	// dispatch() refuses such a path, and each log line below still names it on one line.
+	if (holds_line_break(path)) path = join("?", split(replace(path, "\r", "\n"), "\n"));
 	let duration_ms = elapsed_ms(start);
 
 	// Idempotency store: cache 2xx POST responses so a repeated key replays.

@@ -1,4 +1,5 @@
 let ids = require('ids');
+let values = require('values');
 let error_ring = require('error_ring');
 
 const STATUS_BY_CODE = {
@@ -60,7 +61,7 @@ const ALL_CODES = [
 const REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 
 function new_context(inbound_request_id) {
-	if (type(inbound_request_id) == "string" && match(inbound_request_id, REQUEST_ID_RE))
+	if (values.whole_match(inbound_request_id, REQUEST_ID_RE))
 		return { request_id: inbound_request_id };
 	return { request_id: ids.new_ulid() };
 }
@@ -72,7 +73,7 @@ function new_context(inbound_request_id) {
 function request_context(env, query) {
 	let h = env.headers;
 	let rid = h["x-request-id"];
-	let ctx = new_context(match(rid, REQUEST_ID_RE) ? rid : query.request_id);
+	let ctx = new_context(values.whole_match(rid, REQUEST_ID_RE) ? rid : query.request_id);
 	ctx.if_match = h["if-match"] || query.if_match;
 	ctx.if_none_match = h["if-none-match"] || query.if_none_match;
 	ctx.idempotency_key = h["idempotency-key"] || query.idempotency_key;

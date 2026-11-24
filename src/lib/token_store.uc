@@ -100,7 +100,7 @@ function _validate_create_body(body, package_exists) {
 	if (type(body) != "object")
 		return [errors.field_error("(root)", "invalid_type", "must be a JSON object")];
 	let errs = [];
-	if (type(body.name) != "string" || !match(body.name, NAME_RE))
+	if (!values.whole_match(body.name, NAME_RE))
 		push(errs, errors.field_error("name", "invalid_format",
 			"must match [A-Za-z0-9_]+ (uci section-name charset; use underscores instead of hyphens)"));
 	if (type(body.scopes) != "array" || length(body.scopes) == 0)

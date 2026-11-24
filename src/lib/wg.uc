@@ -58,7 +58,7 @@ function peer_flag(v) {
 // A stored key as the handler gives it to wg: the whole value. null when that is not a WireGuard
 // key, so the kernel can hold no such peer.
 function kernel_key(v) {
-	return (type(v) == "string" && match(v, WG_KEY_RE)) ? v : null;
+	return values.whole_match(v, WG_KEY_RE) ? v : null;
 }
 
 // The handler skips a peer, or leaves out its preshared key, when the value does not match its own

@@ -102,6 +102,28 @@ as `{ "k": 1 }`. `main.uc` therefore refuses the NUL escape in the request text
 there too: `replace("AB\u0000 CD", /[[:space:]]/g, "")` returns `AB`. `wg.uc`
 relies on it to end a line of a WireGuard config at a NUL byte, as wg does.
 
+### A pattern without the `s` flag matches each line on OpenWrt main
+
+ucode 8a8b4d12a8 ("types: fix regexp `/.../s` flag inversion", 2026-03-20)
+swapped the meaning of the `s` flag. Since then, and so on OpenWrt main, a regex
+literal or a `regexp()` without `s` compiles with POSIX `REG_NEWLINE`: `^` also
+matches after a newline, `$` also matches before one, and `.` and a bracket
+expression that starts with `^` match no newline. With `s`, the anchors cover
+the whole string and `.` matches a newline. Older builds do the reverse: OpenWrt
+25.12 (ucode 2026.01.16), and ucode 0.0.20250529, which Alpine 3.24 ships and
+the unit job of CI runs.
+
+On OpenWrt main, `match("abc\nxyz", /^[a-z]+$/)` therefore returns `[ "abc" ]`:
+an anchored check of a whole value passes when one line of the value passes. A
+value without a newline matches alike on both builds, so `values.whole_match(s,
+re)` takes only such a value, and each check of a name, an id, a key or a number
+that must hold for the whole value goes through it. `main.uc` also refuses a
+newline or a carriage return in the path, in the query and in the headers that
+it reads, before any handler runs, and counts the `{` and `[` of a body after it
+drops the newlines. The `s` flag is no fix: its meaning depends on the build,
+and the unit job runs the older one. To see on a unit host what OpenWrt main
+does with `/X/`, run `/X/s`, and the reverse.
+
 ### `const` is real
 
 `const X = ...` is parsed and enforced. Top-level data tables in this repo are

@@ -68,6 +68,14 @@ function config_get(v) {
 	return (type(v) == "array") ? join(" ", filter(v, (e) => e !== "")) : v;
 }
 
+// The ucode of OpenWrt main (since ucode 8a8b4d12a8) compiles a pattern without the s flag with
+// REG_NEWLINE, so ^ and $ match at each line and an anchored pattern judges one line of a value; older
+// builds, such as OpenWrt 25.12 and the unit hosts, do the reverse. A value without a newline matches
+// alike on both, so a check of a whole value takes only such a value.
+function whole_match(s, re) {
+	return (type(s) == "string" && index(s, "\n") < 0) ? match(s, re) : null;
+}
+
 // A value that reaches a line-oriented config file, a shell argument or a stdin prompt cannot
 // carry control characters: one embedded newline turns a single value into two lines. That is
 // how a feed URL appended a second, attacker-chosen apk repository which every later install
@@ -238,7 +246,7 @@ const SHELL_WORD_RE = "^[^ \t\n\r*?[]*$";
 function as_int(v) {
 	if (v == null) return null;
 	if (type(v) == "int") return v;
-	if (type(v) == "string" && v != "" && match(v, /^-?[0-9]+$/))
+	if (type(v) == "string" && v != "" && whole_match(v, /^-?[0-9]+$/))
 		return int(v);
 	return null;
 }
@@ -296,7 +304,7 @@ function rt_table_id(v, read_rt_tables) {
 }
 
 function is_valid_ipv4(s) {
-	if (type(s) != "string" || !match(s, IPV4_RE)) return false;
+	if (!whole_match(s, IPV4_RE)) return false;
 	for (let part in split(s, ".")) {
 		let n = int(part);
 		if (n < 0 || n > 255) return false;
@@ -330,7 +338,7 @@ function is_valid_ipv6(s) {
 				count += 2;
 				continue;
 			}
-			if (!match(g, IPV6_GROUP_RE)) return false;
+			if (!whole_match(g, IPV6_GROUP_RE)) return false;
 			count++;
 		}
 	}
@@ -345,7 +353,7 @@ function is_valid_ip(s) {
 }
 
 function is_valid_cidr(s) {
-	if (type(s) != "string" || !match(s, CIDR_RE)) return false;
+	if (!whole_match(s, CIDR_RE)) return false;
 	let parts = split(s, "/");
 	if (!is_valid_ipv4(parts[0])) return false;
 	let prefix = int(parts[1]);
@@ -357,7 +365,7 @@ function is_valid_cidr(s) {
 function is_valid_ipv6_cidr(s) {
 	if (type(s) != "string") return false;
 	let parts = split(s, "/");
-	if (length(parts) != 2 || !is_valid_ipv6(parts[0]) || !match(parts[1], /^[0-9]{1,3}$/))
+	if (length(parts) != 2 || !is_valid_ipv6(parts[0]) || !whole_match(parts[1], /^[0-9]{1,3}$/))
 		return false;
 	return int(parts[1]) <= 128;
 }
@@ -806,7 +814,7 @@ return {
 	shell_bool,
 	strict_bool, as_list, as_list_or_null, as_word_list_or_null, config_get_words, as_int, netifd_int,
 	netifd_string, rt_table_id, config_get, ucode_int,
-	has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem, dnsmasq_option_problem,
+	whole_match, has_control_chars, unstorable_text_path, json_has_nul, dnsmasq_value_problem, dnsmasq_option_problem,
 	DNSMASQ_TEXT_RE, DNSMASQ_OPTION_RE, DNSMASQ_WORDS_RE,
 	require_present, section_index,
 	MAC_PATTERN, MAC_RE, WG_KEY_PATTERN,

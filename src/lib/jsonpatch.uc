@@ -3,6 +3,8 @@
 // The result is wrapped { ok: true, value } / { ok: false, ... } so the handler
 // can translate to the standard error envelope without raising.
 
+let values = require('values');
+
 function _unescape_token(t) {
 	let out = "";
 	let i = 0;
@@ -26,7 +28,7 @@ function _split_pointer(pointer) {
 
 function _is_array_index(arr, token) {
 	if (token == "-") return true;
-	if (type(token) != "string" || !match(token, /^(0|[1-9][0-9]*)$/)) return false;
+	if (!values.whole_match(token, /^(0|[1-9][0-9]*)$/)) return false;
 	let n = int(token);
 	return n >= 0 && n <= length(arr);
 }
@@ -146,7 +148,7 @@ function _remove(root, parts) {
 	let parent = r.parent, key = r.key;
 	if (type(parent) == "array") {
 		if (key == "-") return { error: "cannot remove the append marker" };
-		if (!match(key, /^(0|[1-9][0-9]*)$/)) return { error: "invalid array index" };
+		if (!values.whole_match(key, /^(0|[1-9][0-9]*)$/)) return { error: "invalid array index" };
 		let idx = int(key);
 		if (idx >= length(parent)) return { error: "array index out of range" };
 		let kept = [];

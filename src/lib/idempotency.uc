@@ -1,5 +1,6 @@
 let fs = require('fs');
 let state_dir = require('state_dir');
+let values = require('values');
 
 const DIR = state_dir.DIRS.idempotency;
 const TTL_SECONDS = 86400;
@@ -39,8 +40,7 @@ function _key_path(token_name, key) {
 }
 
 function validate_key(key) {
-	if (type(key) != "string") return false;
-	return !!match(key, KEY_RE);
+	return !!values.whole_match(key, KEY_RE);
 }
 
 // The sweep runs at most once an hour, because it stats every entry.

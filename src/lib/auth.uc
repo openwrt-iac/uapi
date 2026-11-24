@@ -8,7 +8,7 @@ const BEARER_RE = /^Bearer[ \t]+([A-Za-z0-9_-]+)$/;
 function authorize(tokens, authorization_header, hash_fn, req) {
 	if (type(authorization_header) != "string" || authorization_header == "")
 		return { ok: false, kind: "unauthorized" };
-	let m = match(authorization_header, BEARER_RE);
+	let m = values.whole_match(authorization_header, BEARER_RE);
 	if (!m) return { ok: false, kind: "unauthorized" };
 	let bearer = m[1];
 

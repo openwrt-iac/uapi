@@ -35,7 +35,7 @@ function set_password(ctx, body) {
 	let errs = [];
 	if (type(user) != "string" || user == "")
 		push(errs, errors.field_error("user", "required", "is required"));
-	else if (!match(user, USER_RE))
+	else if (!values.whole_match(user, USER_RE))
 		push(errs, errors.field_error("user", "invalid_format",
 			"must be 'root' or a lowercase Unix-shaped name"));
 	else if (!user_exists(user))

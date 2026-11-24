@@ -69,7 +69,7 @@ function version_of(name, query_output) {
 }
 
 function info_one(name) {
-	if (!match(name, PKG_NAME_RE)) return null;
+	if (!values.whole_match(name, PKG_NAME_RE)) return null;
 	let exists = apk_exec(sprintf("info -e -- %s", name));
 	if (!exists.ok || exists.output == "") return null;
 	let query = apk_exec(sprintf("query --from installed --fields name,version --format json -- %s", name));
@@ -87,7 +87,7 @@ function list_handler(ctx) {
 }
 
 function get_one_handler(ctx, name) {
-	if (!match(name, PKG_NAME_RE))
+	if (!values.whole_match(name, PKG_NAME_RE))
 		return errors.error(ctx, "not_found", sprintf("invalid package name %J", name));
 	let info = info_one(name);
 	if (!info)
@@ -117,7 +117,7 @@ function install_handler(ctx, body) {
 	if (type(name) != "string" || name == "")
 		return errors.validation_failed(ctx,
 			[errors.field_error("name", "required", "is required")]);
-	if (!match(name, PKG_NAME_RE))
+	if (!values.whole_match(name, PKG_NAME_RE))
 		return errors.validation_failed(ctx,
 			[errors.field_error("name", "invalid_format",
 			                    "must match ^[A-Za-z0-9_+][A-Za-z0-9_+.-]*$")]);
@@ -144,7 +144,7 @@ function install_handler(ctx, body) {
 }
 
 function remove_handler(ctx, name) {
-	if (!match(name, PKG_NAME_RE))
+	if (!values.whole_match(name, PKG_NAME_RE))
 		return errors.error(ctx, "bad_request", sprintf("invalid package name %J", name));
 	if (!info_one(name))
 		return errors.error(ctx, "not_found", sprintf("package %J is not installed", name));
@@ -186,7 +186,7 @@ function list_feeds_handler(ctx) {
 }
 
 function get_feed_handler(ctx, id) {
-	if (!match(id, FEED_NAME_RE))
+	if (!values.whole_match(id, FEED_NAME_RE))
 		return errors.error(ctx, "not_found", sprintf("invalid feed name %J", id));
 	let path = feed_path(id);
 	let fp = fs.open(path, "r");
@@ -208,7 +208,7 @@ function create_feed_handler(ctx, body) {
 	let errs = [];
 	if (type(name) != "string" || name == "")
 		push(errs, errors.field_error("name", "required", "is required"));
-	else if (!match(name, FEED_NAME_RE))
+	else if (!values.whole_match(name, FEED_NAME_RE))
 		push(errs, errors.field_error("name", "invalid_format",
 		                              "must match ^[A-Za-z0-9_][A-Za-z0-9_.-]*$"));
 	if (type(url) != "string" || url == "")
@@ -267,7 +267,7 @@ function create_feed_handler(ctx, body) {
 }
 
 function remove_feed_handler(ctx, id) {
-	if (!match(id, FEED_NAME_RE))
+	if (!values.whole_match(id, FEED_NAME_RE))
 		return errors.error(ctx, "bad_request", sprintf("invalid feed name %J", id));
 	let path = feed_path(id);
 	if (fs.stat(path) == null)

@@ -4,6 +4,7 @@ let scope = require("scope");
 let transaction = require("transaction");
 let ucitrack = require("ucitrack");
 let handler = require("handler");
+let values = require("values");
 
 const ID_RE = /^[A-Za-z0-9_]+$/;
 const TYPE_RE = /^[!-~]+$/;
@@ -164,7 +165,7 @@ function writable_options(body) {
 	let opts = {}, errs = [];
 	for (let k, v in body) {
 		if (NOT_OPTIONS[k]) continue;
-		if (!match(k, ID_RE)) {
+		if (!values.whole_match(k, ID_RE)) {
 			push(errs, errors.field_error(k, "invalid_format", "must hold only letters, digits and _, the option names uci stores"));
 			continue;
 		}
@@ -242,10 +243,10 @@ function create(conn, ctx, scopes, pkg, body) {
 	let errs = [];
 	if (type(sec_type) != "string" || sec_type == "")
 		push(errs, errors.field_error(".type", "required", "is required on raw create"));
-	else if (!match(sec_type, TYPE_RE) || match(sec_type, TYPE_UNQUOTED_RE))
+	else if (!values.whole_match(sec_type, TYPE_RE) || match(sec_type, TYPE_UNQUOTED_RE))
 		push(errs, errors.field_error(".type", "invalid_format",
 			"must be printable ASCII without spaces or any of \" # ' ; \\, because uci writes the type unquoted"));
-	if (client_supplied_id && (type(new_id) != "string" || !match(new_id, ID_RE)))
+	if (client_supplied_id && !values.whole_match(new_id, ID_RE))
 		push(errs, errors.field_error("id", "invalid_format",
 			"must hold only letters, digits and _, the section names uci stores"));
 	let w = writable_options(body);

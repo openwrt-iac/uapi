@@ -3,6 +3,7 @@ let errors = require("errors");
 let transaction = require("transaction");
 let jsonpatch = require("jsonpatch");
 let mgmt = require("mgmt");
+let values = require("values");
 
 // ETag computation. Uses sha256 from ucode-mod-digest when available (real
 // router); falls back to a non-crypto stable string hash for unit-test
@@ -61,7 +62,7 @@ function paginate(ctx, items, query, id_field, carry) {
 	if (query != null && query.limit != null) {
 		// Force int conversion: `+s` accepts trailing junk and returns NaN
 		// silently. Require digit-only input via the regex, then int().
-		if (type(query.limit) != "string" || !match(query.limit, /^[1-9][0-9]{0,4}$/))
+		if (!values.whole_match(query.limit, /^[1-9][0-9]{0,4}$/))
 			return errors.error(ctx, "bad_request",
 				sprintf("limit must be a positive integer 1..%d", MAX_LIMIT));
 		let n = int(query.limit);
@@ -72,10 +73,10 @@ function paginate(ctx, items, query, id_field, carry) {
 	}
 	let start = 0;
 	if (query != null && query.cursor != null) {
-		if (!match(query.cursor, CURSOR_RE))
+		if (!values.whole_match(query.cursor, CURSOR_RE))
 			return errors.error(ctx, "invalid_cursor", "cursor is malformed");
 		let after = substr(query.cursor, 2);
-		let id = match(after, /^([A-Za-z0-9_]+)\.[0-9a-f]+$/)?.[1] ?? after;
+		let id = values.whole_match(after, /^([A-Za-z0-9_]+)\.[0-9a-f]+$/)?.[1] ?? after;
 		while (start < length(items) && items[start][key] != id) start++;
 		if (start == length(items))
 			return errors.error(ctx, "invalid_cursor", "cursor refers to no current item");
@@ -259,7 +260,7 @@ _check_value = function(spec, val, field_path, errs) {
 	let string_refused = false;
 	if (type(val) == "string" && spec.pattern != null) {
 		let re = regexp(spec.pattern);
-		if (re != null && !match(val, re)) {
+		if (re != null && !values.whole_match(val, re)) {
 			push(errs, { field: field_path, code: "invalid_format",
 			             message: sprintf("must match %s", spec.pattern) });
 			string_refused = true;
@@ -430,7 +431,7 @@ function validate_section_id(conn, pkg, id) {
 		             message: "must be a string" });
 		return errs;
 	}
-	if (length(id) == 0 || length(id) > SECTION_ID_MAX_LEN || !match(id, SECTION_ID_RE)) {
+	if (length(id) == 0 || length(id) > SECTION_ID_MAX_LEN || !values.whole_match(id, SECTION_ID_RE)) {
 		push(errs, { field: "id", code: "invalid_format",
 		             message: sprintf("must be 1 to %d characters, start with a letter, and contain only letters, digits, and underscore (uci section-name rules)",
 		                              SECTION_ID_MAX_LEN) });
