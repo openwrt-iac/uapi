@@ -21,7 +21,9 @@ no job of the 4.x line uses a 25.12 SDK or image. The `v3` branch keeps its own
 `ci.yml`, which builds and tests 3.x on 25.12. The apk feed itself is rebuilt by
 `openwrt-iac/openwrt-iac.github.io`'s `publish.yml` workflow, which
 pulls the asset of the Release that GitHub marks Latest from each source
-repo listed in its `feed.yml`. uapi no longer owns a gh-pages feed of its own.
+repo listed in its `feed.yml`, and of each tag that `feed.yml` lists in
+`extra_tags`, such as v3.5.0 for OpenWrt 25.12. uapi no longer owns a gh-pages
+feed of its own.
 
 The `verify-arch-build` matrix job cross-compiles against the SDKs for
 `aarch64_generic`, `arm_cortex-a7`, and `mips_24kc` on tag push. It does

@@ -115,10 +115,14 @@ On 25.12, apk refuses the package before it changes a file or runs a script:
   ```
 
   On a router with 3.x, 3.x stays installed and keeps its token store.
-- `apk upgrade` and `apk upgrade uapi`, with a feed that serves 4.x, keep 3.x
-  and print nothing about uapi. `apk list --upgradable` still lists 4.x.
-- `apk add uapi` on a router without uapi, from a feed that serves only 4.x,
-  fails with the same error.
+- `apk upgrade` and `apk upgrade uapi`, with a feed that serves 4.x, fail with
+  the same error on a router whose `/etc/apk/world` holds plain `uapi`, and
+  upgrade no package. 3.x stays installed.
+- `apk add uapi` on a router without uapi fails with the same error, also when
+  the feed serves 3.5.0 beside 4.x. apk does not fall back to an older version.
+- `apk add 'uapi<4'` installs 3.5.0 from the feed, and the constraint in
+  `/etc/apk/world` makes `apk upgrade` keep 3.x. On a router with 3.x, it only
+  writes the constraint.
 
 The floor is a date, not a commit. If a later 25.12 release takes a netifd of
 the `openwrt-25.12` branch with a commit date after 2026-07-17, that netifd

@@ -7,14 +7,17 @@ uapi 4.x needs a netifd that carries `e97e36f`, and the package says so with
 the dependency `netifd>=2026.07.17` (the date of that commit). OpenWrt 25.12
 ships `netifd-2026.02.26~cbb83a18-r2`, so apk does not install 4.x there:
 
-- `apk add` of a 4.x APK prints `ERROR: unable to select packages:
-  netifd-2026.02.26~cbb83a18-r2: breaks: uapi-<version>-r1[netifd>=2026.07.17]`
-  and changes nothing.
-- A 25.12 router that runs 3.x from the project feed keeps 3.x on
-  `apk upgrade` and prints nothing about it. `apk list --upgradable` still
-  shows 4.x.
-- A new 25.12 router cannot `apk add uapi` once the feed serves only 4.x. It
-  installs the 3.5.0 APK from the GitHub Release of v3.5.0.
+- `apk add` of a 4.x APK, and `apk add uapi` from the feed, print
+  `ERROR: unable to select packages: netifd-2026.02.26~cbb83a18-r2: breaks:
+  uapi-<version>-r1[netifd>=2026.07.17]` and change nothing. The feed also
+  serves 3.5.0, but apk-tools 3.0.5, the apk of 25.12, does not fall back to an
+  older version on its own.
+- On 25.12, install with `apk add 'uapi<4'`. The constraint picks 3.5.0 from
+  the feed and stays in `/etc/apk/world`, so `apk upgrade` keeps 3.x.
+- A 25.12 router that runs 3.x from the feed, with plain `uapi` in
+  `/etc/apk/world`, fails `apk upgrade` as a whole with the same error and
+  upgrades no package. Run `apk add 'uapi<4'` once. It installs nothing and
+  only writes the constraint.
 
 `docs/migration-v3-to-v4.md` says how to move such a router to 4.x.
 Pulled-in dependencies are all in OpenWrt's `base` feed: `uhttpd`,
