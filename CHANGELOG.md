@@ -6,6 +6,28 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`recent_errors` of `/uapi/diagnostics` keeps the cause of a failed
+  reload**: each entry carries `reload_error` and `restore_error`, null for a
+  code that has none. A `reload_failed_restored` or `reload_failed_unrecovered`
+  also logs a `uapi-reload-failure` syslog line with the request id and both
+  fields. Before, the cause was only in the response, so nothing told why a
+  reload failed once a client dropped the field or lost the response. The ring
+  and the line keep the text that uapi writes, such as `dnsmasq exited with code
+  1`, and not the output of the daemon after it, which stays in the response.
+  (#489)
+
+### Security
+
+- **The output that a failed reload, restore or recovery quotes no longer
+  reaches the diagnostics ring or syslog.** After a stop or a start that
+  failed, the message of `recover_failed` in `recent_errors`, and the note of
+  the `uapi-dnsmasq-recovery` syslog line, held the output of the init script.
+  That output can quote any value of the config, and the ring reaches every
+  token with `uapi:diagnostics:ro`. The response to the client that sent the
+  request keeps it. (#489)
+
 ## [4.0.1] - 2026-11-24
 
 This release fixes input checks on the ucode of OpenWrt main. Upgrade every 4.0.0

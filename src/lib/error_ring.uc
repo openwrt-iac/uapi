@@ -12,6 +12,14 @@ const CAP = 20;
 // times over, and every later error re-reads and rewrites all of it.
 const MAX_MESSAGE = 512;
 
+function clip(m) {
+	if (type(m) != "string" || length(m) <= MAX_MESSAGE) return m;
+	// A cut inside a UTF-8 sequence would make /uapi/diagnostics serve text that is not UTF-8.
+	let cut = MAX_MESSAGE;
+	while (cut > 0 && (ord(m, cut) & 0xC0) == 0x80) cut--;
+	return substr(m, 0, cut) + "...";
+}
+
 function read() {
 	if (!state_dir.owned(DIR)) return [];
 	let f = fs.open(PATH, "r");
@@ -28,14 +36,8 @@ function append(entry) {
 	if (type(entry) != "object" || !state_dir.owned(DIR)) return;
 	try {
 		let existing = read();
-		let m = entry.message;
-		if (length(m) > MAX_MESSAGE) {
-			// A cut inside a UTF-8 sequence would make /uapi/diagnostics serve text that is not UTF-8.
-			let cut = MAX_MESSAGE;
-			while (cut > 0 && (ord(m, cut) & 0xC0) == 0x80) cut--;
-			m = substr(m, 0, cut) + "...";
-		}
-		push(existing, { ...entry, message: m });
+		push(existing, { ...entry, message: clip(entry.message), reload_error: clip(entry.reload_error),
+		                 restore_error: clip(entry.restore_error) });
 		while (length(existing) > CAP) shift(existing);
 		// One name per request process. Appends that shared one wrote through their own offsets
 		// into one file, which then held no JSON, and the ring read empty.

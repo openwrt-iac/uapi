@@ -27006,7 +27006,22 @@
 									]
 								},
 								"message": {
-									"type": "string"
+									"type": "string",
+									"description": "The message of the envelope, clipped to 512 bytes with `...`, without the output of a command that the envelope quotes."
+								},
+								"reload_error": {
+									"type": [
+										"string",
+										"null"
+									],
+									"description": "reload_failed_restored and reload_failed_unrecovered only: the text that uapi wrote for the reload_error of the envelope, without the output of the daemon or of the command that it quotes. Clipped like message. Null for another code."
+								},
+								"restore_error": {
+									"type": [
+										"string",
+										"null"
+									],
+									"description": "reload_failed_unrecovered only: the text that uapi wrote for the restore_error of the envelope, without the output of a command. Clipped like message. Null for another code."
 								}
 							}
 						}

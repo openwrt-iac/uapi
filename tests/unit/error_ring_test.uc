@@ -62,6 +62,16 @@ t.describe('error_ring', () => {
 		t.assert_equal(er.read()[0].message, head + "...");
 	});
 
+	t.it('clips a long reload_error and restore_error as it clips a message', () => {
+		wipe();
+		let exact = "";
+		for (let i = 0; i < er.MAX_MESSAGE; i++) exact += "a";
+		er.append({ ts: 1, request_id: "r1", code: "reload_failed_unrecovered", status: 500, message: "x",
+		            reload_error: exact + "b", restore_error: exact });
+		let v = er.read()[0];
+		t.assert_deep_equal([ v.reload_error, v.restore_error ], [ exact + "...", exact ]);
+	});
+
 	t.it('survives garbage on disk by returning empty', () => {
 		wipe();
 		try { fs.mkdir("/var/run/uapi-error-ring"); } catch (_) {}

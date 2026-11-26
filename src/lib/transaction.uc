@@ -1,5 +1,6 @@
 let fs = require('fs');
 let wg = require('wg');
+let cmd_output = require('cmd_output');
 let limits = require('limits');
 let write_journal = require('write_journal');
 let log = require('log');
@@ -142,7 +143,7 @@ function default_reload(services, budget, init_dir, action) {
 		pop(done);
 		let k = length(done);
 		if (k > 0 && done[k - 1] != "0")
-			err = sprintf("%s exited with code %s: %s", services[k - 1], done[k - 1], trim(read(files[k - 1])));
+			err = cmd_output.append(sprintf("%s exited with code %s", services[k - 1], done[k - 1]), trim(read(files[k - 1])));
 		else if (k == n)
 			break;
 		else if (now_ms() >= budget.until)
@@ -265,8 +266,8 @@ function dnsmasq_check(conn, services, run) {
 			else if (r.code == -1)
 				return sprintf("dnsmasq --test could not run on its config %s: %s", name, r.output);
 			else if (r.code != 0)
-				return sprintf("dnsmasq refuses its config %s: %s", name,
-				               replace(split(trim(r.output), "\n")[0], /^dnsmasq: /, ""));
+				return cmd_output.append(sprintf("dnsmasq refuses its config %s", name),
+				                         replace(split(trim(r.output), "\n")[0], /^dnsmasq: /, ""));
 		}
 		return unverified;
 	};
@@ -358,7 +359,7 @@ function dnsmasq_respawn_check(conn, services, wait_ms, recovery) {
 		let outcome = (r.unverified != null) ? "unfinished" : (length(r.left) > 0) ? "stopped" : "recovered";
 		log.syslog((outcome == "recovered") ? log.LOG_NOTICE : log.LOG_WARNING,
 		           sprintf("uapi-dnsmasq-recovery %s outcome=%s gave_up=%s note=%J", recovery.request_id ?? "-", outcome,
-		                   join(",", lost), r.unverified ?? r.why));
+		                   join(",", lost), cmd_output.without_output(r.unverified ?? r.why)));
 		if (outcome == "recovered") return null;
 		if (only != null)
 			return sprintf("procd does not start %s again after the reload of the restore: %s", join(", ", r.left ?? lost),

@@ -117,6 +117,13 @@ body=$(echo "$r" | sed '$d')
 echo "$body" | jq -e '.code == "reload_failed_restored"' >/dev/null || fail "expected reload_failed_restored: $body"
 echo "$body" | jq -e '.reload_error | startswith("dnsmasq refuses its config ") and contains("bad IP address")' >/dev/null \
 	|| fail "expected the dnsmasq --test refusal in reload_error: $body"
+rid=$(echo "$body" | jq -r .request_id)
+entry=$(call "$URL/uapi/diagnostics" | sed '$d' | jq -c --arg id "$rid" '.recent_errors[] | select(.request_id == $id)')
+echo "$entry" | jq -e '(.reload_error | startswith("dnsmasq refuses its config ") and (contains("bad IP address") | not))
+	and .restore_error == null' >/dev/null || fail "recent_errors must keep the text of uapi without the output of dnsmasq: $entry"
+line=$($SSH "logread -e 'uapi-reload-failure $rid'" | tail -1)
+echo "$line" | grep -q 'reload_error="dnsmasq refuses its config ' || fail "no uapi-reload-failure line for $rid: $line"
+echo "$line" | grep -q 'bad IP address' && fail "the uapi-reload-failure line holds the output of dnsmasq: $line"
 [ "$(stored_options)" = "$TWO" ] || fail "uci did not get the old list back: $(stored_options)"
 assert_dnsmasq_omits "dhcp-option=tdhcp,3,not-an-address"
 dnsmasq_running || fail "dnsmasq is not running after the restore"

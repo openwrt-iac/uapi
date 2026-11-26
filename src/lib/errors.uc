@@ -1,6 +1,8 @@
 let ids = require('ids');
 let values = require('values');
 let error_ring = require('error_ring');
+let cmd_output = require('cmd_output');
+let log = require('log');
 
 const STATUS_BY_CODE = {
 	bad_request: 400,
@@ -100,11 +102,11 @@ function error(ctx, code, message, extras) {
 
 	let body = {
 		code: code,
-		message: message,
+		message: cmd_output.for_writer(message),
 		request_id: ctx.request_id,
 	};
 	if (extras != null) {
-		for (let k in extras) body[k] = extras[k];
+		for (let k in extras) body[k] = cmd_output.for_writer(extras[k]);
 	}
 	let headers = base_headers(ctx);
 	if (status == 401)
@@ -122,7 +124,9 @@ function error(ctx, code, message, extras) {
 			status: status,
 			method: ctx.method,
 			path: ctx.path,
-			message: message,
+			message: cmd_output.without_output(message),
+			reload_error: cmd_output.without_output(extras?.reload_error),
+			restore_error: cmd_output.without_output(extras?.restore_error),
 		});
 	return { status, headers, body };
 }
@@ -173,13 +177,22 @@ function lock_unavailable(ctx, lock_error) {
 	             sprintf("transaction lock file not available: %s", lock_error));
 }
 
+// The client can drop the cause, and the ring keeps 20 entries in tmpfs, so syslog is where an
+// operator still finds it, or forwards it, after the fact.
+function log_reload_failure(ctx, code, reload_error, restore_error) {
+	log.syslog(log.LOG_ERR, sprintf("uapi-reload-failure %s code=%s reload_error=%J restore_error=%J", ctx.request_id ?? "-",
+	                                code, cmd_output.without_output(reload_error), cmd_output.without_output(restore_error)));
+}
+
 function reload_failed_restored(ctx, reload_error) {
+	log_reload_failure(ctx, "reload_failed_restored", reload_error, null);
 	return error(ctx, "reload_failed_restored",
 	             "Service reload failed; prior configuration has been restored",
 	             { reload_error });
 }
 
 function reload_failed_unrecovered(ctx, reload_error, restore_error) {
+	log_reload_failure(ctx, "reload_failed_unrecovered", reload_error, restore_error);
 	return error(ctx, "reload_failed_unrecovered",
 	             "Service reload failed AND restore failed; configuration is in an unknown state",
 	             { reload_error, restore_error });
