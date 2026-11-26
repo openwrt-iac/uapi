@@ -19,7 +19,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (#489)
 - **`dhcp/domains` models the local DNS records of `config domain`**, LuCI's
   Hostnames: `name`, `ip` and `instance`. A write reloads dnsmasq and unbound
-  while procd runs them. The scope is `dhcp:domains`.
+  while procd runs them. The scope is `dhcp:domains`. (#487)
 
 ### Security
 
