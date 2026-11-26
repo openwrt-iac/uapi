@@ -257,6 +257,11 @@ const CASES = [
 		modify: { key: "match_tag", value: ['ipxe'] },
 	},
 	{
+		file: "dhcp.domains.uc", id: "d1", pkg: "dhcp",
+		section: { '.type': 'domain', name: 'nas.lan', ip: '192.168.1.10', instance: 'main' },
+		modify: { key: "ip", value: "fd00::10" },
+	},
+	{
 		file: "dhcp.servers.uc", id: "s1", pkg: "dhcp",
 		section: { ignore: '1', force: '1', dynamicdhcp: '0', '.type': 'dhcp', interface: 'lan', start: '100', limit: '150', leasetime: '12h', dhcpv4: 'server', ra_slaac: '0', ra_flags: ['managed-config', 'other-config'] },
 	},

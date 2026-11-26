@@ -17,6 +17,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the line keep the text that uapi writes, such as `dnsmasq exited with code
   1`, and not the output of the daemon after it, which stays in the response.
   (#489)
+- **`dhcp/domains` models the local DNS records of `config domain`**, LuCI's
+  Hostnames: `name`, `ip` and `instance`. A write reloads dnsmasq and unbound
+  while procd runs them. The scope is `dhcp:domains`.
 
 ### Security
 

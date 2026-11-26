@@ -22,6 +22,7 @@ const KNOWN_PATHS = {
 	"firewall:defaults": true,
 	"dhcp": true,
 	"dhcp:hosts": true,
+	"dhcp:domains": true,
 	"dhcp:leases": true,
 	"dhcp:servers": true,
 	"dhcp:dnsmasq": true,
