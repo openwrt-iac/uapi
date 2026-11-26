@@ -179,6 +179,7 @@ them out (`docs/raw.md`). Requires `rpcd-mod-iwinfo` at runtime for the
 | Path | Wraps | Notes |
 |---|---|---|
 | `dhcp/hosts` | `config host` | Static leases. `macs` (the whole uci `list mac`), `ip`, `name`, `leasetime`, `duid`, `tag` (tags the host sets), `match_tag` (tags a request must carry). dnsmasq.init joins `mac` and `tag` with spaces and splits the words, so a list entry `a b` reads as two. A MAC octet can be `*`, which dnsmasq and LuCI take. odhcpd cannot parse such a MAC and skips the whole host. |
+| `dhcp/domains` | `config domain` | Local DNS records, LuCI's Hostnames: `name`, `ip` and `instance`. dnsmasq.init writes `ip` and `name` into the hosts file of each instance, or only of the one that `instance` names, and skips a section without either. A write takes a `name` in the shape of LuCI's `hostname` datatype, and a read gives any other single word. A stored `name` with a space or a tab is an error of the section, because dnsmasq.init makes each word a name and unbound takes the whole value as one. `ip` is one IPv4 or IPv6 address. |
 | `dhcp/servers` | `config dhcp` | Per-interface server config. `runtime` carries active-lease counts. `dhcpv4`, `ra_flags` and `ra_slaac` are the options that odhcpd.defaults writes into the stock `lan` section. `ra_flags` reads null when unset, which odhcpd takes as `other-config` only, and `["none"]` sets no flag. A read gives the flags that odhcpd sets: uci passes it the words of an option split at spaces and tabs, or each list entry whole, and odhcpd stops at the first word that is no flag name. When it sets none, such as for an option of spaces, the read gives `["none"]`. `dhcpv4` takes the four modes of `ra`. odhcpd has no DHCPv4 relay, so dnsmasq and odhcpd both serve on every value but `disabled`, and odhcpd reads `dhcpv4` only when `dhcp/odhcpd` sets `maindhcp`. dnsmasq takes an unset `dhcpv4` as `disabled` (`dnsmasq.init`, `config_get dhcpv4 "$cfg" dhcpv4 disabled`), as odhcpd does. LuCI's DHCP setup writes `server`. `dhcp_option` takes one option per entry, because dnsmasq.init passes each entry to dnsmasq whole and dnsmasq reads it as one option. An entry answers `422 invalid_format` when, outside a quoted string, a field that reads as an address, such as `10.0.0.1` or `[::]`, is followed by whitespace and then by what starts a `dhcp-option` value: a number and a comma, `option:`, `option6:`, `tag:`, `net:`, `set:`, `vendor:`, `encap:` or `vi-encap:`, as in `3,10.0.0.1 6,10.0.0.1`. LuCI's form takes any entry. A text option with spaces, such as `15,my domain` or `15,my 6,domain`, stays valid. A stored entry that the rule refuses blocks every write of the section. Other entries that dnsmasq refuses, such as `3,10.0.0.1, 6,10.0.0.1`, pass the rule and are left to the `--test` check below. |
 | `dhcp/dnsmasq` (singleton) | `config dnsmasq` | Global dnsmasq tuning; forwarders, address overrides, rebind protection. dnsmasq.init passes `server` and `address` with `config_list_foreach`, so an option of either reads null. |
 | `dhcp/odhcpd` (singleton) | `config odhcpd` | `maindhcp`, `leasefile`, `loglevel`. `maindhcp` reads true only for `1` in the section named `odhcpd`, which both daemons take. dnsmasq.init stops serving DHCPv4 for any number above 0 in that section, and odhcpd takes `true` too and keeps the value that it has for any other value or no option, since a reload does not reset it. A write that sends `maindhcp` stores `1` or `0` even when the read already gives that value, so that both daemons agree, and null removes the option. LuCI shows a value other than `1` unchecked and removes the option when it saves the form. |
@@ -189,26 +190,28 @@ and each of them only while procd runs it. `dhcp/servers` and `dhcp/hosts`
 reload `dnsmasq`, `odhcpd` and `unbound`. odhcpd reads a server section too,
 `ra`, `dhcpv6` and `ra_default` among others, and the static leases of a host.
 unbound reads `interface` and `ignore` of a server section, and makes records of
-the `name` and `ip` of a host when its `add_extra_dns` is set. `dhcp/odhcpd`
-reloads `odhcpd`, `dnsmasq` and `unbound`, because dnsmasq.init reads `maindhcp`
-and unbound makes the directory of `leasefile`. `dhcp/dnsmasq` reloads `dnsmasq`
-and `unbound`, which reads `domain` and `port` when it forwards local names to
-dnsmasq. procd runs a daemon while it holds a `config.change` trigger for it,
-from the start of the service to its stop, whatever its instances show, which is
-when a LuCI save reloads it. A daemon that the router does not ship, that the
-operator stopped, or that has no such trigger yet, as unbound at boot until 3 s
-after the last interface event, is skipped: the write does not answer `503
-init_script_missing` for it, and its reload does not start it, as the reload of
-dnsmasq.init and unbound.init would. When the `service list` call fails, uapi
-cannot tell, and reloads the daemon. A write when none of them runs answers 2xx
-with `X-Reload-Status: no_reload`. LuCI saves through rpcd, which fires the
-procd reload trigger on `dhcp` of each daemon that procd lists with one. A
-commit through libuci fires none, so uapi runs the reloads above itself. A write
-takes the lock of `unbound` too while `/etc/init.d/unbound` exists, before it
-asks procd which daemons to reload, so a write to the `unbound` packages, or a
-`system` write that can reload unbound, at the same moment answers `423 locked`,
-whether unbound runs or not. When unbound ran before the write, it waits 2 s for
-unbound to keep running, as a write to `unbound/server` does.
+the `name` and `ip` of a host when its `add_extra_dns` is set. `dhcp/domains`
+reloads `dnsmasq` and `unbound`, which makes records of a domain under the same
+setting. `dhcp/odhcpd` reloads `odhcpd`, `dnsmasq` and `unbound`, because
+dnsmasq.init reads `maindhcp` and unbound makes the directory of `leasefile`.
+`dhcp/dnsmasq` reloads `dnsmasq` and `unbound`, which reads `domain` and `port`
+when it forwards local names to dnsmasq. procd runs a daemon while it holds a
+`config.change` trigger for it, from the start of the service to its stop,
+whatever its instances show, which is when a LuCI save reloads it. A daemon that
+the router does not ship, that the operator stopped, or that has no such trigger
+yet, as unbound at boot until 3 s after the last interface event, is skipped:
+the write does not answer `503 init_script_missing` for it, and its reload does
+not start it, as the reload of dnsmasq.init and unbound.init would. When the
+`service list` call fails, uapi cannot tell, and reloads the daemon. A write
+when none of them runs answers 2xx with `X-Reload-Status: no_reload`. LuCI saves
+through rpcd, which fires the procd reload trigger on `dhcp` of each daemon that
+procd lists with one. A commit through libuci fires none, so uapi runs the
+reloads above itself. A write takes the lock of `unbound` too while
+`/etc/init.d/unbound` exists, before it asks procd which daemons to reload, so a
+write to the `unbound` packages, or a `system` write that can reload unbound, at
+the same moment answers `423 locked`, whether unbound runs or not. When unbound
+ran before the write, it waits 2 s for unbound to keep running, as a write to
+`unbound/server` does.
 
 After a write that reloads dnsmasq, uapi runs the command of each dnsmasq
 instance with `--test` on the config that dnsmasq.init just wrote. If dnsmasq

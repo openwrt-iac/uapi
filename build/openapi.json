@@ -89,6 +89,10 @@
 			"description": "Static DHCP leases (`config host`)."
 		},
 		{
+			"name": "Dhcp / Domains",
+			"description": "Local DNS records that dnsmasq answers (`config domain`), LuCI's Hostnames."
+		},
+		{
 			"name": "Dhcp / Servers",
 			"description": "Per-interface DHCP server config (`config dhcp`). runtime carries lease counts."
 		},
@@ -296,6 +300,7 @@
 			"name": "DHCP",
 			"tags": [
 				"Dhcp / Hosts",
+				"Dhcp / Domains",
 				"Dhcp / Servers",
 				"Dhcp / Dnsmasq",
 				"Dhcp / Odhcpd",
@@ -10861,6 +10866,729 @@
 				},
 				"tags": [
 					"Dhcp / Hosts"
+				],
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
+					},
+					{
+						"$ref": "#/components/parameters/RequestId"
+					}
+				]
+			}
+		},
+		"/dhcp/domains": {
+			"get": {
+				"summary": "List domains",
+				"parameters": [
+					{
+						"name": "managed",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"true",
+								"false"
+							]
+						},
+						"description": "Filter by managed flag. Another value answers 400."
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 500
+						},
+						"description": "Items on a page, 100 by default."
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^c_[A-Za-z0-9_.:-]+$"
+						},
+						"description": "The `X-Next-Cursor` of the page before. A cursor that is empty, malformed or names no current item answers 400 `invalid_cursor`. A cursor that ends on an unmanaged section holds a hash of the items up to it, because the id of that section is its position in the package, and it answers 400 `invalid_cursor` when one of these items changed."
+					},
+					{
+						"$ref": "#/components/parameters/RequestId"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"headers": {
+							"Link": {
+								"$ref": "#/components/headers/Link"
+							},
+							"X-Next-Cursor": {
+								"$ref": "#/components/headers/XNextCursor"
+							},
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/DhcpDomainsResponse"
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Dhcp / Domains"
+				]
+			},
+			"post": {
+				"summary": "Create a domains",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DhcpDomainsRequest"
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "idempotency_key",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.:-]{0,127}$"
+						},
+						"description": "Equivalent to the `Idempotency-Key` header, which wins when it is not empty. Replays the cached response for 24 h; the same key with a different body gives 409."
+					},
+					{
+						"$ref": "#/components/parameters/RequestId"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DhcpDomainsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Reload-Stopped": {
+								"$ref": "#/components/headers/XReloadStopped"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Dhcp / Domains"
+				]
+			}
+		},
+		"/dhcp/domains/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"get": {
+				"summary": "Get one domains",
+				"description": "Supports conditional GET via `If-None-Match` (or `?if_none_match=`). A matching ETag returns 304 with no body.",
+				"parameters": [
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
+					},
+					{
+						"$ref": "#/components/parameters/RequestId"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DhcpDomainsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"304": {
+						"description": "If-None-Match matched current ETag",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"tags": [
+					"Dhcp / Domains"
+				]
+			},
+			"put": {
+				"summary": "Replace a domains",
+				"description": "Honors `If-Match` and `If-None-Match` (header, or `?if_match=` / `?if_none_match=`). A stale `If-Match`, or an `If-None-Match` that matches, gives 412 with nothing written.",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
+					},
+					{
+						"$ref": "#/components/parameters/RequestId"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DhcpDomainsRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DhcpDomainsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Reload-Stopped": {
+								"$ref": "#/components/headers/XReloadStopped"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Dhcp / Domains"
+				]
+			},
+			"patch": {
+				"summary": "Partially update a domains",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
+					},
+					{
+						"$ref": "#/components/parameters/RequestId"
+					}
+				],
+				"description": "Default content-type uses RFC 7396 merge-patch semantics (partial object). `application/json-patch+json` selects RFC 6902 JSON Patch with ops add/remove/replace/move/copy/test (the test op enables atomic compare-and-swap without If-Match).",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DhcpDomainsPatch"
+							}
+						},
+						"application/json-patch+json": {
+							"schema": {
+								"$ref": "#/components/schemas/JsonPatch"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DhcpDomainsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Reload-Stopped": {
+								"$ref": "#/components/headers/XReloadStopped"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Dhcp / Domains"
+				]
+			},
+			"delete": {
+				"summary": "Delete a domains",
+				"parameters": [
+					{
+						"name": "if_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "ETag precondition, equivalent to the `If-Match` header, which wins when it is not empty."
+					},
+					{
+						"name": "if_none_match",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Equivalent to the `If-None-Match` header, which wins when it is not empty. `*` matches any existing resource."
+					},
+					{
+						"$ref": "#/components/parameters/RequestId"
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Deleted",
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Reload-Stopped": {
+								"$ref": "#/components/headers/XReloadStopped"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					}
+				},
+				"tags": [
+					"Dhcp / Domains"
+				]
+			}
+		},
+		"/dhcp/domains/{id}/adopt": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string"
+					},
+					"description": "Section identifier (uapi-generated ULID for managed sections, uci cfg-name for unmanaged)"
+				}
+			],
+			"post": {
+				"summary": "Adopt an anonymous DHCP domain",
+				"description": "Adopt an anonymous DHCP domain into uapi management. The section is renamed to a uapi-generated ULID and `managed` flips to `true`; subsequent writes (PUT, PATCH, DELETE) are then permitted. **The id changes**: the response carries the new ULID; any client state pointing at the original anonymous id (`cfgXXXXXX`) must be updated. Idempotent: adopting an already-managed section returns 409 unmanaged_resource (see error envelope).",
+				"responses": {
+					"200": {
+						"description": "Adopted",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DhcpDomainsResponse"
+								}
+							}
+						},
+						"headers": {
+							"X-Request-Id": {
+								"$ref": "#/components/headers/XRequestId"
+							},
+							"X-Reload-Status": {
+								"$ref": "#/components/headers/XReloadStatus"
+							},
+							"X-Reload-Services": {
+								"$ref": "#/components/headers/XReloadServices"
+							},
+							"X-Reload-Stopped": {
+								"$ref": "#/components/headers/XReloadStopped"
+							},
+							"X-Kernel-Status": {
+								"$ref": "#/components/headers/XKernelStatus"
+							},
+							"X-Kernel-Applied": {
+								"$ref": "#/components/headers/XKernelApplied"
+							},
+							"X-Kernel-Blocked": {
+								"$ref": "#/components/headers/XKernelBlocked"
+							},
+							"Idempotent-Replayed": {
+								"$ref": "#/components/headers/IdempotentReplayed"
+							},
+							"ETag": {
+								"$ref": "#/components/headers/ETag"
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/Unauthorized"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/TooManyRequests"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					},
+					"409": {
+						"$ref": "#/components/responses/Conflict"
+					},
+					"412": {
+						"$ref": "#/components/responses/PreconditionFailed"
+					},
+					"422": {
+						"$ref": "#/components/responses/ValidationFailed"
+					},
+					"423": {
+						"$ref": "#/components/responses/Locked"
+					},
+					"413": {
+						"$ref": "#/components/responses/PayloadTooLarge"
+					}
+				},
+				"tags": [
+					"Dhcp / Domains"
 				],
 				"parameters": [
 					{
@@ -36275,6 +37003,118 @@
 					"broadcast": {
 						"type": [
 							"boolean",
+							"null"
+						]
+					},
+					"instance": {
+						"type": [
+							"string",
+							"null"
+						]
+					}
+				}
+			},
+			"DhcpDomainsResponse": {
+				"type": "object",
+				"description": "uapi resource backed by uci dhcp.domain",
+				"properties": {
+					"id": {
+						"type": "string",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"managed": {
+						"type": "boolean",
+						"readOnly": true
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "Hostname that dnsmasq answers with `ip`, LuCI's Hostname. A write takes letters, digits, underscores, dashes and dots, in the shape that LuCI's `hostname` datatype takes. A read also gives another single word. A stored value with a space or a tab is an error of the section and blocks every write of it: dnsmasq.init makes each word a name of the address, and unbound takes the whole value as one name."
+					},
+					"ip": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IPv4 or IPv6 address without a prefix length, LuCI's IP address. dnsmasq skips a domain without one."
+					},
+					"instance": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "The dhcp/dnsmasq section (instance) whose hosts file gets this record. Unset, every instance gets it. unbound ignores it. LuCI's form does not show it."
+					},
+					"runtime": {
+						"type": "object",
+						"description": "Live state of this resource as the daemon reports it, read-only and never part of the desired state or of a plan diff. Empty {} when the resource reads no live state.",
+						"readOnly": true
+					}
+				},
+				"required": [
+					"id",
+					"runtime",
+					"name",
+					"ip"
+				]
+			},
+			"DhcpDomainsRequest": {
+				"type": "object",
+				"description": "Request body for the uapi resource backed by uci dhcp.domain.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+						"description": "Optional at create: caller-supplied uci section name; becomes the response `id`. When omitted, the server emits a ULID. Read-only after create (rename via DELETE + POST). Charset and length follow uci section-name rules: 1 to 32 characters, start with a letter, alphanumerics and underscore only. Per-resource modules may tighten further (e.g. proto=wireguard interfaces are IFNAMSIZ-tight at 15 chars)."
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^([a-zA-Z0-9_]+|[a-zA-Z0-9_][a-zA-Z0-9_.-]*[a-zA-Z0-9]\\.?)$",
+						"description": "Hostname that dnsmasq answers with `ip`, LuCI's Hostname. A write takes letters, digits, underscores, dashes and dots, in the shape that LuCI's `hostname` datatype takes. A read also gives another single word. A stored value with a space or a tab is an error of the section and blocks every write of it: dnsmasq.init makes each word a name of the address, and unbound takes the whole value as one name."
+					},
+					"ip": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "IPv4 or IPv6 address without a prefix length, LuCI's IP address. dnsmasq skips a domain without one."
+					},
+					"instance": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "The dhcp/dnsmasq section (instance) whose hosts file gets this record. Unset, every instance gets it. unbound ignores it. LuCI's form does not show it."
+					}
+				},
+				"required": [
+					"name",
+					"ip"
+				]
+			},
+			"DhcpDomainsPatch": {
+				"type": "object",
+				"description": "Merge-patch body (RFC 7396): any subset of DhcpDomainsRequest, which describes the fields.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+					},
+					"name": {
+						"type": [
+							"string",
+							"null"
+						],
+						"pattern": "^([a-zA-Z0-9_]+|[a-zA-Z0-9_][a-zA-Z0-9_.-]*[a-zA-Z0-9]\\.?)$"
+					},
+					"ip": {
+						"type": [
+							"string",
 							"null"
 						]
 					},

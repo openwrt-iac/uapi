@@ -57,6 +57,7 @@ const RESOURCES = {
 	"wireless:devices":    handler.make(load_resource("wireless:devices")),
 	"wireless:interfaces": handler.make(load_resource("wireless:interfaces")),
 	"dhcp:hosts":          handler.make(load_resource("dhcp:hosts")),
+	"dhcp:domains":        handler.make(load_resource("dhcp:domains")),
 	"dhcp:leases":         handler.make_collection(load_resource("dhcp:leases")),
 	"dhcp:servers":        handler.make(load_resource("dhcp:servers")),
 	"sqm:queues":          handler.make(load_resource("sqm:queues")),
