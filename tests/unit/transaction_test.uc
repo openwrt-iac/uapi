@@ -1,5 +1,6 @@
 let t = require('harness');
 let tx = require('transaction');
+let cmd_output = require('cmd_output');
 let ubus = require('bus');
 
 function harness_locks(initial_available) {
@@ -640,13 +641,13 @@ t.describe('transaction, the time that uapi waits for the reloads of a request',
 	t.it('restores after a reload that fails within the time, and the reload of the restore shares it', () => {
 		scripts([ "fail", "ok" ]);
 		let w = write(false);
-		t.assert_deep_equal([ w.r.kind, w.r.reload_error, w.target ], [ "reload_failed_restored", "firewall exited with code 3: firewall: bad rule", "ACCEPT" ]);
+		t.assert_deep_equal([ w.r.kind, w.r.reload_error, w.target ], [ "reload_failed_restored", cmd_output.append("firewall exited with code 3", "firewall: bad rule"), "ACCEPT" ]);
 		// The failed reload takes 0.3 s of the 0.5 s, and the reload of the restore 0.3 s more.
 		for (let batch in [ false, true ]) {
 			scripts([ "slowfail", "slow" ]);
 			w = write(batch, null, 500);
 			t.assert_deep_equal([ w.r.kind, w.r.reload_error, w.r.restore_error, w.target ],
-			                    [ "reload_failed_unrecovered", "firewall exited with code 3: firewall: bad rule",
+			                    [ "reload_failed_unrecovered", cmd_output.append("firewall exited with code 3", "firewall: bad rule"),
 			                      "reload during restore did not finish: " + STILL("firewall", "0.5"), "ACCEPT" ]);
 		}
 	});
@@ -668,7 +669,7 @@ t.describe('transaction, the time that uapi waits for the reloads of a request',
 	// A daemon that a script starts held the files of every other reload of the request.
 	t.it('gives each script its own output file and no other', () => {
 		scripts([ "ok" ]);
-		t.assert_equal(tx.default_reload([ "a", "fds" ], { ms: 2000 }, dir), "fds exited with code 1: 2");
+		t.assert_equal(tx.default_reload([ "a", "fds" ], { ms: 2000 }, dir), cmd_output.append("fds exited with code 1", "2"));
 	});
 
 	// A shell that cannot fork the reloads exits 2, and uapi waited out the time for them.
@@ -690,7 +691,7 @@ t.describe('transaction, the time that uapi waits for the reloads of a request',
 
 	t.it('keeps the output and the exit code of a reload that fails', () => {
 		scripts([ "fail" ]);
-		t.assert_equal(tx.default_reload([ "firewall" ], { ms: 300 }, dir), "firewall exited with code 3: firewall: bad rule");
+		t.assert_equal(tx.default_reload([ "firewall" ], { ms: 300 }, dir), cmd_output.append("firewall exited with code 3", "firewall: bad rule"));
 	});
 
 	t.it('waits 20 s by default', () => {
@@ -1354,7 +1355,7 @@ t.describe('transaction, daemons that must keep running after the reload', () =>
 // as `dhcp-option=lan,3,not-an-address` only when it reads that config.
 t.describe('transaction, dnsmasq --test after the reload', () => {
 	const conf = (name) => "/var/etc/dnsmasq.conf." + name;
-	const REFUSED = "dnsmasq refuses its config main: bad IP address at line 33 of /var/etc/dnsmasq.conf.main";
+	const REFUSED = cmd_output.append("dnsmasq refuses its config main", "bad IP address at line 33 of /var/etc/dnsmasq.conf.main");
 
 	// The nth call of service list answers lists[n], each instance name mapped to whether it runs.
 	function fake(lists) {
@@ -1408,7 +1409,7 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		t.assert_deep_equal(map(tests.ran, (a) => a[3]), [ conf("main"), conf("guest"), conf("added") ]);
 		for (let name in [ "guest", "added" ])
 			t.assert_equal(tx.dnsmasq_check(fake(lists), [ "dnsmasq" ], tester([ name ]).run)(),
-			               sprintf("dnsmasq refuses its config %s: bad IP address at line 33 of %s", name, conf(name)));
+			               cmd_output.append(sprintf("dnsmasq refuses its config %s", name), sprintf("bad IP address at line 33 of %s", conf(name))));
 	});
 
 	t.it('tests an instance that service list no longer shows with its command from before', () => {
@@ -1438,7 +1439,7 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		let both = fake([ { main: true, guest: true } ]);
 		t.assert_equal(tx.dnsmasq_check(both, [ "dnsmasq" ], (argv) => (argv[3] == conf("main")) ? { code: -9, output: "" }
 		                                                       : { code: 1, output: "dnsmasq: bad option at line 2 of x" })(),
-		               "dnsmasq refuses its config guest: bad option at line 2 of x");
+		               cmd_output.append("dnsmasq refuses its config guest", "bad option at line 2 of x"));
 	});
 
 	t.it('a write whose --test does not finish keeps its commit and answers unverified', () => {
@@ -1599,7 +1600,7 @@ t.describe('transaction, dnsmasq --test after the reload', () => {
 		}));
 		system("rm -rf " + dir);
 		t.assert_equal(r.kind, "reload_failed_restored");
-		t.assert_equal(r.reload_error, "dnsmasq refuses its config main: bad IP address at line 1 of x");
+		t.assert_equal(r.reload_error, cmd_output.append("dnsmasq refuses its config main", "bad IP address at line 1 of x"));
 		t.assert_equal(conn._state.uci.dhcp.lan.leasetime, "12h");
 		t.assert_equal(n, 4);
 	});
@@ -2238,7 +2239,7 @@ t.describe('transaction, a service to reload only while procd runs it', () => {
 		let refused = odhcpd_write([ "odhcpd", "dnsmasq" ]), skipped = odhcpd_write([ "odhcpd" ]);
 		system("rm -rf " + dir);
 		t.assert_deep_equal([ refused.kind, refused.reload_error ],
-		                    [ "reload_failed_unrecovered", "dnsmasq refuses its config main: bad option at line 1 of x" ]);
+		                    [ "reload_failed_unrecovered", cmd_output.append("dnsmasq refuses its config main", "bad option at line 1 of x") ]);
 		t.assert_deep_equal([ skipped.ok, skipped.reload_services ], [ true, [ "odhcpd" ] ]);
 	});
 });

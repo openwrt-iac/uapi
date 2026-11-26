@@ -1,5 +1,6 @@
 let fs = require('fs');
 let values = require('values');
+let cmd_output = require('cmd_output');
 
 // netifd reads wireguard peers with `config_foreach wireguard_<iface>` inside the
 // proto setup step, so a peer edit leaves the parent `interface` section untouched
@@ -37,6 +38,11 @@ function run(argv) {
 	let output = p.read("all") ?? "";
 	let code = p.close();
 	return { ok: code == 0, code: code, output: trim(output) };
+}
+
+// A command that did not start printed nothing, and its output holds the reason that run() wrote.
+function failure(what, r) {
+	return (r.code == null) ? sprintf("%s: %s", what, r.output) : cmd_output.append(what, r.output);
 }
 
 // netifd runs the ucode proto handler of wireguard-tools. It gives wg each value as uci holds it,
@@ -416,8 +422,7 @@ function apply_routes(conn, iface, wanted, previous) {
 	for (let r in wanted) {
 		let res = run(route_cmd("replace", iface, r, route_table(conn, iface, r.v6)));
 		if (!res.ok)
-			return sprintf("installing route %s on %s failed: %s",
-			               r.prefix, iface, res.output);
+			return failure(sprintf("installing route %s on %s failed", r.prefix, iface), res);
 	}
 
 	let keep = {};
@@ -489,7 +494,7 @@ function apply_peer(iface, peer, omitted) {
 	let r = run(set_peer_argv(iface, { ...peer, public_key: key, endpoint_host: keep_endpoint ? null : host }, psk_path));
 	if (psk_path != null) fs.unlink(psk_path);
 	if (!r.ok)
-		return sprintf("wg set on %s failed: %s", iface, r.output);
+		return failure(sprintf("wg set on %s failed", iface), r);
 	if (keep_endpoint && omitted != null) push(omitted, iface);
 	return null;
 }
@@ -710,7 +715,7 @@ function apply(conn, ops, applied, omitted, blocked) {
 			}
 			if (key && length(again) == 0) {
 				let r = remove_peer(iface, key);
-				if (!r.ok) return sprintf("wg set remove on %s failed: %s", iface, r.output);
+				if (!r.ok) return failure(sprintf("wg set remove on %s failed", iface), r);
 			}
 			for (let p in again) {
 				let err = apply_peer(iface, p, omitted);

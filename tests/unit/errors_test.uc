@@ -1,5 +1,7 @@
 let t = require('harness');
 let errors = require('errors');
+let error_ring = require('error_ring');
+let cmd_output = require('cmd_output');
 
 t.describe('errors.new_context', () => {
 	t.it('produces a fresh request_id per call', () => {
@@ -239,6 +241,39 @@ t.describe('errors.reload_failed_unrecovered', () => {
 		t.assert_equal(r.status, 500);
 		t.assert_equal(r.body.reload_error, "reload err");
 		t.assert_equal(r.body.restore_error, "restore err");
+	});
+});
+
+t.describe('the output of a command in an error', () => {
+	let ctx = { request_id: "01hx0000000000000000000001", method: "POST", path: "/network/interfaces" };
+	let last = () => error_ring.read()[length(error_ring.read()) - 1];
+
+	t.it('reaches the writer, and the ring keeps only the text that uapi wrote', () => {
+		let reload = cmd_output.append("network exited with code 1", "psk=SECRET");
+		let restore = "reload during restore failed: " + cmd_output.append("network exited with code 1", "psk=OTHER");
+		let r = errors.reload_failed_unrecovered(ctx, reload, restore);
+		t.assert_equal(r.body.reload_error, "network exited with code 1: psk=SECRET");
+		t.assert_equal(r.body.restore_error, "reload during restore failed: network exited with code 1: psk=OTHER");
+		let e = last();
+		t.assert_deep_equal([ e.request_id, e.code, e.reload_error, e.restore_error ],
+		                    [ ctx.request_id, "reload_failed_unrecovered", "network exited with code 1",
+		                      "reload during restore failed: network exited with code 1" ]);
+	});
+
+	t.it('stays out of the message that the ring keeps', () => {
+		let r = errors.error(ctx, "recover_failed", "procd does not run dnsmasq/main: a stop and a start of dnsmasq did not bring it back, "
+		                     + cmd_output.append("dnsmasq exited with code 1", "SECRET"), { service: "dnsmasq", stopped: [ "main" ] });
+		t.assert_equal(r.body.message, "procd does not run dnsmasq/main: a stop and a start of dnsmasq did not bring it back, "
+		                               + "dnsmasq exited with code 1: SECRET");
+		t.assert_equal(last().message, "procd does not run dnsmasq/main: a stop and a start of dnsmasq did not bring it back, "
+		                               + "dnsmasq exited with code 1");
+	});
+
+	t.it('is null in a ring entry that does not carry it', () => {
+		errors.reload_failed_restored(ctx, cmd_output.append("dnsmasq refuses its config main", "SECRET"));
+		t.assert_deep_equal([ last().reload_error, last().restore_error ], [ "dnsmasq refuses its config main", null ]);
+		errors.error(ctx, "not_found", "missing");
+		t.assert_deep_equal([ last().code, last().reload_error, last().restore_error ], [ "not_found", null, null ]);
 	});
 });
 

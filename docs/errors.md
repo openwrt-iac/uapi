@@ -35,6 +35,12 @@ Every non-2xx response carries this body shape (Content-Type:
   newline or a carriage return answers `400 bad_request` under a ULID.
 - `errors[]` is only present for `422 validation_failed`. **All** field errors
   are reported together so the client can fix everything in one round trip.
+- Each other top-level field is an extension field of a code: `reload_error`
+  and `restore_error` (`reload_failed_restored`, `reload_failed_unrecovered`),
+  `service` and `stopped` (`recover_failed`), and `aborted_at_index`, `error`
+  and `reverted` (`batch_partial_failure`). A minor release can add an
+  extension field. Each one keeps its meaning for the whole major, and a client
+  can show each of them as it is, with no release of its own.
 
 ## Top-level codes
 
@@ -89,6 +95,12 @@ an extension field:
 
 A daemon that uapi watches and that stops after the reload reads, for example,
 `unbound stopped after the reload, with exit code 1`.
+
+The output of the daemon or of the command, here `netifd: interface 'wan' has
+invalid proto`, can quote any value of the config, so only the envelope has
+it. `recent_errors` of `/uapi/diagnostics` and the `uapi-reload-failure` syslog
+line keep the text that uapi writes before it, here `network exited with code
+1`, and do the same for `restore_error` and the message of `recover_failed`.
 
 The unrecovered case adds `restore_error` as well. A restore whose reload had
 not ended when uapi

@@ -243,6 +243,16 @@ uapi[<pid>]: <request_id> <token_name|-> <category> <code|-> <method> <path> <st
 - `path`: uhttpd's `PATH_INFO`, so the `/api/v4` mount prefix is already
   stripped. A client's `POST /api/v4/firewall/rules` logs as `/firewall/rules`.
 
+A `reload_failed_restored` or a `reload_failed_unrecovered` also logs a
+`uapi-reload-failure` line with the request id, the code, and the `reload_error`
+and `restore_error` of the envelope as JSON strings, or `null`. Like
+`recent_errors` of `/uapi/diagnostics`, the line keeps only the text that uapi
+writes, such as `dnsmasq exited with code 1` or `dnsmasq refuses its config
+main`. The output of the daemon or of the command that the envelope quotes
+after it reaches only the client that sent the write, because it can quote any
+value of the config, a write-only key among them. The note of the
+`uapi-dnsmasq-recovery` line leaves that output out too.
+
 A `POST /uapi/batch` logs one line for the whole request. The id of a
 sub-request, `<request_id>.<index>`, shows only in the `headers` of its entry
 in the 207 `results` and in `recent_errors` of `/uapi/diagnostics`.
@@ -255,6 +265,9 @@ uapi[1234]: 01HX1234567890ABCDEFGHJKMN tf-prod AUDIT - POST /firewall/rules 200 
 
 # ERROR (5xx)
 uapi[1234]: 01HX234567890ABCDEFGHJKMNN tf-prod ERROR reload_failed_restored PUT /network/interfaces/wan 500 [3120ms]
+
+# The cause of a failed reload, before its ERROR line
+uapi[1234]: uapi-reload-failure 01HX234567890ABCDEFGHJKMNN code=reload_failed_restored reload_error="network exited with code 1" restore_error=null
 
 # WARN (auth failure)
 uapi[1234]: 01HX34567890ABCDEFGHJKMNNN - WARN unauthorized GET /system 401 [1ms]
@@ -466,7 +479,8 @@ that a killed request left half done, and the last 20 error envelopes. Scope:
   "recent_errors": [
     { "ts": 1780510463, "request_id": "01HX...", "code": "validation_failed",
       "status": 422, "method": "POST", "path": "/firewall/rules",
-      "message": "Request body failed validation" }
+      "message": "Request body failed validation",
+      "reload_error": null, "restore_error": null }
   ],
   "request_id": "01HX..."
 }
@@ -572,7 +586,15 @@ failure simply produces an empty ring rather than a 5xx on the original
 request. The ring caps at 20 entries (oldest dropped first), and keeps the
 first 512 bytes of each message, ending a cut one with `...`: a 400 for a
 control character in a body names the key before authentication, so an
-unclipped message let any client store a body of any size in RAM.
+unclipped message let any client store a body of any size in RAM. An entry
+also carries `reload_error` and `restore_error`, clipped in the same way. They
+are null for a code that has none. For a failed reload or restore, they keep
+the text that uapi writes, and not the output of the daemon or of the command
+that the envelope quotes after it. The same holds for `message`, as in the
+`recover_failed` of a stop or a start that failed. That output can quote any
+value of the config, and the ring reaches every token with
+`uapi:diagnostics:ro`, while the envelope reaches only the client that sent the
+request.
 
 `lock_state` reports which uapi lock files exist under `/var/lock`, not
 which locks are held right now: `flock` is released when the fd closes

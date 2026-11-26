@@ -782,6 +782,20 @@ t.describe('wg reads and sets a peer as the handler does', () => {
 		t.assert_equal(r.result, 'ok');
 		t.assert_true(index(r.commands, set_of(PK, '10.0.0.2/32')) >= 0, r.commands);
 	});
+	t.it('marks what a failed wg set prints, so that only the writer reads it', () => {
+		let ops = [ { iface: 'wg1', action: 'remove', public_key: PK } ];
+		let call = sprintf("(function() { let o = require('cmd_output'); let e = wg.apply(c, %J); return sprintf('%%J', [ o.for_writer(e), o.without_output(e) ]); })()", ops);
+		let removal = 'wg|set|wg1|peer|' + PK + '|remove';
+		let r = run_wg({ network: { wg1: WG1 } }, call, { [removal]: "Key is not the correct length or format: `SECRET'" }, "'" + removal + "'");
+		t.assert_equal(r.result, sprintf('%J', [ "wg set remove on wg1 failed: Key is not the correct length or format: `SECRET'",
+		                                         "wg set remove on wg1 failed" ]));
+	});
+	t.it('keeps the reason in every view when wg did not start', () => {
+		let ops = [ { iface: 'wg1', action: 'remove', public_key: PK } ];
+		let call = sprintf("(function() { let o = require('cmd_output'); require('fs').popen = () => null; let e = wg.apply(c, %J); return sprintf('%%J', [ o.for_writer(e), o.without_output(e) ]); })()", ops);
+		let r = run_wg({ network: { wg1: WG1 } }, call);
+		t.assert_equal(r.result, sprintf('%J', [ "wg set remove on wg1 failed: could not exec wg", "wg set remove on wg1 failed: could not exec wg" ]));
+	});
 	t.it('sets nothing for a peer whose stored key is not a WireGuard key, and sets the others', () => {
 		let ops = [ { iface: 'wg1', action: 'set', public_key: PK + ' # peer B', allowed_ips: [ '10.0.0.2/32' ] },
 		            { iface: 'wg1', action: 'set', public_key: PK2, allowed_ips: [ '10.0.0.3/32' ] } ];

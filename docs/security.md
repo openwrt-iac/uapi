@@ -364,6 +364,12 @@ human-readable English and may name specific failing fields (`"src_zone is
 required"`) - never sensitive values.
 
 Specifically NOT logged:
+- The output of a daemon or of a command that a failed reload or restore
+  quotes. It can quote any value of the config, a write-only key among them,
+  so it reaches only the client that sent the write, in `reload_error`,
+  `restore_error` or the message of `recover_failed`. The
+  `uapi-reload-failure` and `uapi-dnsmasq-recovery` lines, and `recent_errors`
+  of `/uapi/diagnostics`, keep only the text that uapi writes.
 - Cleartext token values.
 - Cleartext passwords (the `system/password` endpoint audit-logs the user
   name and request id, never the password).

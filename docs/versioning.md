@@ -84,6 +84,10 @@ rest.
   what a client must send or retry, and it keeps its meaning for the whole
   major. A client can pass each of them on as it is, with no release of its
   own (`docs/errors.md`, "Response headers").
+- New extension fields of the error envelope, which are its top-level fields
+  other than `code`, `message`, `request_id` and `errors`. Each one keeps its
+  meaning for the whole major, and a client can show each of them as it is,
+  with no release of its own (`docs/errors.md`, "Envelope").
 - Field rename with both old and new accepted during a deprecation window: the
   old marked `deprecated: true` in `build/openapi.json`, an entry added to
   `docs/deprecations.md`, and the actual removal scheduled for the next major.
