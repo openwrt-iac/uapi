@@ -1012,9 +1012,10 @@ const PREFIX_ROUTES = [
 	{ seg: "system",   fn: nonuci_route },
 ];
 
-function dispatch(env, start) {
+function dispatch(env, start, seen) {
 	let query = parse_query(env.QUERY_STRING);
 	let ctx = errors.request_context(env, query);
+	seen.ctx = ctx;
 	let method = env.REQUEST_METHOD ?? "GET";
 	let path = env.PATH_INFO ?? "/";
 	ctx.method = method;
@@ -1140,6 +1141,7 @@ function dispatch(env, start) {
 		return { ctx, resp: errors.error(ctx, auth_result.kind, msg) };
 	}
 	let token = auth_result.token;
+	seen.token = token;
 
 	// Best-effort last-used tracking. Throttled to ~1 write/minute/token by
 	// token_store. Auth has already succeeded; any failure here is silent.
@@ -1247,16 +1249,19 @@ global.handle_request = function(env) {
 	// non-blocking one.
 	if (STDIN != null)
 		STDIN.fcntl(io.F_SETFL, STDIN.fcntl(io.F_GETFL) | io.O_NONBLOCK);
+	// dispatch() fills `seen` as it goes, so that a request that throws keeps the id that its client
+	// sent and the name of its token in the 500 and in the syslog lines.
+	let seen = {};
 	let result;
 	try {
-		result = dispatch(env, start);
+		result = dispatch(env, start, seen);
 	} catch (e) {
-		let ctx = errors.new_context();
+		let ctx = seen.ctx ?? errors.new_context();
 		log.syslog(log.LOG_ERR,
 			sprintf("uapi-internal %s: %s", ctx.request_id, errors.exception_text(e)));
 		result = {
 			ctx,
-			token: null,
+			token: seen.token,
 			resp: errors.error(ctx, "internal_error", "An internal error occurred"),
 		};
 	}
