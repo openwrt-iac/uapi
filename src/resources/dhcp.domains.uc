@@ -52,7 +52,7 @@ return {
 	schema_properties: {
 		name:     { "x-uapi-read-nullable": true, type: "string", pattern: "^[^ \t]*$",
 		            "x-uapi-write": { pattern: "^([a-zA-Z0-9_]+|[a-zA-Z0-9_][a-zA-Z0-9_.-]*[a-zA-Z0-9]\\.?)$" },
-		            description: "Hostname that dnsmasq answers with `ip`, LuCI's Hostname. A write takes letters, digits, underscores, dashes and dots, in the shape that LuCI's `hostname` datatype takes. A read also gives another single word. A stored value with a space or a tab is an error of the section and blocks every write of it: dnsmasq.init makes each word a name of the address, and unbound takes the whole value as one name." },
+		            description: "Hostname that dnsmasq answers with `ip`, LuCI's Hostname. A write takes letters, digits, underscores, dashes and dots, in the shape that LuCI's `hostname` datatype takes. LuCI also refuses a name of more than 253 characters, and a name with a dot that holds only digits and dots, such as `10.0.0.1`, but a write takes both. A read also gives another single word. A stored value with a space or a tab is an error of the section and blocks every write of it: dnsmasq.init makes each word a name of the address, and unbound takes the whole value as one name." },
 		ip:       { "x-uapi-read-nullable": true, type: "string",
 		            description: "IPv4 or IPv6 address without a prefix length, LuCI's IP address. dnsmasq skips a domain without one." },
 		instance: { type: ["string", "null"],
