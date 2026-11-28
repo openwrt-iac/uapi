@@ -251,7 +251,17 @@ writes, such as `dnsmasq exited with code 1` or `dnsmasq refuses its config
 main`. The output of the daemon or of the command that the envelope quotes
 after it reaches only the client that sent the write, because it can quote any
 value of the config, a write-only key among them. The note of the
-`uapi-dnsmasq-recovery` line leaves that output out too.
+`uapi-dnsmasq-recovery` line leaves that output out too, and so does the
+`uapi-pkg-failure` line of a failed apk write.
+
+An exception that uapi does not catch answers `500 internal_error` and logs a
+`uapi-internal` line. For an `Error`, which uapi raises with its own text, the
+line gives its message. For any other error, it gives the type and the place
+where it was raised, because the message of an error of the interpreter can
+quote the value that it failed on, as in `(<value>) is not iterable`, and that
+value can be a write-only key. The `unreadable` and `sweep_failed` messages of
+`/uapi/diagnostics`, and the `restore_error` of a restore that threw, follow the
+same rule.
 
 A `POST /uapi/batch` logs one line for the whole request. The id of a
 sub-request, `<request_id>.<index>`, shows only in the `headers` of its entry
@@ -279,7 +289,7 @@ uapi[1234]: 01HX4567890ABCDEFGHJKMNNNN tf-readonly ACCESS - GET /firewall/rules 
 uapi[1234]: uapi-bus call system.info args={}
 
 # Internal error from the top-level exception handler
-uapi[1234]: uapi-internal 01HX567890ABCDEFGHJKMNNNNN: Type error: ...
+uapi[1234]: uapi-internal 01HX567890ABCDEFGHJKMNNNNN: Type error at /usr/share/uapi/lib/handler.uc:263
 
 # Insecure-bypass marker triggered
 uapi[1234]: uapi-insecure-bypass 01HX67890ABCDEFGHJKMNNNNNN GET /system status=200 remote=10.0.2.2

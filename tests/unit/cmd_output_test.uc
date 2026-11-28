@@ -32,6 +32,23 @@ t.describe('cmd_output', () => {
 		t.assert_equal(o.without_output(substr(e, 0, length(e) - 1)), "dnsmasq refuses its config main");
 	});
 
+	t.it('keeps the end of a long output, where a command prints its cause', () => {
+		let out = "";
+		for (let i = 0; i < 5000; i++) out += "a";
+		let r = o.tail(out + "CAUSE");
+		t.assert_equal(length(r), 3 + 4096);
+		t.assert_equal(substr(r, 0, 4), "...a");
+		t.assert_equal(substr(r, -5), "CAUSE");
+		t.assert_equal(o.tail("short"), "short");
+		t.assert_equal(o.tail(null), null);
+	});
+
+	t.it('cuts a long output at the start of a UTF-8 character', () => {
+		let out = "";
+		for (let i = 0; i < 1366; i++) out += "€";
+		t.assert_equal(o.tail(out), "..." + substr(out, 3));
+	});
+
 	t.it('leaves a text without output and a value that is not a string as they are', () => {
 		t.assert_equal(o.without_output("dnsmasq stopped after the reload"), "dnsmasq stopped after the reload");
 		t.assert_equal(o.for_writer("x"), "x");

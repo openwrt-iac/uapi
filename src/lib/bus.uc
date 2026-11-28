@@ -1,3 +1,4 @@
+let errors = require('errors');
 let values = require('values');
 
 function deepcopy(v) {
@@ -210,7 +211,7 @@ function connect(opts) {
 			} catch (e) {
 				drop(pkg);
 				return { conflict: sprintf("another writer changed the package %s during the request, and the writes of the request no longer apply to it: %s",
-				                           pkg, e.message) };
+				                           pkg, errors.exception_text(e)) };
 			}
 			if (!changes) return false;
 			if (cursor.commit(pkg)) return true;

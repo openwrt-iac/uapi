@@ -310,6 +310,16 @@ t.describe('errors.STATUS_BY_CODE / FIELD_CODES / ALL_CODES tables', () => {
 		t.assert_equal(errors.FIELD_CODES.write_only, null);
 	});
 
+	t.it('exception_text keeps the message of an Error, whose text uapi wrote', () => {
+		try { die("uci load dhcp: Entry not found"); }
+		catch (e) { t.assert_equal(errors.exception_text(e), "uci load dhcp: Entry not found"); }
+	});
+
+	t.it('exception_text gives the type and place of an interpreter error, not the value that it quotes', () => {
+		try { let key = "SECRET"; let v = [ ...key ]; }
+		catch (e) { t.assert_match(errors.exception_text(e), /^Type error at .*errors_test\.uc:[0-9]+$/); }
+	});
+
 	t.it('ALL_CODES is a superset of STATUS_BY_CODE keys plus batch_partial_failure', () => {
 		let in_all = {};
 		for (let c in errors.ALL_CODES) in_all[c] = true;

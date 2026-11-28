@@ -116,6 +116,16 @@ const OPAQUE_RUNTIME = {
 	"readOnly": true,
 };
 
+const PACKAGE_FEED_PROPS = {
+	"id": { "type": "string" },
+	"managed": { "type": "boolean", "readOnly": true },
+	"name": { "type": "string" },
+	"filename": { "type": "string" },
+	"url": { "type": "string" },
+	"enabled": { "type": "boolean" },
+	"runtime": OPAQUE_RUNTIME,
+};
+
 const READ_NULLABLE = "x-uapi-read-nullable";
 // A field that may hold several lines opts out of the default newline/CR refusal (#276).
 const MULTILINE = "x-uapi-multiline";
@@ -889,7 +899,7 @@ function build_paths() {
 		"post": {
 			"summary": "Create a new apk feed file and run apk update",
 			"requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PackageFeedCreateRequest" } } } },
-			"responses": responses("post", { "200": make_response(200, "Created", "PackageFeed") })
+			"responses": responses("post", { "200": make_response(200, "Created", "PackageFeedCreated") })
 		},
 	};
 	paths["/packages/feeds/{id}"] = {
@@ -1184,8 +1194,9 @@ function build_schemas() {
 				"errors": { "type": "array",
 				            "items": { "$ref": "#/components/schemas/FieldError" },
 				            "description": "Per-field error list (validation_failed only)." },
-				"reload_error":  { "type": "string", "description": "reload_failed_restored / reload_failed_unrecovered only." },
-				"restore_error": { "type": "string", "description": "reload_failed_unrecovered only." },
+				"reload_error":  { "type": "string", "description": "reload_failed_restored / reload_failed_unrecovered only. The text of uapi can be followed by the output of the daemon or of the command. That output can quote any value of the config, a write-only key among them. A client must not copy it into a log that others read." },
+				"restore_error": { "type": "string", "description": "reload_failed_unrecovered only. Like reload_error, it can quote the output of a command." },
+				"command_output": { "type": "string", "description": "internal_error only, when a command that uapi ran failed, today `apk add` or `apk del`: the last 4096 bytes of what the command printed, after `...` when it is longer. It is the text of the command, not of uapi. It can quote any value of the config, a write-only key among them, and what a package script prints. A client must not copy it into a log that others read." },
 				"service": { "type": "string", "description": "recover_failed only: the `{name}` of the path." },
 				"stopped": { "type": "array", "items": { "type": "string" },
 				             "description": "recover_failed only: the instances of the service that are still down, by their names in `service list`, as `recovered` of RecoverResult names them." },
@@ -1265,16 +1276,17 @@ function build_schemas() {
 		"PackageFeed": {
 			"type": "object",
 			"required": ["id", "url", "runtime"],
+			"properties": PACKAGE_FEED_PROPS,
+		},
+		"PackageFeedCreated": {
+			"type": "object",
+			"required": ["id", "url", "update_status", "update_output", "runtime"],
 			"properties": {
-				"id": { "type": "string" },
-				"managed": { "type": "boolean", "readOnly": true },
-				"name": { "type": "string" },
-				"filename": { "type": "string" },
-				"url": { "type": "string" },
-				"enabled": { "type": "boolean" },
+				...PACKAGE_FEED_PROPS,
 				"update_status": { "type": "string",
-				                   "description": "Set by a create only. `ok` when the `apk update` after the write refreshed every feed. Otherwise why it failed, or that it did not finish within `reload_budget_s` of `config limits` and was killed. The feed file is written in every case." },
-				"runtime": OPAQUE_RUNTIME,
+				                   "description": "`ok` when the `apk update` after the write refreshed every feed. Otherwise why it failed, or that it did not finish within `reload_budget_s` of `config limits` and was killed. The feed file is written in every case." },
+				"update_output": { "type": ["string", "null"],
+				                   "description": "Null when `update_status` is `ok`. Otherwise the lines that `apk update` printed and that name no URL or only this feed: apk prints the URL of every feed, a token in its path or query among them. The field holds the last 4096 bytes of them, after `...` when they are longer. It is the text of apk, not of uapi. A client must not copy it into a log that others read." },
 			},
 		},
 		"PackageFeedCreateRequest": {

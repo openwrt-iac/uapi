@@ -69,8 +69,7 @@ function set_password(ctx, body) {
 	if (!r.ok) {
 		non_uci.audit_warning(ctx, "passwd-failure", { user: user, exit: r.exit_code });
 		return errors.error(ctx, "internal_error",
-			sprintf("passwd failed (exit %d); see syslog %s for details",
-				r.exit_code, ctx.request_id));
+			sprintf("passwd failed (exit %d)", r.exit_code));
 	}
 	non_uci.audit_notice(ctx, "passwd-set", { user: user });
 	return errors.no_content(ctx);

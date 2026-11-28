@@ -177,6 +177,16 @@ function lock_unavailable(ctx, lock_error) {
 	             sprintf("transaction lock file not available: %s", lock_error));
 }
 
+// An error of the interpreter quotes the value that it failed on, as in `(<value>) is not iterable`,
+// and that value can be a write-only key. die() and assert() raise an `Error` whose text uapi wrote.
+// The text of an exception reaches syslog, the ring and /uapi/diagnostics, so it keeps the message
+// of an `Error` only, and the type and place of any other error.
+function exception_text(e) {
+	if (e.type == "Error") return e.message;
+	let at = e.stacktrace?.[0];
+	return sprintf("%s at %s:%d", e.type, at?.filename ?? "-", at?.line ?? 0);
+}
+
 // The client can drop the cause, and the ring keeps 20 entries in tmpfs, so syslog is where an
 // operator still finds it, or forwards it, after the fact.
 function log_reload_failure(ctx, code, reload_error, restore_error) {
@@ -221,6 +231,7 @@ return {
 	lock_unavailable,
 	reload_failed_restored,
 	reload_failed_unrecovered,
+	exception_text,
 	ok,
 	no_content,
 	STATUS_BY_CODE,

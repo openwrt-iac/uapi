@@ -1,6 +1,7 @@
 let fs = require('fs');
 let wg = require('wg');
 let cmd_output = require('cmd_output');
+let errors = require('errors');
 let limits = require('limits');
 let write_journal = require('write_journal');
 let log = require('log');
@@ -534,7 +535,7 @@ function recover_service(conn, svc, params) {
 		caught = e;
 	}
 	default_release_pkg(lock);
-	if (caught != null) die(caught);
+	if (caught != null) die(errors.exception_text(caught));
 	return result;
 }
 
@@ -570,7 +571,7 @@ function _finalize_after_reload(reload_err, restore_fn, body, services, ops, ker
 		if (type(r2) == "object") push(errs, "reload during restore did not finish: " + r2.unverified);
 		else if (r2 != null) push(errs, "reload during restore failed: " + r2);
 	} catch (e) {
-		push(errs, "" + e);
+		push(errs, errors.exception_text(e));
 	}
 	let restore_err = join("; ", [ ...left, ...errs ]);
 
@@ -742,7 +743,7 @@ function transaction(conn, params) {
 	// as a kill does, because the commit may have landed.
 	if (caught == null) write_journal.clear();
 	release(lock);
-	if (caught != null) die(caught);
+	if (caught != null) die(errors.exception_text(caught));
 	return with_check_notes(result, watch);
 }
 
@@ -856,7 +857,7 @@ function multi_transaction(conn, params) {
 				let wrote = false;
 				// Right before the commit, for the reason that run_inner() gives.
 				snapshots[pkg] = conn.uci_export(pkg);
-				try { wrote = conn.uci_commit(pkg); } catch (e) { caught_commit = "" + e; }
+				try { wrote = conn.uci_commit(pkg); } catch (e) { caught_commit = errors.exception_text(e); }
 				if (type(wrote) == "object") {
 					commit_err = conflict = wrote.conflict;
 					break;
@@ -913,7 +914,7 @@ function multi_transaction(conn, params) {
 	if (caught == null) write_journal.clear();
 	for (let h in acquired) _release_one(h);
 	_release_one(g);
-	if (caught != null) die(caught);
+	if (caught != null) die(errors.exception_text(caught));
 	return with_check_notes(result, watch);
 }
 
@@ -935,7 +936,7 @@ function with_lock(params) {
 	catch (e) { caught = e; }
 	if (caught == null) write_journal.clear();
 	release(lock);
-	if (caught != null) die(caught);
+	if (caught != null) die(errors.exception_text(caught));
 	return result ?? { ok: true };
 }
 

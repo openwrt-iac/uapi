@@ -37,10 +37,15 @@ Every non-2xx response carries this body shape (Content-Type:
   are reported together so the client can fix everything in one round trip.
 - Each other top-level field is an extension field of a code: `reload_error`
   and `restore_error` (`reload_failed_restored`, `reload_failed_unrecovered`),
-  `service` and `stopped` (`recover_failed`), and `aborted_at_index`, `error`
-  and `reverted` (`batch_partial_failure`). A minor release can add an
-  extension field. Each one keeps its meaning for the whole major, and a client
-  can show each of them as it is, with no release of its own.
+  `service` and `stopped` (`recover_failed`), `command_output`
+  (`internal_error`), and `aborted_at_index`, `error` and `reverted`
+  (`batch_partial_failure`). A minor release can add an extension field. Each
+  one keeps its meaning for the whole major, and a client can show each of them
+  as it is, with no release of its own. `reload_error`, `restore_error` and
+  `command_output` can quote the output of a command, which is not the text of
+  uapi: it can quote any value of the config, a write-only key among them, and
+  what a package script prints. A client must not copy them into a log that
+  others read.
 
 ## Top-level codes
 
@@ -101,6 +106,12 @@ invalid proto`, can quote any value of the config, so only the envelope has
 it. `recent_errors` of `/uapi/diagnostics` and the `uapi-reload-failure` syslog
 line keep the text that uapi writes before it, here `network exited with code
 1`, and do the same for `restore_error` and the message of `recover_failed`.
+
+When a command that uapi runs fails, today `apk add` or `apk del`, the
+`internal_error` carries its output in `command_output`, and the message keeps
+only the text of uapi, such as `apk add failed (exit 1)`. The field holds the
+last 4096 bytes of the output, after `...` when it is longer, because a command
+prints its cause last. Neither syslog nor `recent_errors` gets it.
 
 The unrecovered case adds `restore_error` as well. A restore whose reload had
 not ended when uapi

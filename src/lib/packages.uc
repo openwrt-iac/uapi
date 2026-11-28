@@ -1,4 +1,5 @@
 let fs = require('fs');
+let cmd_output = require('cmd_output');
 let errors = require('errors');
 let non_uci = require('non_uci');
 let transaction = require('transaction');
@@ -30,9 +31,27 @@ function apk_update(budget_s) {
 	return { ok: r.code == 0, exit_code: r.code, output: trim(r.output), killed: r.code == -9 };
 }
 
+// apk update prints the URL of each feed, from each line of each file under repositories.d and from
+// /etc/apk/repositories, with a token in its path or query: apk masks only a password. A feed read
+// gives the first line of a feed file, and packages:feeds:rw does not grant root, so the client gets
+// the lines that name no URL or only its feed, to which apk can add the path of an index.
+const URL_RE = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^] \t]*/g;
+
+function bare_url(u) {
+	return replace(rtrim(u, ":"), /^[A-Za-z][A-Za-z0-9+.-]*:\/\/([^\/@]*@)?/, "");
+}
+
+function own_feed_lines(output, url) {
+	let mine = bare_url(url);
+	let names_mine = (u) => (u == mine || substr(u, 0, length(mine) + 1) == mine + "/");
+	return join("\n", filter(split(output, "\n"), (line) =>
+		length(filter(match(line, URL_RE) ?? [], (m) => !names_mine(bare_url(m[0])))) == 0));
+}
+
+// The output of apk goes only to the client that sent the write, in command_output or
+// update_output: a package script can print any value, and syslog can go off-box.
 function audit_apk_failure(ctx, action, name, r) {
-	non_uci.audit_warning(ctx, "pkg-failure",
-		{ action: action, name: name, exit: r.exit_code, output: r.output });
+	non_uci.audit_warning(ctx, "pkg-failure", { action: action, name: name, exit: r.exit_code });
 }
 
 function list_installed() {
@@ -132,9 +151,8 @@ function install_handler(ctx, body) {
 	let r = lr.result;
 	if (!r.exec.ok) {
 		audit_apk_failure(ctx, "install", name, r.exec);
-		return errors.error(ctx, "internal_error",
-			sprintf("apk add failed (exit %d); see syslog %s for details",
-				r.exec.exit_code, ctx.request_id));
+		return errors.error(ctx, "internal_error", sprintf("apk add failed (exit %d)", r.exec.exit_code),
+		                    { command_output: cmd_output.tail(r.exec.output) });
 	}
 	let info = info_one(name);
 	if (!info)
@@ -157,9 +175,8 @@ function remove_handler(ctx, name) {
 	let r = lr.result;
 	if (!r.exec.ok) {
 		audit_apk_failure(ctx, "remove", name, r.exec);
-		return errors.error(ctx, "internal_error",
-			sprintf("apk del failed (exit %d); see syslog %s for details",
-				r.exec.exit_code, ctx.request_id));
+		return errors.error(ctx, "internal_error", sprintf("apk del failed (exit %d)", r.exec.exit_code),
+		                    { command_output: cmd_output.tail(r.exec.output) });
 	}
 	return errors.no_content(ctx);
 }
@@ -253,17 +270,17 @@ function create_feed_handler(ctx, body) {
 	let r = lr.result;
 
 	let update_status = "ok";
+	let update_output = null;
 	if (!r.update.ok) {
 		audit_apk_failure(ctx, "feed_create_update", name, r.update);
 		update_status = r.update.killed
-			? sprintf("apk update did not finish within %d s and was killed; see syslog %s",
-				ctx.limits.reload_budget_s, ctx.request_id)
-			: sprintf("apk update failed (exit %d); see syslog %s",
-				r.update.exit_code, ctx.request_id);
+			? sprintf("apk update did not finish within %d s and was killed", ctx.limits.reload_budget_s)
+			: sprintf("apk update failed (exit %d)", r.update.exit_code);
+		update_output = cmd_output.tail(own_feed_lines(r.update.output, url));
 	}
 	return errors.ok(ctx, { id: name, managed: true, name: name,
 	                        filename: name + ".list", url: url, enabled: true,
-	                        update_status: update_status, runtime: {} });
+	                        update_status, update_output, runtime: {} });
 }
 
 function remove_feed_handler(ctx, id) {

@@ -89,11 +89,12 @@ read-only collection, and a writable one puts it in its item view.
   Names starting with `-` or `.` are rejected to prevent apk-flag injection
   (`--allow-untrusted`, `--repository=...`); the shell-out also uses `apk add --
   <name>` as a defense-in-depth separator.
-- **Audit.** On failure, the full apk stderr is logged to syslog under the
-  request id (`uapi-pkg-failure <request_id> action=install name="..." exit=<n>
-  output="..."`). The HTTP response carries only a generic "apk add failed (exit
-  N); see syslog <request_id>" message, so feed URLs with embedded credentials
-  don't leak into client logs.
+- **Audit.** On failure, the `internal_error` carries the message `apk add
+  failed (exit N)` and the output of apk in `command_output`. Syslog gets only
+  the action, the name and the exit code (`uapi-pkg-failure <request_id>
+  action=install name=... exit=<n>`). The output holds what the scripts of a
+  package print, which can be any value, and syslog can go off-box. A token
+  that can install a package already has root, so its client can read it.
 - **Why not uci.** apk's installed-package set is a runtime database
   (`/var/lib/apk/...`), not a uci config. The right place to drive it is apk
   itself.
@@ -106,8 +107,11 @@ read-only collection, and a writable one puts it in its item view.
 - **Reload.** None; `apk update` IS the reload. It runs under the time bound of
   `packages/installed`, and the feed file stays written when it fails. A
   create reports the result in `update_status`: `ok`, `apk update failed (exit
-  N); see syslog <request_id>`, or `apk update did not finish within N s and was
-  killed; see syslog <request_id>`. A remove answers 204 whatever `apk update`
+  N)`, or `apk update did not finish within N s and was killed`. When it is not
+  `ok`, `update_output` holds the lines that apk printed and that name no URL
+  or only the new feed, and syslog gets only the exit code. apk prints the URL
+  of every feed, with a token in its path or query, and a feed read gives only
+  the first line of a feed file. A remove answers 204 whatever `apk update`
   returns.
 - **Validation.** Feed name must match `^[A-Za-z0-9_][A-Za-z0-9_.-]*$` (no
   leading dot, no leading dash). URL must be `http://` or `https://`. `file://`
