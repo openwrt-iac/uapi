@@ -751,7 +751,7 @@ function validation_sweep(conn, scopes) {
 		try { found = h.sweep(conn); }
 		catch (e) {
 			found = [ { id: null, managed: null,
-			            errors: [ { field: "", code: "sweep_failed", message: "" + e } ] } ];
+			            errors: [ { field: "", code: "sweep_failed", message: errors.exception_text(e) } ] } ];
 		}
 		for (let f in found ?? [])
 			push(invalid, { resource: replace(key, ":", "/"), id: f.id,
@@ -1253,7 +1253,7 @@ global.handle_request = function(env) {
 	} catch (e) {
 		let ctx = errors.new_context();
 		log.syslog(log.LOG_ERR,
-			sprintf("uapi-internal %s: %s", ctx.request_id, "" + e));
+			sprintf("uapi-internal %s: %s", ctx.request_id, errors.exception_text(e)));
 		result = {
 			ctx,
 			token: null,

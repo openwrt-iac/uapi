@@ -3,6 +3,16 @@ let fs = require('fs');
 
 let pkg = loadfile('src/lib/packages.uc')();
 
+function logged_by(fn) {
+	let log = require('log');
+	let real = log.syslog, logged = [], r, caught = null;
+	log.syslog = (level, msg) => push(logged, msg);
+	try { r = fn(); } catch (e) { caught = e; }
+	log.syslog = real;
+	if (caught != null) die(caught);
+	return { r, logged };
+}
+
 function ctx(budget_s) { return { request_id: "01hx0000000000000000000000", limits: { reload_budget_s: budget_s ?? 20 } }; }
 
 t.describe('packages module', () => {
@@ -178,6 +188,7 @@ t.describe('packages.create_feed writes the feed file', () => {
 		let s = create_with(false, updated);
 		t.assert_equal(s.r.status, 200);
 		t.assert_equal(s.r.body.update_status, 'ok');
+		t.assert_equal(s.r.body.update_output, null);
 		t.assert_deep_equal(s.files, [ 'extra.list' ]);
 		t.assert_equal(s.feed, 'https://example.com/extra\n');
 		t.assert_deep_equal(s.runs, [ [ [ 'apk', '--timeout', '20', 'update' ], 20000 ] ]);
@@ -202,11 +213,43 @@ t.describe('packages.create_feed writes the feed file', () => {
 		let s = create_with(false, (tx, argv, ms) => tx.run_bounded([ dir + '/apk', ...slice(argv, 1) ], ms), 1);
 		system('rm -rf ' + dir);
 		t.assert_equal(s.r.status, 200);
-		t.assert_equal(s.r.body.update_status,
-			'apk update did not finish within 1 s and was killed; see syslog 01hx0000000000000000000000');
+		t.assert_equal(s.r.body.update_status, 'apk update did not finish within 1 s and was killed');
 		t.assert_equal(s.feed, 'https://example.com/extra\n');
 		t.assert_deep_equal(s.runs, [ [ [ 'apk', '--timeout', '1', 'update' ], 1000 ] ]);
 		t.assert_true(s.ms < 4000, sprintf('the request answered after %d ms', s.ms));
+	});
+
+	// The shape that apk update printed on OpenWrt main r38521 for two feeds that it could not fetch.
+	t.it('answers the lines of a failed apk update that name no other feed in update_output', () => {
+		let output = 'wgetFailed to send request: Operation not permitted\n'
+			+ 'WARNING: updating and opening https://example.com/extra: unexpected end of file\n'
+			+ 'WARNING: updating and opening https://u:*@host/SECRET/packages.adb?k=SECRET2/x86_64/APKINDEX.tar.gz: unexpected end of file\n'
+			+ ' [https://example.com/extra2/packages.adb]\n'
+			+ ' [https://example.com/extra/x86_64/APKINDEX.tar.gz]\n'
+			+ '2 unavailable, 0 stale; 10592 distinct packages available\n';
+		let s = logged_by(() => create_with(false, () => ({ code: 2, output })));
+		t.assert_equal(s.r.r.body.update_status, 'apk update failed (exit 2)');
+		t.assert_equal(s.r.r.body.update_output, 'wgetFailed to send request: Operation not permitted\n'
+			+ 'WARNING: updating and opening https://example.com/extra: unexpected end of file\n'
+			+ ' [https://example.com/extra/x86_64/APKINDEX.tar.gz]\n'
+			+ '2 unavailable, 0 stale; 10592 distinct packages available');
+		t.assert_deep_equal(s.logged, [ 'uapi-pkg-failure 01hx0000000000000000000000 action=feed_create_update name=extra exit=2' ]);
+	});
+});
+
+t.describe('packages gives the output of apk only to the client that sent the write', () => {
+	t.it('answers the output of a failed apk add in command_output', () => {
+		let fsx = { ...fs,
+			open: (path, m) => fs.open((path == '/var/lock/uapi.lock') ? '/tmp/uapi-test-packages.lock' : path, m),
+			popen: () => ({ read: () => 'ethtool: postinst printed SECRET\nERROR: ethtool: script exited with error 1\n', close: () => 1 }),
+		};
+		let tx = t.load_with_fs(fsx, [ 'transaction' ]);
+		let p = t.load_with({ fs: fsx, transaction: { ...tx, run_bounded: () => ({ code: 0, output: '' }) } },
+		                    [ 'non_uci', 'packages' ]);
+		let s = logged_by(() => p.install(ctx(), { name: "ethtool" }));
+		t.assert_equal(s.r.body.message, 'apk add failed (exit 1)');
+		t.assert_equal(s.r.body.command_output, 'ethtool: postinst printed SECRET\nERROR: ethtool: script exited with error 1');
+		t.assert_deep_equal(s.logged, [ 'uapi-pkg-failure 01hx0000000000000000000000 action=install name=ethtool exit=1' ]);
 	});
 });
 

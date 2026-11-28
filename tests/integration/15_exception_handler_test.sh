@@ -15,7 +15,12 @@ fail() { echo "FAIL: $*"; exit 1; }
 echo "--- inject a broken system.uc that throws on fromUci ---"
 $SSH 'cp /usr/share/uapi/resources/system.uc /usr/share/uapi/resources/system.uc.bak'
 $SSH "cat > /usr/share/uapi/resources/system.uc <<'UCEND'
+let fs = require('fs');
 function fromUci(section) {
+    if (fs.stat('/tmp/uapi-crash-type') != null) {
+        let v = 'uapi-type-error-marker';
+        return [...v];
+    }
     die(\"intentional test crash from system.fromUci\");
 }
 function toUci(json) { return {}; }
@@ -32,7 +37,7 @@ $SSH '/etc/init.d/uhttpd restart'
 sleep 2
 
 cleanup() {
-	$SSH 'mv /usr/share/uapi/resources/system.uc.bak /usr/share/uapi/resources/system.uc; /etc/init.d/uhttpd restart' >/dev/null 2>&1 || true
+	$SSH 'rm -f /tmp/uapi-crash-type; mv /usr/share/uapi/resources/system.uc.bak /usr/share/uapi/resources/system.uc; /etc/init.d/uhttpd restart' >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
@@ -50,8 +55,24 @@ sleep 1
 $SSH "logread | tail -200" > /tmp/uapi_excn_log.txt
 grep -F "$req_id" /tmp/uapi_excn_log.txt | grep -q 'ERROR' \
 	|| { cat /tmp/uapi_excn_log.txt; fail "no ERROR audit for $req_id"; }
-grep -F "uapi-internal $req_id" /tmp/uapi_excn_log.txt \
-	|| { cat /tmp/uapi_excn_log.txt; fail "no uapi-internal $req_id trace"; }
+grep -F "uapi-internal $req_id: intentional test crash from system.fromUci" /tmp/uapi_excn_log.txt \
+	|| { cat /tmp/uapi_excn_log.txt; fail "no uapi-internal $req_id trace with the text of die()"; }
+
+# An error of the interpreter quotes the value that it failed on, so the line keeps only its
+# type and place.
+echo "--- a type error logs its type and place, not the value that it quotes ---"
+$SSH 'touch /tmp/uapi-crash-type'
+resp=$(curl -sS -i -w "\n%{http_code}" -H "$ADMIN" "$URL/system")
+[ "$(echo "$resp" | tail -1)" = "500" ] || fail "expected 500 for the type error"
+req_id=$(echo "$resp" | tr -d '\r' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d:[[:space:]]*//p' | head -1 | tr -d '[:space:]')
+sleep 1
+$SSH "logread | tail -200" > /tmp/uapi_excn_log.txt
+line=$(grep -F "uapi-internal $req_id" /tmp/uapi_excn_log.txt) \
+	|| { cat /tmp/uapi_excn_log.txt; fail "no uapi-internal $req_id trace for the type error"; }
+echo "$line"
+echo "$line" | grep -qF "uapi-internal $req_id: Type error at /usr/share/uapi/resources/system.uc:" \
+	|| fail "the line does not give the type and the place"
+if echo "$line" | grep -qF "uapi-type-error-marker"; then fail "the line quotes the value"; fi
 rm -f /tmp/uapi_excn_log.txt
 
 echo "top-level exception handler returns envelope + emits ERROR audit + uapi-internal trace."

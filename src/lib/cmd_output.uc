@@ -38,4 +38,16 @@ function without_output(s) {
 	return unmarked(out);
 }
 
-return { append, for_writer, without_output };
+// A body keeps the end of an output, where a command prints its cause: a package script can print a
+// lot, and a client can put the whole field in the context of a model.
+const MAX_OUTPUT = 4096;
+
+function tail(s) {
+	if (type(s) != "string" || length(s) <= MAX_OUTPUT) return s;
+	// A cut inside a UTF-8 sequence would make the body hold text that is not UTF-8.
+	let cut = length(s) - MAX_OUTPUT;
+	while (cut < length(s) && (ord(s, cut) & 0xC0) == 0x80) cut++;
+	return "..." + substr(s, cut);
+}
+
+return { append, for_writer, without_output, tail };

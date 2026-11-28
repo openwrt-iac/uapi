@@ -920,6 +920,20 @@ t.describe('transaction, lock release', () => {
 		t.assert_true(threw);
 		t.assert_equal(locks.released, 1);
 	});
+
+	// main.uc logs the message of an `Error`, and die(e) of a type error made one that kept the value.
+	t.it('raises a type error of fn again with its type and place, without the value that it quotes', () => {
+		let locks = harness_locks(true);
+		let caught = null;
+		try {
+			tx.transaction(ubus.stub(), build_params({ acquire: locks.acquire, release: locks.release,
+				fn: function() { let key = "SECRET"; return [ ...key ]; } }));
+		} catch (e) {
+			caught = e;
+		}
+		t.assert_equal(caught.type, "Error");
+		t.assert_match(caught.message, /^Type error at .*transaction_test\.uc:[0-9]+$/);
+	});
 });
 
 let fs = require('fs');

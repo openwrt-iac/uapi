@@ -1215,7 +1215,7 @@ function make(resource, opts) {
 			} catch (e) {
 				// A resource that throws on a section it cannot read is itself a
 				// finding, and must not take the whole sweep down with it.
-				errs = [ { field: "", code: "unreadable", message: "" + e } ];
+				errs = [ { field: "", code: "unreadable", message: errors.exception_text(e) } ];
 			}
 			if (length(errs ?? []) > 0)
 				push(out, { id: id, managed: (view != null) ? !!view.managed : null,
@@ -1339,7 +1339,7 @@ function make_singleton(resource, opts) {
 			errs = _validate_with_schema(resource, view, carry_write_only(resource, view, s),
 			                             conn, id, {});
 		} catch (e) {
-			errs = [ { field: "", code: "unreadable", message: "" + e } ];
+			errs = [ { field: "", code: "unreadable", message: errors.exception_text(e) } ];
 		}
 		if (length(errs ?? []) == 0) return [];
 		return [ { id: id, managed: true, errors: errs } ];

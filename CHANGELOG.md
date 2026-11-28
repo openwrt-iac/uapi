@@ -20,6 +20,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`dhcp/domains` models the local DNS records of `config domain`**, LuCI's
   Hostnames: `name`, `ip` and `instance`. A write reloads dnsmasq and unbound
   while procd runs them. The scope is `dhcp:domains`. (#487)
+- **A failed `apk add` or `apk del` answers the output of apk in
+  `command_output`**, a new extension field of `internal_error`, and a feed
+  create whose `apk update` fails answers it in `update_output`, without the
+  lines that name another feed. Each holds the last 4096 bytes of the output.
+  The message and `update_status` keep only the text of uapi, such as `apk add
+  failed (exit 1)`, and no longer point to syslog. Neither does the message of a
+  failed password set, whose syslog line holds only the exit code. (#491)
 
 ### Security
 
@@ -30,6 +37,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   That output can quote any value of the config, and the ring reaches every
   token with `uapi:diagnostics:ro`. The response to the client that sent the
   request keeps it. (#489)
+- **The `uapi-pkg-failure` syslog line no longer holds the output of apk**,
+  which quotes what the scripts of a package print. It keeps the action, the
+  name and the exit code. (#491)
+- **The `uapi-internal` syslog line, `/uapi/diagnostics` and `recent_errors`
+  no longer hold the message of an error of the interpreter**, which can quote
+  the value that it failed on, a write-only key among them. They give its type
+  and the place where it was raised. The message of an error that uapi raises
+  with its own text stays. Before, a write turned each error into one of the
+  second kind with the same message. (#491)
 
 ## [4.0.1] - 2026-11-24
 
