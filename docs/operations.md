@@ -261,7 +261,8 @@ where it was raised, because the message of an error of the interpreter can
 quote the value that it failed on, as in `(<value>) is not iterable`, and that
 value can be a write-only key. The `unreadable` and `sweep_failed` messages of
 `/uapi/diagnostics`, and the `restore_error` of a restore that threw, follow the
-same rule.
+same rule. The 500, this line and the ERROR audit line keep the request id that
+the client sent, and the audit line names the token once uapi resolved it.
 
 A `POST /uapi/batch` logs one line for the whole request. The id of a
 sub-request, `<request_id>.<index>`, shows only in the `headers` of its entry

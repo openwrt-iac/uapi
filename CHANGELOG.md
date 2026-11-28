@@ -28,6 +28,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failed (exit 1)`, and no longer point to syslog. Neither does the message of a
   failed password set, whose syslog line holds only the exit code. (#491)
 
+### Fixed
+
+- **A request that hits an exception that uapi does not catch keeps the
+  `X-Request-Id` that its client sent** in the 500, the `uapi-internal` syslog
+  line and the ERROR audit line, and the audit line names its token once uapi
+  resolved it. Before, all three carried a new id, and the audit line the token
+  `-`, so a search of syslog for the id of the client did not find them. Its
+  entry in `recent_errors` now gives the method and the path,
+  `uapi_requests_total` counts it under the `token_id` of its token, the ACCESS
+  and `uapi-insecure-bypass` lines log it as any other request, and the read of
+  what is left of its body keeps the deadline of `config limits`. (#494)
+
 ### Security
 
 - **The output that a failed reload, restore or recovery quotes no longer
